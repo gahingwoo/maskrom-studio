@@ -50,6 +50,22 @@ export interface SpiImage {
   sha256: string;
 }
 
+/**
+ * One part of an image that a release carries in parts: GitHub takes no
+ * release file of 2 GiB or more, so a larger .img.xz is published as
+ * <file>.part1, <file>.part2, ... (images[].parts in the catalog). The parts
+ * joined in order are the file.
+ */
+export interface ImagePart {
+  file: string;
+  url: string;
+  size: number;
+  sha256: string;
+}
+
+/** More parts than this and "<file>.part*" would no longer sort in order. */
+export const MAX_PARTS = 9;
+
 export interface CatalogImage {
   /** Stable key: "<tag>/<file>". */
   id: string;
@@ -65,7 +81,11 @@ export interface CatalogImage {
   flavor: string;
   kernel: string;
   file: string;
+  /** Where the .img.xz downloads from; empty for an image in parts. */
   url: string;
+  /** The parts to download and join, in order; empty for an image that is one file. */
+  parts: ImagePart[];
+  /** Size and SHA-256 of the .img.xz: for an image in parts, of the joined file. */
   size: number;
   sha256: string;
   extractSize: number;
@@ -154,7 +174,10 @@ function parseImage(raw: unknown, index: number, release: CatalogRelease, sample
   const branch = str(raw, 'branch', problems, where);
   const kernel = typeof raw.kernel === 'string' ? raw.kernel : '';
   const file = str(raw, 'file', problems, where);
-  const url = str(raw, 'url', problems, where);
+  // An image in parts has "parts" in place of "url".
+  const split = raw.parts !== undefined && raw.parts !== null;
+  if (split && raw.url !== undefined) problems.push(`${where}: has both "url" and "parts"`);
+  const url = split ? '' : str(raw, 'url', problems, where);
   const size = int(raw, 'size', problems, where);
   const sha256 = str(raw, 'sha256', problems, where);
   const extractSize = int(raw, 'extract_size', problems, where);
@@ -177,18 +200,61 @@ function parseImage(raw: unknown, index: number, release: CatalogRelease, sample
   if (file !== expectedFile) problems.push(`${name}: file name should be ${expectedFile}`);
   // Images are only ever downloaded from this release of roxora-os/build.
   const expectedUrl = `${DOWNLOAD_PREFIX}${release.tag}/${file}`;
-  if (url !== expectedUrl) problems.push(`${name}: url is not ${expectedUrl}`);
+  if (!split && url !== expectedUrl) problems.push(`${name}: url is not ${expectedUrl}`);
   if (extractSize! < size!) problems.push(`${name}: extract_size is smaller than size`);
+  const parts = split ? parseParts(raw.parts, name, release, file!, size!, problems) : [];
   if (problems.length !== n) return null;
   const spi = parseSpi(raw.spi, name, release, file!, problems);
 
   return {
     id: `${release.tag}/${file}`,
     board: board!, boardName: boardName!, vendor, soc: soc!, release: rel!, ubuntuVersion: ubuntuVersion!,
-    branch: branch!, flavor, kernel, file: file!, url: url!, size: size!, sha256: sha256!,
+    branch: branch!, flavor, kernel, file: file!, url: url!, parts, size: size!, sha256: sha256!,
     extractSize: extractSize!, extractSha256: extractSha256!, status: status as ImageStatus,
     verifyUrl, spi, releaseInfo: release, sample,
   };
+}
+
+/**
+ * The parts of a split image. Any fault drops the image: a part that is
+ * wrong makes the whole file wrong.
+ */
+function parseParts(raw: unknown, name: string, release: CatalogRelease, imageFile: string, size: number,
+  problems: string[]): ImagePart[] {
+  if (!Array.isArray(raw) || raw.length < 2 || raw.length > MAX_PARTS) {
+    problems.push(`${name}: "parts" is not a list of 2 to ${MAX_PARTS} parts`);
+    return [];
+  }
+  const parts: ImagePart[] = [];
+  let total = 0;
+  raw.forEach((item, i) => {
+    const where = `${name} part ${i + 1}`;
+    if (!isObject(item)) {
+      problems.push(`${where}: not an object`);
+      return;
+    }
+    const n = problems.length;
+    const file = str(item, 'file', problems, where);
+    const url = str(item, 'url', problems, where);
+    const psize = int(item, 'size', problems, where);
+    const sha256 = str(item, 'sha256', problems, where);
+    if (problems.length !== n) return;
+    const expectedFile = `${imageFile}.part${i + 1}`;
+    if (file !== expectedFile) problems.push(`${where}: file name should be ${expectedFile}`);
+    // Parts, like whole images, are only ever downloaded from this release.
+    const expectedUrl = `${DOWNLOAD_PREFIX}${release.tag}/${file}`;
+    if (url !== expectedUrl) problems.push(`${where}: url is not ${expectedUrl}`);
+    if (!HEX64.test(sha256!)) problems.push(`${where}: sha256 is not 64 lower-case hex digits`);
+    if (problems.length !== n) return;
+    total += psize!;
+    parts.push({ file: file!, url: url!, size: psize!, sha256: sha256! });
+  });
+  if (parts.length !== raw.length) return [];
+  if (total !== size) {
+    problems.push(`${name}: the parts add up to ${total} bytes, not the image's ${size}`);
+    return [];
+  }
+  return parts;
 }
 
 /** Vendor for catalogs that have no vendor field: the first word of the board name. */
@@ -359,16 +425,23 @@ export function checkAgainstRelease(cat: ParsedCatalog, gh: GithubRelease): Pars
   }
   const images: CatalogImage[] = [];
   for (const img of cat.images) {
-    const asset = gh.assets.find((a) => a.name === img.file);
-    if (!asset) {
-      problems.push(`${img.file}: not attached to release ${gh.tag_name}`);
-      continue;
+    // What the release must hold: the image, or every one of its parts.
+    const files = img.parts.length > 0 ? img.parts : [{ file: img.file, sha256: img.sha256 }];
+    let bad = false;
+    for (const f of files) {
+      const asset = gh.assets.find((a) => a.name === f.file);
+      if (!asset) {
+        problems.push(`${f.file}: not attached to release ${gh.tag_name}`);
+        bad = true;
+        continue;
+      }
+      const digest = asset.digest ?? '';
+      if (digest.startsWith('sha256:') && digest.slice(7) !== f.sha256) {
+        problems.push(`${f.file}: catalog sha256 differs from the digest GitHub publishes`);
+        bad = true;
+      }
     }
-    const digest = asset.digest ?? '';
-    if (digest.startsWith('sha256:') && digest.slice(7) !== img.sha256) {
-      problems.push(`${img.file}: catalog sha256 differs from the digest GitHub publishes`);
-      continue;
-    }
+    if (bad) continue;
     let spi = img.spi;
     if (spi) {
       const sa = gh.assets.find((a) => a.name === spi!.file);

@@ -4,64 +4,19 @@
 
 import { net } from 'electron';
 import { createHash, randomBytes } from 'node:crypto';
-import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { createWriteStream, mkdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import type { CatalogImage } from '../shared/catalog';
+import { downloadReleaseFile, type Progress, type ReleaseFile } from './release-download';
 
-export type Progress = (p: { stage: 'download' | 'check' | 'decompress'; bytes: number; total: number }) => void;
-
-async function sha256File(path: string, total: number, progress: Progress): Promise<string> {
-  const h = createHash('sha256');
-  let done = 0;
-  for await (const chunk of createReadStream(path, { highWaterMark: 4 << 20 })) {
-    h.update(chunk as Buffer);
-    done += (chunk as Buffer).length;
-    progress({ stage: 'check', bytes: done, total });
-  }
-  return h.digest('hex');
-}
-
-/** A release file the catalog describes: the .img.xz, or the SPI image. */
-export type ReleaseFile = Pick<CatalogImage, 'file' | 'url' | 'size' | 'sha256' | 'sample'>;
+export type { Progress, ReleaseFile } from './release-download';
 
 /**
- * A release file in the cache, downloaded if needed, always checked against
- * the catalog's sha256 before it is used.
+ * A release file in the cache, downloaded if needed (an image in parts part
+ * after part), always checked against the catalog's sha256 before it is used.
  */
-export async function fetchImage(img: ReleaseFile, cacheDir: string, progress: Progress, signal?: AbortSignal): Promise<string> {
-  if (img.sample) throw new Error('Sample entries cannot be downloaded or written.');
-  mkdirSync(cacheDir, { recursive: true });
-  const dest = join(cacheDir, img.file);
-  if (existsSync(dest) && statSync(dest).size === img.size) {
-    if (await sha256File(dest, img.size, progress) === img.sha256) return dest;
-    rmSync(dest, { force: true });
-  }
-  const part = `${dest}.part`;
-  const r = await net.fetch(img.url, { signal });
-  if (!r.ok || !r.body) throw new Error(`Download failed: HTTP ${r.status}`);
-  const h = createHash('sha256');
-  let done = 0;
-  const body = Readable.fromWeb(r.body as never);
-  body.on('data', (c: Buffer) => {
-    h.update(c);
-    done += c.length;
-    progress({ stage: 'download', bytes: done, total: img.size });
-  });
-  try {
-    await pipeline(body, createWriteStream(part), { signal });
-  } catch (e) {
-    rmSync(part, { force: true });
-    throw e;
-  }
-  const got = h.digest('hex');
-  if (done !== img.size || got !== img.sha256) {
-    rmSync(part, { force: true });
-    throw new Error(`The download does not match the release (sha256 ${got}, expected ${img.sha256}).`);
-  }
-  renameSync(part, dest);
-  return dest;
+export function fetchImage(img: ReleaseFile, cacheDir: string, progress: Progress, signal?: AbortSignal): Promise<string> {
+  return downloadReleaseFile(img, cacheDir, progress, signal, (url, init) => net.fetch(url, init));
 }
 
 export { detectCompression, type Compression } from './image-source';

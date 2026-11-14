@@ -420,9 +420,12 @@ function DestinationStep(p: {
   // one. Without it, or when it fails, the user downloads the file and
   // picks it (the alert under the title says how); either way it is
   // checked against the release, with a progress bar while that runs.
-  const viaProxy = WEB && !!api.downloadProxy && !p.proxyError;
   const releaseKind = WEB && mb && (p.source === 'spi' ? 'spi' : p.source === 'release' ? 'image' : null);
   const relFile = releaseKind === 'spi' ? p.image?.spi : releaseKind === 'image' ? p.image : undefined;
+  // An image a release carries in parts (larger than GitHub takes as one
+  // file): the page cannot join them, so the user does and picks the result.
+  const relParts = releaseKind === 'image' ? p.image?.parts ?? [] : [];
+  const viaProxy = WEB && !!api.downloadProxy && !p.proxyError && relParts.length === 0;
   const releasePicker = (what: 'image' | 'spi') => {
     if (releaseKind !== what) return undefined;
     if (p.checking) {
@@ -449,9 +452,22 @@ function DestinationStep(p: {
   useEffect(() => { if (p.proxyError) byHandRef.current?.scrollIntoView({ block: 'nearest' }); }, [p.proxyError]);
   const byHand = !!relFile && !viaProxy && !p.releaseFile && (
     <Alert ref={byHandRef} isInline variant={p.proxyError ? 'warning' : 'info'} title="Download the release file by hand">
-      {p.proxyError ?? 'GitHub does not let a web page download release files itself.'} Download it, then
-      choose it under What to write:{' '}
-      <Button variant="link" isInline component="a" href={relFile.url}>{relFile.file}</Button>
+      {relParts.length > 0 ? (
+        <>
+          This image is larger than GitHub takes as one file, so the release has it in {relParts.length} parts.
+          Download them, join them in order (<code>cat {relFile.file}.part* &gt; {relFile.file}</code>), then
+          choose the joined file under What to write:{' '}
+          {relParts.map((part, i) => (
+            <span key={part.file}>{i > 0 ? ', ' : ''}<Button variant="link" isInline component="a" href={part.url}>{part.file}</Button></span>
+          ))}
+        </>
+      ) : (
+        <>
+          {p.proxyError ?? 'GitHub does not let a web page download release files itself.'} Download it, then
+          choose it under What to write:{' '}
+          <Button variant="link" isInline component="a" href={relFile.url}>{relFile.file}</Button>
+        </>
+      )}
     </Alert>
   );
   const lead = WEB ? (

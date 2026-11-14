@@ -133,6 +133,9 @@ export async function fetchReleaseFile(
 ): Promise<PreparedFile | { error: string }> {
   if (!base) return { error: 'This page has no download service set up.' };
   if (!img || img.sample) return { error: 'This image is not from a published release and cannot be written.' };
+  if (what === 'image' && img.parts.length > 0) {
+    return { error: `This image comes in ${img.parts.length} parts, which this page cannot join.` };
+  }
   const f = releaseFile(img, what);
   const url = proxyUrl(base, img, what);
   if (!f || !url) return { error: 'This release has no such file for the board.' };

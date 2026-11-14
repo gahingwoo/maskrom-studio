@@ -135,6 +135,56 @@ describe('parseCatalog', () => {
     expect(p.problems[0]).toMatch(/file name should be roxora-radxa-rock-4d-noble-edge-gnome-2026.11.0.img.xz/);
   });
 
+  // An image a release carries in parts: "parts" in place of "url".
+  const inParts = (sizes = [300000000, 112345678]) => {
+    const c = real();
+    const i = c.images[0];
+    delete i.url;
+    i.parts = sizes.map((size, n) => ({
+      file: `${i.file}.part${n + 1}`,
+      url: `https://github.com/roxora-os/build/releases/download/v2026.11.0/${i.file}.part${n + 1}`,
+      size,
+      sha256: String(n + 1).repeat(64),
+    }));
+    return c;
+  };
+
+  it('reads an image in parts: no url, the parts in order', () => {
+    const p = parseCatalog(inParts());
+    expect(p.problems).toEqual([]);
+    expect(p.images[0].url).toBe('');
+    expect(p.images[0].size).toBe(412345678);
+    expect(p.images[0].parts.map((x) => [x.file, x.size])).toEqual([
+      ['roxora-radxa-rock-4d-noble-edge-2026.11.0.img.xz.part1', 300000000],
+      ['roxora-radxa-rock-4d-noble-edge-2026.11.0.img.xz.part2', 112345678],
+    ]);
+    expect(p.images[1].parts).toEqual([]);
+  });
+
+  it('drops an image whose parts do not add up, are misnamed, or come from elsewhere', () => {
+    expect(parseCatalog(inParts([300000000, 1])).problems[0]).toMatch(/parts add up to 300000001 bytes, not the image's 412345678/);
+    const named = inParts();
+    named.images[0].parts[1].file = named.images[0].parts[0].file;
+    expect(parseCatalog(named).problems[0]).toMatch(/part 2: file name should be .*\.img\.xz\.part2/);
+    const elsewhere = inParts();
+    elsewhere.images[0].parts[0].url = 'https://example.com/x.part1';
+    expect(parseCatalog(elsewhere).problems[0]).toMatch(/part 1: url is not https:\/\/github.com\/roxora-os\/build\//);
+    for (const c of [inParts([300000000, 1]), named, elsewhere]) {
+      expect(parseCatalog(c).images.map((i) => i.board)).toEqual(['armsom-cm5-io']);
+    }
+  });
+
+  it('drops an image with one part, with url beside parts, or with neither', () => {
+    expect(parseCatalog(inParts([412345678])).problems[0]).toMatch(/"parts" is not a list of 2 to 9 parts/);
+    const both = inParts();
+    both.images[0].url = 'https://github.com/roxora-os/build/releases/download/v2026.11.0/roxora-radxa-rock-4d-noble-edge-2026.11.0.img.xz';
+    expect(parseCatalog(both).problems[0]).toMatch(/has both "url" and "parts"/);
+    const neither = real();
+    delete neither.images[0].url;
+    expect(parseCatalog(neither).problems[0]).toMatch(/"url" is missing/);
+    for (const c of [inParts([412345678]), both, neither]) expect(parseCatalog(c).images).toHaveLength(1);
+  });
+
   it('rejects names that could escape a path', () => {
     const c = real();
     c.images[0].board = '../etc';
@@ -246,6 +296,31 @@ describe('GitHub releases', () => {
     expect(p.images[0].board).toBe('radxa-rock-4d');
     expect(p.images[0].spi).toBeNull();
     expect(p.problems.some((x) => /-spi.img: catalog sha256 differs/.test(x))).toBe(true);
+  });
+
+  it('wants every part of an image in parts attached, with its digest', () => {
+    const c = real();
+    const i = c.images[0];
+    delete i.url;
+    i.parts = [300000000, 112345678].map((size, n) => ({
+      file: `${i.file}.part${n + 1}`,
+      url: `https://github.com/roxora-os/build/releases/download/v2026.11.0/${i.file}.part${n + 1}`,
+      size,
+      sha256: String(n + 1).repeat(64),
+    }));
+    const part = (n: number, digest = `sha256:${String(n).repeat(64)}`) =>
+      ({ name: `${i.file}.part${n}`, browser_download_url: 'x', digest });
+    // The whole file is not in the release; its parts are.
+    const others = gh.assets.filter((a) => a.name !== i.file);
+    const ok = checkAgainstRelease(parseCatalog(c), { ...gh, assets: [...others, part(1), part(2)] });
+    expect(ok.images.map((x) => x.board)).toEqual(['radxa-rock-4d']);
+    expect(ok.images[0].parts).toHaveLength(2);
+    const missing = checkAgainstRelease(parseCatalog(c), { ...gh, assets: [...others, part(1)] });
+    expect(missing.images).toEqual([]);
+    expect(missing.problems.some((x) => /\.part2: not attached to release/.test(x))).toBe(true);
+    const changed = checkAgainstRelease(parseCatalog(c), { ...gh, assets: [...others, part(1), part(2, `sha256:${'9'.repeat(64)}`)] });
+    expect(changed.images).toEqual([]);
+    expect(changed.problems.some((x) => /\.part2: catalog sha256 differs/.test(x))).toBe(true);
   });
 
   it('drops images that are not attached to the release', () => {

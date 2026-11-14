@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Images in parts. GitHub takes no release file of 2 GiB or more, so Roxora
+  releases carry the desktop images as `<file>.part1`, `<file>.part2`, ...
+  (from Roxora 2026.11.4 on). The app downloads the parts in order into one
+  file, with one progress bar over the whole image, checks each part and
+  then the joined file against the release's SHA-256, and writes it as any
+  other image. Earlier versions do not list these images. The web version
+  cannot join the parts; it links them and asks for the joined file.
 - Roxora's colours, as on the website: a mint-tinted page in the light
   theme and the mark's near-black and deep greens in the dark theme, links
   and selections in Roxora green, and primary buttons in the mark's bright
