@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  catalogAssets, checkAgainstRelease, flavorWords, groupByBoard, isLts, parseCatalog, type GithubRelease,
+  catalogAssets, checkAgainstRelease, compareImages, flavorWords, groupByBoard, isLts, parseCatalog, type GithubRelease,
 } from '../src/shared/catalog';
 
 const sample = JSON.parse(readFileSync(new URL('../resources/sample-catalog.json', import.meta.url), 'utf8'));
@@ -249,6 +249,21 @@ describe('groupByBoard', () => {
       ['resolute-cli', 'resolute-gnome-minimal', 'resolute-gnome', 'resolute-kde', 'noble-cli']);
     expect(['cli', 'gnome-minimal', 'gnome', 'kde'].map(flavorWords)).toEqual(
       ['Command line', 'GNOME desktop, minimal', 'GNOME desktop', 'kde']);
+  });
+
+  it('sorts images by a column (Image step headers)', () => {
+    const base = parseCatalog(real()).images.find((i) => i.board === 'radxa-rock-4d')!;
+    const mk = (id: string, o: Partial<typeof base>) => ({ ...base, id, ...o });
+    const imgs = [
+      mk('a', { ubuntuVersion: '24.04', flavor: 'gnome', branch: 'edge', kernel: '7.3.4', size: 300 }),
+      mk('b', { ubuntuVersion: '26.04', flavor: 'cli', branch: 'vendor', kernel: '6.1.115', size: 100 }),
+      mk('c', { ubuntuVersion: '26.10', flavor: 'gnome-minimal', branch: 'edge', kernel: '7.3.10', size: 200 }),
+    ];
+    const by = (k: Parameters<typeof compareImages>[2]) => [...imgs].sort((x, y) => compareImages(x, y, k)).map((i) => i.id);
+    expect(by('ubuntu')).toEqual(['a', 'b', 'c']);
+    expect(by('desktop')).toEqual(['b', 'c', 'a']);
+    expect(by('kernel')).toEqual(['a', 'c', 'b']);
+    expect(by('size')).toEqual(['b', 'c', 'a']);
   });
 
   it('knows which Ubuntu versions are LTS', () => {

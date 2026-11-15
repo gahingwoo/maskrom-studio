@@ -29,7 +29,7 @@ export function flavorWords(flavor: string): string {
 }
 
 /** Command line first, then the desktops from small to full, then flavors not known here. */
-function flavorRank(flavor: string): number {
+export function flavorRank(flavor: string): number {
   const i = Object.keys(FLAVOR_NAMES).indexOf(flavor);
   return i < 0 ? Object.keys(FLAVOR_NAMES).length : i;
 }
@@ -343,6 +343,20 @@ function compareVersions(a: string, b: string): number {
     if (d !== 0) return d;
   }
   return 0;
+}
+
+/** The Image step's sortable columns. */
+export type ImageSortKey = 'release' | 'ubuntu' | 'desktop' | 'kernel' | 'size';
+
+/** Order two images by one column, ascending; ties keep the default order (stable sort). */
+export function compareImages(a: CatalogImage, b: CatalogImage, key: ImageSortKey): number {
+  switch (key) {
+    case 'release': return compareVersions(a.releaseInfo.version, b.releaseInfo.version);
+    case 'ubuntu': return ubuntuNumber(a.ubuntuVersion) - ubuntuNumber(b.ubuntuVersion);
+    case 'desktop': return flavorRank(a.flavor) - flavorRank(b.flavor);
+    case 'kernel': return a.branch.localeCompare(b.branch) || compareVersions(a.kernel ?? '', b.kernel ?? '');
+    case 'size': return a.size - b.size;
+  }
 }
 
 /** Ubuntu LTS releases are April releases of even years (24.04, 26.04). */

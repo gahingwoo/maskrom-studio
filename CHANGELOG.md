@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Image step: click a column header (Release, Ubuntu, Desktop, Kernel,
+  Download) to sort the images by it, again to reverse; the desktop flavor
+  has its own column.
+
 ## 0.1.8
 
 - Maskrom: when the board's loader returns filler past a point on read-back

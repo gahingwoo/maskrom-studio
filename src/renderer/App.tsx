@@ -12,7 +12,7 @@ import {
 } from '@patternfly/react-core';
 import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
-import { flavorWords, groupByBoard, type Board, type CatalogImage } from '../shared/catalog';
+import { compareImages, flavorWords, groupByBoard, type Board, type CatalogImage, type ImageSortKey } from '../shared/catalog';
 import { BOARD_REQUEST_URL, queryWords, vendorCounts, visibleBoards } from '../shared/boardsearch';
 import { formatBytes } from '../shared/format';
 import type { CatalogResult, ImagerApi, JobProgress, LocalImage, PreparedFile } from '../shared/ipc';
@@ -319,9 +319,16 @@ function BoardPicker({ boards, board, setBoard, find }: {
   );
 }
 
+const IMAGE_COLUMNS: [ImageSortKey, string][] = [
+  ['release', 'Release'], ['ubuntu', 'Ubuntu'], ['desktop', 'Desktop'], ['kernel', 'Kernel'], ['size', 'Download'],
+];
+
 function ImageStep({ board, imageId, setImage, lp }: {
   board: Board | undefined; imageId: string | null; setImage: (id: string) => void; lp: LocalPick;
 }) {
+  // Sorting by a column header; none means the default order (newest
+  // release, newest Ubuntu LTS, command line, edge).
+  const [sort, setSort] = useState<{ key: ImageSortKey; dir: 'asc' | 'desc' } | null>(null);
   if (!board && !lp.local) return null;
   // A custom file takes the place of a release image; a file that is a
   // release image keeps that image selected.
@@ -333,13 +340,22 @@ function ImageStep({ board, imageId, setImage, lp }: {
       : 'No board is chosen, so no release images are listed.'}>
       {board && (
         <Table aria-label="Images" variant="compact">
-          <Thead><Tr><Th screenReaderText="Select" /><Th>Release</Th><Th>Ubuntu</Th><Th>Kernel</Th><Th>Download</Th></Tr></Thead>
+          <Thead><Tr><Th screenReaderText="Select" />
+            {IMAGE_COLUMNS.map(([key, label], col) => (
+              <Th key={key} sort={{
+                columnIndex: col + 1,
+                sortBy: sort ? { index: IMAGE_COLUMNS.findIndex(([k]) => k === sort.key) + 1, direction: sort.dir } : {},
+                onSort: (_e, _i, dir) => setSort({ key, dir }),
+              }}>{label}</Th>
+            ))}
+          </Tr></Thead>
           <Tbody>
-            {board.images.map((img, i) => (
+            {(sort ? [...board.images].sort((x, y) => (sort.dir === 'asc' ? 1 : -1) * compareImages(x, y, sort.key)) : board.images).map((img, i) => (
               <Tr key={img.id} isClickable onRowClick={() => setImage(img.id)} isRowSelected={selected === img.id}>
                 <Td select={{ rowIndex: i, variant: 'radio', isSelected: selected === img.id, onSelect: () => setImage(img.id) }} />
                 <Td dataLabel="Release">{releaseWords(img)}<div className="muted">{img.releaseInfo.date}</div></Td>
-                <Td dataLabel="Ubuntu">{img.ubuntuVersion} ({img.release})<div className="muted">{flavorWords(img.flavor)}</div></Td>
+                <Td dataLabel="Ubuntu">{img.ubuntuVersion} ({img.release})</Td>
+                <Td dataLabel="Desktop">{flavorWords(img.flavor)}</Td>
                 <Td dataLabel="Kernel">{img.kernel ? `${img.kernel} ` : ''}{img.branch}</Td>
                 <Td dataLabel="Download">{formatBytes(img.size)}</Td>
               </Tr>
