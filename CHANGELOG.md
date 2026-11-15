@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.7
 
 - Maskrom on the RK3576: a board whose loader still runs from an earlier
   attempt is written without sending the loader again (sending it failed
