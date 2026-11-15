@@ -106,6 +106,19 @@ export interface ImagerApi {
   cancelUpdate?(): Promise<void>;
   restartApp?(): Promise<void>;
   onUpdateProgress?(cb: (p: { bytes: number; total: number }) => void): () => void;
+  /**
+   * Where an update is: 'download' and 'brew-update' can be cancelled,
+   * 'install' and 'brew-upgrade' cannot.
+   */
+  onUpdateStage?(cb: (stage: string) => void): () => void;
+  /** What the programs an update runs print (Homebrew, hdiutil, ditto). */
+  onUpdateLog?(cb: (text: string) => void): () => void;
+  /**
+   * Desktop only: put text on the clipboard through the main process. The
+   * page itself has no clipboard permission. The web build uses
+   * navigator.clipboard.
+   */
+  copyText?(text: string): Promise<boolean>;
   openExternal(url: string): Promise<void>;
   setTheme(theme: 'light' | 'dark'): void;
 }

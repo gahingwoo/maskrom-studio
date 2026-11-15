@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActionList, ActionListGroup, ActionListItem, Alert, AlertActionCloseButton, AlertActionLink, Button, ClipboardCopy, CodeBlock, CodeBlockCode, Content, DescriptionList,
+  ActionList, ActionListGroup, ActionListItem, Alert, AlertActionCloseButton, AlertActionLink, Button, ClipboardCopy, ClipboardCopyButton, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, EmptyState, EmptyStateActions, EmptyStateBody,
   EmptyStateFooter, ExpandableSection, Flex, FlexItem, Form, FormGroup, FormSelect, FormSelectOption, Masthead,
   MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter, ModalHeader, Page,
@@ -386,7 +386,7 @@ function DriversNote() {
           The .deb and .rpm packages install a udev rule that lets you use the board without root. With the
           AppImage, add the rule once:
         </Content>
-        <CodeBlock><CodeBlockCode>{'echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"\' | sudo tee /etc/udev/rules.d/70-roxora-imager.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger'}</CodeBlockCode></CodeBlock>
+        <CopyBlock id="udev-rule" text={'echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"\' | sudo tee /etc/udev/rules.d/70-roxora-imager.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger'} />
       </>
     );
   }
@@ -644,12 +644,40 @@ function RunView({ run, onCancel, onDone, reconnect }: { run: Run; onCancel: () 
   );
 }
 
+/** Copy text: through the main process in the desktop app (the page has no clipboard permission), else the browser's clipboard. */
+function copyText(text: string): void {
+  if (api.copyText) api.copyText(text).catch(() => {});
+  else navigator.clipboard?.writeText(text).catch(() => {});
+}
+
+/** One line of text with a Copy button that says "Copied". */
+function CopyLine({ text }: { text: string }) {
+  return (
+    <ClipboardCopy isReadOnly hoverTip="Copy" clickTip="Copied" onCopy={() => copyText(text)}>{text}</ClipboardCopy>
+  );
+}
+
+/** A code block of commands with a Copy button. */
+function CopyBlock({ id, text }: { id: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  const actions = (
+    <CodeBlockAction>
+      <ClipboardCopyButton id={`${id}-copy`} textId={id} aria-label="Copy" variant="plain"
+        onClick={() => { copyText(text); setCopied(true); }} onTooltipHidden={() => setCopied(false)}>
+        {copied ? 'Copied' : 'Copy'}
+      </ClipboardCopyButton>
+    </CodeBlockAction>
+  );
+  return <CodeBlock actions={actions}><CodeBlockCode id={id}>{text}</CodeBlockCode></CodeBlock>;
+}
+
 /** What pressing Update will do, by how this copy was installed. Shown before anything is downloaded. */
 function updatePlan(o: UpdateOffer): string {
   const file = o.asset ? `${o.asset.name} (${formatBytes(o.asset.size)})` : '';
   const checked = 'checks it against the SHA-256 GitHub lists for it';
   switch (o.kind) {
-    case 'dmg': return `Roxora Imager downloads ${file} to your Downloads folder, ${checked}, and opens it. You then quit Roxora Imager and drag the new app onto Applications.`;
+    case 'brew': return 'This copy was installed with Homebrew. Roxora Imager runs Homebrew for you: "brew update", then "brew upgrade --cask roxora-imager". You then restart the app.';
+    case 'dmg': return `Roxora Imager downloads ${file} to your Downloads folder, ${checked}, and puts the new app in place of this one. You then restart the app.`;
     case 'windows': return `Roxora Imager downloads the installer ${file}, ${checked}, then closes and starts the installer.`;
     case 'appimage': return `Roxora Imager downloads ${file}, ${checked}, and puts it in place of the AppImage you are running. You then restart the app.`;
     case 'deb': case 'rpm': return `Roxora Imager downloads ${file}, ${checked}, and installs it with the system's package manager, which asks for your password. You then restart the app.`;
@@ -661,57 +689,81 @@ function updatePlan(o: UpdateOffer): string {
 function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ bytes: number; total: number } | null>(null);
+  const [stage, setStage] = useState('download');
+  const [log, setLog] = useState('');
   const [result, setResult] = useState<UpdateResult | null>(null);
-  useEffect(() => { setResult(null); setProgress(null); }, [offer?.version]);
+  useEffect(() => { setResult(null); setProgress(null); setLog(''); }, [offer?.version]);
   if (!offer) return null;
-  const canInstall = !!api.installUpdate && !!offer.asset && offer.kind !== 'brew' && offer.kind !== 'none';
+  const brew = offer.kind === 'brew';
+  const canInstall = !!api.installUpdate && (brew || (!!offer.asset && offer.kind !== 'none'));
   const start = async () => {
     setBusy(true);
     setResult(null);
+    setLog('');
+    setStage(brew ? 'brew-update' : 'download');
     setProgress({ bytes: 0, total: offer.asset?.size ?? 0 });
-    const off = api.onUpdateProgress?.(setProgress);
+    const offs = [
+      api.onUpdateProgress?.(setProgress), api.onUpdateStage?.(setStage),
+      api.onUpdateLog?.((t) => setLog((cur) => (cur + t).slice(-20000))),
+    ];
     const r = await api.installUpdate!();
-    off?.();
+    offs.forEach((off) => off?.());
     setBusy(false);
     setResult(r);
   };
   const close = () => { if (!busy) onClose(); };
   const notes = <Button variant="link" isInline component="a" href={offer.url} target="_blank">Release notes</Button>;
+  // Once the app itself is being replaced there is no stopping half way.
+  const canCancel = stage === 'download' || stage === 'brew-update';
+  const working: Record<string, string> = {
+    'brew-update': 'Homebrew is looking for the new version',
+    'brew-upgrade': 'Homebrew is installing the new version. Do not quit Roxora Imager.',
+    install: 'Putting the new app in place. Do not quit Roxora Imager.',
+  };
   return (
     <Modal isOpen onClose={close} variant="small" aria-labelledby="update-title">
       <ModalHeader title={`Update to Roxora Imager ${offer.version}${offer.beta ? ' (beta)' : ''}`} labelId="update-title" />
       <ModalBody>
         <Stack hasGutter>
-          {offer.kind === 'brew' && (
+          {brew && !canInstall && (
             <>
               <Content component="p">This copy was installed with Homebrew. Update it in Terminal with:</Content>
-              <ClipboardCopy isReadOnly hoverTip="Copy" clickTip="Copied">{'brew upgrade --cask roxora-imager'}</ClipboardCopy>
+              <CopyLine text="brew upgrade --cask roxora-imager" />
             </>
           )}
-          {offer.kind !== 'brew' && !canInstall && (
+          {!brew && !canInstall && (
             <Content component="p">
               The app cannot update this copy itself{offer.kind === 'none' ? '' : ': the release has no package for this computer'}.
               Get the new version from the release page.
             </Content>
           )}
           {canInstall && !busy && !result && <Content component="p">{updatePlan(offer)}</Content>}
-          {busy && progress && (
+          {busy && stage === 'download' && progress && (
             <Progress title={`Downloading ${offer.asset?.name ?? ''}`} measureLocation={ProgressMeasureLocation.top}
               value={progress.total ? Math.min(100, Math.floor(progress.bytes * 100 / progress.total)) : 0}
               label={`${formatBytes(progress.bytes)} of ${formatBytes(progress.total)}`} />
           )}
+          {busy && stage !== 'download' && (
+            <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }} flexWrap={{ default: 'nowrap' }}>
+              <FlexItem flex={{ default: 'flexNone' }}><Spinner size="md" aria-label="Working" /></FlexItem>
+              <FlexItem>{working[stage] ?? 'Installing'}</FlexItem>
+            </Flex>
+          )}
           {result && (
             <Alert isInline variant={result.ok ? 'success' : 'danger'} title={result.ok ? result.message : result.reason} />
           )}
-          {result && !result.ok && result.command && (
-            <ClipboardCopy isReadOnly hoverTip="Copy" clickTip="Copied">{result.command}</ClipboardCopy>
+          {result && !result.ok && result.command && <CopyLine text={result.command} />}
+          {log && (
+            <ExpandableSection toggleText="Output" className="log">
+              <CodeBlock><CodeBlockCode>{log}</CodeBlockCode></CodeBlock>
+            </ExpandableSection>
           )}
           <StackItem>{notes}</StackItem>
         </Stack>
       </ModalBody>
       <ModalFooter>
-        {canInstall && !busy && !result && <Button variant="primary" onClick={start}>Download and install</Button>}
-        {busy && <Button variant="secondary" onClick={() => api.cancelUpdate?.()}>Cancel</Button>}
+        {canInstall && !busy && !result && <Button variant="primary" onClick={start}>{brew ? 'Update with Homebrew' : 'Download and install'}</Button>}
+        {busy && canCancel && <Button variant="secondary" onClick={() => api.cancelUpdate?.()}>Cancel</Button>}
         {result?.ok && result.restart && <Button variant="primary" onClick={() => api.restartApp?.()}>Restart now</Button>}
         {result && !result.ok && canInstall && <Button variant="secondary" onClick={start}>Try again</Button>}
         {!busy && <Button variant="link" onClick={close}>{result?.ok && result.restart ? 'Later' : result || !canInstall ? 'Close' : 'Cancel'}</Button>}

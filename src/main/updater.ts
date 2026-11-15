@@ -6,21 +6,23 @@
 // GitHub) only when the setting asks for them. Nothing is downloaded or
 // installed before the user presses Update and confirms. How the update
 // goes depends on how this copy was installed (shared/update.ts,
-// installKind): Homebrew gets its command shown, the DMG is downloaded and
-// opened, the Windows installer is run, an AppImage is replaced, a .deb or
-// .rpm goes through the package manager. Every download is checked against
+// installKind): a Homebrew cask is upgraded by running brew, the app from a
+// DMG is swapped for the one in the new DMG (update-mac.ts), the Windows
+// installer is run, an AppImage is replaced, a .deb or .rpm goes through
+// the package manager. Every download is checked against
 // the SHA-256 GitHub lists for the file (update-install.ts).
 
 import { app, net, shell, type WebContents } from 'electron';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
   assetSha256, BREW_COMMAND, brewCaskOwns, checkDue, installKind, judgeReleases, newestRelease, pickAsset,
   type AppRelease, type InstallKind, type ReleaseAsset, type UpdateCheck, type UpdateResult,
 } from '../shared/update';
 import { loadSettings, saveSettings } from './settings';
+import { brewUpgrade, findBrew, NotInPlace, removeOldBundle, run, swapAppFromDmg } from './update-mac';
 import {
   DOWNLOAD_PREFIX, downloadVerified, fetchReleases, packageInstallCommand, pkexec, programExists, replaceAppImage,
   shellCommand, type Fetch,
@@ -29,6 +31,14 @@ import {
 const owns = (cmd: string, args: string[]) => {
   try { execFileSync(cmd, args, { stdio: 'ignore', timeout: 10000 }); return true; } catch { return false; }
 };
+
+/** The app bundle on macOS: /Applications/Roxora Imager.app. */
+const appBundle = () => app.getPath('exe').replace(/\/Contents\/MacOS\/[^/]+$/, '');
+
+/** At start: clear away the bundle a previous in-app update on macOS put aside. */
+export function afterUpdateCleanup(): void {
+  if (process.platform === 'darwin' && app.isPackaged) removeOldBundle(appBundle());
+}
 
 let install: { kind: InstallKind; arch: string } | null = null;
 /** How this copy was installed, and for which CPU. Looked up once. */
@@ -53,6 +63,12 @@ const FAKE = !app.isPackaged ? process.env.ROXORA_IMAGER_FAKE_UPDATE : undefined
 function fakeCheck(): UpdateCheck {
   if (FAKE === 'error') return { state: 'error', message: 'Could not reach GitHub.' };
   if (FAKE === 'current') return { state: 'current', version: app.getVersion(), beta: false, newerBeta: null };
+  if (FAKE === 'brew') {
+    return { state: 'newer', offer: {
+      version: '9.9.9', url: 'https://github.com/roxora-os/imager/releases', beta: false, kind: 'brew',
+      notes: 'A made-up version for the screenshots.', asset: null,
+    } };
+  }
   return { state: 'newer', offer: {
     version: '9.9.9', url: 'https://github.com/roxora-os/imager/releases', beta: false, kind: 'appimage',
     notes: 'A made-up version for the screenshots.', asset: { name: 'roxora-imager-9.9.9-linux-x86_64.AppImage', size: 164283935 },
@@ -78,7 +94,7 @@ function judge(list: AppRelease[], beta: boolean): UpdateCheck {
  * does not vanish when the app is restarted. Null: nothing to say.
  */
 export async function checkForUpdate(force = false): Promise<UpdateCheck | null> {
-  if (FAKE) return force || FAKE === 'newer' ? fakeCheck() : null;
+  if (FAKE) return force || FAKE === 'newer' || FAKE === 'brew' ? fakeCheck() : null;
   const s = loadSettings();
   const now = Date.now();
   const remembered = () => {
@@ -109,18 +125,48 @@ export function cancelUpdate(): void {
   running?.abort();
 }
 
-/** Start again with the new version (an AppImage has just been replaced under its own name). */
+/** Where the new version starts from, when that is not where this one runs. */
+let relaunchExe: string | null = null;
+
+/** Start again with the new version (an AppImage or app bundle has just been replaced under its own name). */
 export function restartApp(): void {
-  app.relaunch(process.env.APPIMAGE ? { execPath: process.env.APPIMAGE, args: process.argv.slice(1) } : undefined);
+  const execPath = relaunchExe ?? process.env.APPIMAGE;
+  app.relaunch(execPath ? { execPath, args: process.argv.slice(1) } : undefined);
   app.quit();
+}
+
+/** The version of the app bundle on disk, which an update has changed while this one still runs. */
+async function bundleVersion(): Promise<string | null> {
+  const r = await run('/usr/bin/defaults', ['read', join(appBundle(), 'Contents', 'Info'), 'CFBundleShortVersionString']);
+  return r.code === 0 ? r.output.trim() : null;
 }
 
 /** Download and install what the last check offered. Called only after the user confirmed. */
 export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
+  // The screenshots: as on a Mac without Homebrew.
+  if (FAKE) return { ok: false, reason: 'Homebrew was not found on this Mac. You can update in Terminal:', command: BREW_COMMAND };
   const o = offered;
   if (!o) return { ok: false, reason: 'Check for a new version again.' };
   if (running) return { ok: false, reason: 'An update is already being downloaded.' };
-  if (o.kind === 'brew') return { ok: false, reason: 'This copy was installed with Homebrew. Update it in Terminal.', command: BREW_COMMAND };
+  const send = (channel: string, payload: unknown) => { if (!wc.isDestroyed()) wc.send(channel, payload); };
+  const log = (text: string) => send('update:log', text);
+  const stage = (name: string) => send('update:stage', name);
+  if (o.kind === 'brew') {
+    // As the user, never as root; brew refuses root anyway.
+    running = new AbortController();
+    try {
+      const brew = await findBrew();
+      if (!brew) return { ok: false, reason: 'Homebrew was not found on this Mac. You can update in Terminal:', command: BREW_COMMAND };
+      const r = await brewUpgrade({
+        brew, runningVersion: app.getVersion(), installedVersion: bundleVersion, onLog: log, signal: running.signal,
+        onStage: (st) => stage(st === 'update' ? 'brew-update' : 'brew-upgrade'),
+      });
+      if (r.ok) return { ok: true, restart: true, message: `Homebrew installed Roxora Imager ${o.release.tag_name.replace(/^v/, '')}. Restart to use it.` };
+      return r.cancelled ? { ok: false, reason: r.reason } : { ok: false, reason: `${r.reason} Its output is below. You can also update in Terminal:`, command: BREW_COMMAND };
+    } finally {
+      running = null;
+    }
+  }
   const asset = o.asset;
   if (o.kind === 'none' || !asset) return { ok: false, reason: 'The app cannot update this copy itself. Get the new version from the release page.' };
   if (!asset.browser_download_url.startsWith(DOWNLOAD_PREFIX)) return { ok: false, reason: 'The release lists a download that is not on the Roxora Imager release page. Nothing was downloaded.' };
@@ -134,13 +180,29 @@ export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
   try {
     if (o.kind === 'dmg') {
       const dest = join(app.getPath('downloads'), asset.name);
+      stage('download');
       await downloadVerified({ ...d, dest });
-      const err = await shell.openPath(dest);
-      return { ok: true, restart: false, message: `${asset.name} is in your Downloads folder${err ? '. Open it' : ' and has been opened'}. `
-        + 'Quit Roxora Imager, then drag the new Roxora Imager onto Applications and replace the old one.' };
+      // From here on there is no stopping half way.
+      stage('install');
+      try {
+        const at = await swapAppFromDmg({ dmg: dest, appPath: appBundle(), home: homedir(), onLog: log });
+        const moved = at !== appBundle();
+        if (moved) relaunchExe = join(at, 'Contents', 'MacOS', app.getPath('exe').split('/').pop()!);
+        return { ok: true, restart: true, message: moved
+          ? `Roxora Imager ${version} is installed at ${at}, because ${appBundle().replace(/\/[^/]+$/, '')} cannot be written. The old copy is still at ${appBundle()}. Restart to use the new one.`
+          : `Roxora Imager ${version} is installed. Restart to use it.` };
+      } catch (e) {
+        // Not possible here: as before, the DMG is opened and the user drags the app.
+        log(`${(e as Error).message}\n`);
+        const err = await shell.openPath(dest);
+        const why = e instanceof NotInPlace ? 'The app could not be replaced where it is' : 'Replacing the app did not work';
+        return { ok: true, restart: false, message: `${why}: ${(e as Error).message.replace(/\.$/, '')}. The old app is unchanged. ${asset.name} is in your Downloads folder${err ? '. Open it' : ' and has been opened'}: `
+          + 'quit Roxora Imager, then drag the new Roxora Imager onto Applications and replace the old one.' };
+      }
     }
     if (o.kind === 'windows') {
       const dest = join(mkdtempSync(join(tmpdir(), 'roxora-imager-update-')), asset.name);
+      stage('download');
       await downloadVerified({ ...d, dest });
       const err = await shell.openPath(dest);
       if (err) return { ok: false, reason: `The installer could not be started (${err}). It is at ${dest}.` };

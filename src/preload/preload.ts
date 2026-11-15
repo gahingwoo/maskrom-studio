@@ -35,6 +35,17 @@ const api: ImagerApi = {
   installUpdate: () => ipcRenderer.invoke('update:install'),
   cancelUpdate: () => ipcRenderer.invoke('update:cancel'),
   restartApp: () => ipcRenderer.invoke('update:restart'),
+  onUpdateStage: (cb) => {
+    const h = (_e: unknown, st: string) => cb(st);
+    ipcRenderer.on('update:stage', h);
+    return () => { ipcRenderer.off('update:stage', h); };
+  },
+  onUpdateLog: (cb) => {
+    const h = (_e: unknown, text: string) => cb(text);
+    ipcRenderer.on('update:log', h);
+    return () => { ipcRenderer.off('update:log', h); };
+  },
+  copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   onUpdateProgress: (cb) => {
     const h = (_e: unknown, p: { bytes: number; total: number }) => cb(p);
     ipcRenderer.on('update:progress', h);

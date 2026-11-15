@@ -1,7 +1,7 @@
 // The Electron main process: the window, the app:// protocol, WebUSB access
 // for the Maskrom worker, and everything that touches disks or the network.
 
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, net, session, shell, type WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -19,7 +19,7 @@ import { describeLocal, measureFile, sha256OfFile } from './local-image';
 import { handleProtocol, ORIGIN, registerScheme } from './protocol';
 import { macWrite } from './mac-write';
 import { loadSettings, saveSettings } from './settings';
-import { cancelUpdate, checkForUpdate, installUpdate, restartApp } from './updater';
+import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restartApp } from './updater';
 import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
 
 registerScheme();
@@ -348,6 +348,13 @@ ipcMain.handle('update:install', (e) => (job
   ? { ok: false, reason: 'A write is running. Update when it is done.' } : installUpdate(e.sender)));
 ipcMain.handle('update:cancel', () => cancelUpdate());
 ipcMain.handle('update:restart', () => { if (!job) restartApp(); });
+// Copy buttons. The page has no clipboard permission of its own (usb.ts
+// grants nothing but USB), so navigator.clipboard does nothing there.
+ipcMain.handle('clipboard:write', (_e, text: unknown) => {
+  if (typeof text !== 'string' || text.length > 20000) return false;
+  clipboard.writeText(text);
+  return true;
+});
 ipcMain.handle('open-external', (_e, url: string) => {
   if (/^https:\/\/(github\.com\/roxora-os\/|roxora-os\.github\.io\/|zadig\.akeo\.ie\/)/.test(url)) return shell.openExternal(url);
 });
@@ -357,6 +364,7 @@ ipcMain.on('app:info', (e) => {
 ipcMain.on('theme', (_e, t: 'light' | 'dark') => { nativeTheme.themeSource = t; });
 
 app.whenReady().then(() => {
+  afterUpdateCleanup();
   handleProtocol(join(appDir, 'build', 'renderer'), resourcesDir, loaderDir());
   // Unpackaged builds only: let the WebUSB smoke test (scripts/usb-smoke.mjs)
   // reach a device that is not a Rockchip board, and serve it a test file.
