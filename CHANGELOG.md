@@ -10,11 +10,15 @@
   into place. Either way the dialog then offers "Restart now". The old app
   stays untouched if anything fails; the command to copy and the opened DMG
   remain as the fallback.
+- Fix: Maskrom writing to an RK3576 board (seen on a ROCK 4D from a Mac)
+  stopped with "The board did not come back after the loader was sent". The
+  board does come back, but still lists as Maskrom; it now counts as back
+  when it answers with its flash size.
 - Fix: the Copy buttons did nothing in the desktop app (the brew command in
   the update dialog, the command shown when a package could not be
   installed). The page has no clipboard permission; copying now goes through
-  the app itself. The udev rule on the Destination step has a Copy button
-  too.
+  the app itself, and the button reads "Copied" after it was pressed. The
+  udev rule on the Destination step has a Copy button too.
 
 ## 0.1.5
 
