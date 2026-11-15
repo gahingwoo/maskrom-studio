@@ -76,8 +76,10 @@ The app looks for a newer version once a day and offers to install it
 releases are offered to everyone. Beta versions are the pre-releases on
 GitHub, with a version such as 0.1.5-beta.1; they are offered only when
 "Also offer beta versions (pre-releases)" is turned on in Settings, and
-`install.sh` installs one only with `BETA=1`. How an update is installed
-depends on how the app was installed: [docs/install.md](docs/install.md#updates).
+`install.sh` installs one only with `BETA=1`. Updates are installed inside
+the app after you confirm; how depends on how the app was installed (on
+macOS through Homebrew or by replacing the app from the new DMG):
+[docs/install.md](docs/install.md#updates).
 
 What each system asks on first start, and the drivers for Maskrom writing:
 [docs/install.md](docs/install.md). The website lists the packages of the

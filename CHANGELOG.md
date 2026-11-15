@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- macOS: updates are installed inside the app. A Homebrew install is
+  updated by running Homebrew for you after you confirm ("brew update", then
+  "brew upgrade --cask roxora-imager", as your user, with its output in the
+  dialog); an app from the DMG or install.sh is replaced by the one in the
+  new DMG, which is downloaded, checked, mounted out of sight and copied
+  into place. Either way the dialog then offers "Restart now". The old app
+  stays untouched if anything fails; the command to copy and the opened DMG
+  remain as the fallback.
+- Fix: the Copy buttons did nothing in the desktop app (the brew command in
+  the update dialog, the command shown when a package could not be
+  installed). The page has no clipboard permission; copying now goes through
+  the app itself. The udev rule on the Destination step has a Copy button
+  too.
+
 ## 0.1.5
 
 - Images in parts. GitHub takes no release file of 2 GiB or more, so Roxora

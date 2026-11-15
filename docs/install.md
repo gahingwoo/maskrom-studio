@@ -129,8 +129,8 @@ cancelled. What happens then depends on how the app was installed:
 
 | Installed as | Update |
 | --- | --- |
-| macOS, Homebrew cask | The app shows the command `brew upgrade --cask roxora-imager` to copy. It does not run Homebrew. |
-| macOS, DMG or install.sh | The DMG for this Mac's CPU goes to the Downloads folder and is opened. Quit Roxora Imager and drag the new app onto Applications. The app does not replace itself. |
+| macOS, Homebrew cask | The app runs Homebrew for you, as your user: `brew update`, then `brew upgrade --cask roxora-imager`. Its output is in the dialog. Then **Restart now**. If Homebrew is not found or fails, the dialog shows its error and the command to copy. Homebrew only has a new version once its tap lists it, which can be a little after the release. |
+| macOS, DMG or install.sh | The DMG for this Mac's CPU goes to the Downloads folder, is mounted out of sight, and its app is copied in place of the running one (into `~/Applications` if the app's folder cannot be written). Then **Restart now**. The old app is kept until the new one is in place. If that is not possible the DMG is opened and you drag the app yourself. |
 | Windows, installer | The setup program is downloaded and started, and Roxora Imager closes so that it can be replaced. |
 | Linux, AppImage | The new AppImage is downloaded into the same folder and put in place of the old file in one step. Restart the app. |
 | Linux, .deb or .rpm | The package is downloaded and installed with apt-get, dnf or zypper through pkexec, which asks for your password. If that is not possible the app shows the command to run in a terminal. Restart the app. |
