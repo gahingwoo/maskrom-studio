@@ -29,6 +29,11 @@
   <url type="bugtracker">https://github.com/roxora-os/imager/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.8" date="2026-11-15">
+      <description>
+        <p>When a board's loader cannot read back past a point over USB, the result says how much was verified instead of failing.</p>
+      </description>
+    </release>
     <release version="0.1.7" date="2026-11-15">
       <description>
         <p>Writing an RK3576 board over USB works when its loader still runs from an earlier attempt.</p>

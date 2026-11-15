@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8
 
 - Maskrom: when the board's loader returns filler past a point on read-back
   (an RK3576 reading the SD card over USB, from 32 MiB on), the result says
