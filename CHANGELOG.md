@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Maskrom on the RK3576: a board whose loader still runs from an earlier
+  attempt is written without sending the loader again (sending it failed
+  with "Downloading bootloader failed!"). The app asks the board with rfi
+  first, and also when sending the loader fails.
+
 ## 0.1.6
 
 - macOS: updates are installed inside the app. A Homebrew install is

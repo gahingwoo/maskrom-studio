@@ -31,6 +31,8 @@ export interface FakeOptions {
    * Maskrom although the loader answers commands.
    */
   loaderLooksLikeMaskrom?: boolean;
+  /** The loader already runs (an earlier attempt), looking like Maskrom. */
+  loaderAlreadyRunning?: boolean;
 }
 
 class Storage {
@@ -101,7 +103,7 @@ export class FakeBoard {
   constructor(public opts: FakeOptions) {
     for (const [code, size] of Object.entries(opts.storages)) this.storages.set(Number(code), new Storage(size));
     this.current = opts.defaultStorage;
-    this.devices = [new FakeUsbDevice(this, false)];
+    this.devices = [opts.loaderAlreadyRunning ? new FakeUsbDevice(this, true, false) : new FakeUsbDevice(this, false)];
   }
 
   /** What navigator.usb looks like for this board. */

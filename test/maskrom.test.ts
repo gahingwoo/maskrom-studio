@@ -135,6 +135,17 @@ describe.skipIf(!haveWasm)('Maskrom flash through the WASM rkdeveloptool', () =>
     expect(Buffer.from(board.contents(1, image.length)).equals(Buffer.from(image))).toBe(true);
   });
 
+  it('does not send the loader again when it already runs (RK3576 after an earlier attempt)', async () => {
+    const board = new FakeBoard({ storages: { 1: 64 * MiB, 9: 16 * MiB }, defaultStorage: 9, loaderAlreadyRunning: true });
+    const { runner } = await setup(board);
+    const stages: string[] = [];
+    const res = await flash(runner, plan(image), hooks(stages));
+    expect(res).toMatchObject({ ok: true, verified: 'match' });
+    expect(stages).toEqual(['detect', 'storage', 'write', 'verify', 'reset']);
+    expect(board.loaderBytes).toBe(0);
+    expect(Buffer.from(board.contents(1, image.length)).equals(Buffer.from(image))).toBe(true);
+  });
+
   it('says so when the board does not come back after the loader', async () => {
     const board = new FakeBoard({ storages: { 1: 64 * MiB }, defaultStorage: 1, stayAway: true });
     const { runner } = await setup(board);

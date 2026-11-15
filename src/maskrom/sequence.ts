@@ -153,36 +153,52 @@ export async function flash(r: Runner, plan: FlashPlan, hooks: Hooks): Promise<F
     if (mode === 'none') return { ok: false, reason: 'No board in Maskrom mode was found.' };
     if (mode === 'several') return { ok: false, reason: 'More than one Rockchip device is connected. Leave only the board you want to write.' };
 
-    if (mode === 'maskrom') {
+    // The loader (usbplug) answers rfi; plain Maskrom cannot. On the RK3576
+    // ld says Maskrom either way, so a board whose loader still runs from an
+    // earlier attempt looks like a fresh one; db then fails on it.
+    const loaderRuns = async () => {
+      const probe = await r.run(['rfi']);
+      return probe.code === 0 && parseFlashSize(probe.lines) !== null;
+    };
+    if (mode === 'maskrom' && await loaderRuns()) {
+      hooks.log('The loader is already running on the board; not sending it again.');
+    } else if (mode === 'maskrom') {
       hooks.stage('loader');
       const loader = r.writeFile('loader.bin', plan.loader);
-      await step('loader', ['db', loader], 'Sending the loader');
-      // The board resets and comes back with the loader (usbplug) running.
-      // The main process grants access to Rockchip devices, so it shows up
-      // again without a second device pick. Some SoCs come back as a Loader
-      // device; the RK3576 comes back still looking like Maskrom to `ld`
-      // (same descriptor), so then the loader is known to run when `rfi`
-      // gets an answer, which plain Maskrom cannot give (RKDevelopTool-GUI
-      // waits for rfi the same way).
-      hooks.stage('reconnect');
-      const deadline = (plan.reconnectTimeout ?? 20000);
-      let waited = 0;
-      let back = false;
-      await hooks.sleep(1000);
-      while (waited < deadline) {
-        if (hooks.cancelled()) throw new FlashError('Cancelled.');
-        const m = parseList((await r.run(['ld'])).lines);
-        if (m === 'loader') { back = true; break; }
-        if (m === 'maskrom') {
-          const probe = await r.run(['rfi']);
-          if (probe.code === 0 && parseFlashSize(probe.lines) !== null) { back = true; break; }
+      if (hooks.cancelled()) throw new FlashError('Cancelled.');
+      hooks.log(`$ rkdeveloptool db ${loader}`);
+      const db = await r.run(['db', loader]);
+      if (db.code !== 0) {
+        // db also fails when a loader is already running (RKDevelopTool-GUI
+        // checks the same way): go on if rfi answers.
+        if (!(await loaderRuns())) {
+          throw new FlashError(`Sending the loader failed (rkdeveloptool exit ${db.code}).`);
         }
-        await hooks.sleep(500);
-        waited += 500;
-      }
-      if (!back) {
-        return { ok: false, reason: 'The board did not come back after the loader was sent.',
-          detail: 'Unplug the USB cable, put the board in Maskrom mode again and retry.' };
+      } else {
+        // The board resets and comes back with the loader (usbplug) running.
+        // The main process grants access to Rockchip devices, so it shows up
+        // again without a second device pick. Some SoCs come back as a Loader
+        // device; the RK3576 comes back still looking like Maskrom to `ld`
+        // (same descriptor), so then the loader is known to run when `rfi`
+        // gets an answer, which plain Maskrom cannot give (RKDevelopTool-GUI
+        // waits for rfi the same way).
+        hooks.stage('reconnect');
+        const deadline = (plan.reconnectTimeout ?? 20000);
+        let waited = 0;
+        let back = false;
+        await hooks.sleep(1000);
+        while (waited < deadline) {
+          if (hooks.cancelled()) throw new FlashError('Cancelled.');
+          const m = parseList((await r.run(['ld'])).lines);
+          if (m === 'loader') { back = true; break; }
+          if (m === 'maskrom' && await loaderRuns()) { back = true; break; }
+          await hooks.sleep(500);
+          waited += 500;
+        }
+        if (!back) {
+          return { ok: false, reason: 'The board did not come back after the loader was sent.',
+            detail: 'Unplug the USB cable, put the board in Maskrom mode again and retry.' };
+        }
       }
     }
 
