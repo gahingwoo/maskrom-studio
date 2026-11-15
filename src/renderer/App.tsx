@@ -342,7 +342,7 @@ function ImageStep({ board, imageId, setImage, lp }: {
         <Table aria-label="Images" variant="compact">
           <Thead><Tr><Th screenReaderText="Select" />
             {IMAGE_COLUMNS.map(([key, label], col) => (
-              <Th key={key} sort={{
+              <Th key={key} modifier={key === 'kernel' || key === 'size' ? 'nowrap' : undefined} sort={{
                 columnIndex: col + 1,
                 sortBy: sort ? { index: IMAGE_COLUMNS.findIndex(([k]) => k === sort.key) + 1, direction: sort.dir } : {},
                 onSort: (_e, _i, dir) => setSort({ key, dir }),
@@ -353,11 +353,11 @@ function ImageStep({ board, imageId, setImage, lp }: {
             {(sort ? [...board.images].sort((x, y) => (sort.dir === 'asc' ? 1 : -1) * compareImages(x, y, sort.key)) : board.images).map((img, i) => (
               <Tr key={img.id} isClickable onRowClick={() => setImage(img.id)} isRowSelected={selected === img.id}>
                 <Td select={{ rowIndex: i, variant: 'radio', isSelected: selected === img.id, onSelect: () => setImage(img.id) }} />
-                <Td dataLabel="Release">{releaseWords(img)}<div className="muted">{img.releaseInfo.date}</div></Td>
+                <Td dataLabel="Release" modifier="nowrap">{img.releaseInfo.version}{img.releaseInfo.prerelease ? ' (beta)' : ''}<div className="muted">{img.releaseInfo.date}</div></Td>
                 <Td dataLabel="Ubuntu">{img.ubuntuVersion} ({img.release})</Td>
                 <Td dataLabel="Desktop">{flavorWords(img.flavor)}</Td>
-                <Td dataLabel="Kernel">{img.kernel ? `${img.kernel} ` : ''}{img.branch}</Td>
-                <Td dataLabel="Size">{formatBytes(img.size)}</Td>
+                <Td dataLabel="Kernel" modifier="nowrap">{img.kernel ? `${img.kernel} ` : ''}{img.branch}</Td>
+                <Td dataLabel="Size" modifier="nowrap">{formatBytes(img.size)}</Td>
               </Tr>
             ))}
           </Tbody>

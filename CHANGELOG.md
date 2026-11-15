@@ -4,7 +4,8 @@
 
 - Image step: click a column header (Release, Ubuntu, Desktop, Kernel,
   Size; the download size) to sort the images by it, again to reverse; the desktop flavor
-  has its own column.
+  has its own column. The Release, Kernel and Size columns no longer wrap,
+  so their headers stay readable with a full release list.
 - Fix: a write that ended with an unexpected error left the app thinking it
   was still writing, which greyed out Update in Settings until a restart. It
   now ends with the error shown.
