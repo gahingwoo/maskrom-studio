@@ -72,6 +72,8 @@ jobs:
       - run: command -v xz || brew install xz
       - name: Write, read back, refuse the system disk, cancel
         run: node test/e2e/sd-ramdisk-mac.mjs
+      - name: In-app update, swap the app for the one in a DMG (real hdiutil, ditto, xattr)
+        run: node test/e2e/update-dmg-mac.mjs
 
   sd-e2e:
     name: SD write to a loop device
