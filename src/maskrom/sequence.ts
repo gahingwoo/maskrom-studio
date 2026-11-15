@@ -157,9 +157,13 @@ export async function flash(r: Runner, plan: FlashPlan, hooks: Hooks): Promise<F
       hooks.stage('loader');
       const loader = r.writeFile('loader.bin', plan.loader);
       await step('loader', ['db', loader], 'Sending the loader');
-      // The board resets and comes back as a Loader device. The main process
-      // grants access to Rockchip devices, so it shows up again without a
-      // second device pick.
+      // The board resets and comes back with the loader (usbplug) running.
+      // The main process grants access to Rockchip devices, so it shows up
+      // again without a second device pick. Some SoCs come back as a Loader
+      // device; the RK3576 comes back still looking like Maskrom to `ld`
+      // (same descriptor), so then the loader is known to run when `rfi`
+      // gets an answer, which plain Maskrom cannot give (RKDevelopTool-GUI
+      // waits for rfi the same way).
       hooks.stage('reconnect');
       const deadline = (plan.reconnectTimeout ?? 20000);
       let waited = 0;
@@ -169,6 +173,10 @@ export async function flash(r: Runner, plan: FlashPlan, hooks: Hooks): Promise<F
         if (hooks.cancelled()) throw new FlashError('Cancelled.');
         const m = parseList((await r.run(['ld'])).lines);
         if (m === 'loader') { back = true; break; }
+        if (m === 'maskrom') {
+          const probe = await r.run(['rfi']);
+          if (probe.code === 0 && parseFlashSize(probe.lines) !== null) { back = true; break; }
+        }
         await hooks.sleep(500);
         waited += 500;
       }

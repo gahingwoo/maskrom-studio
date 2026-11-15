@@ -25,6 +25,12 @@ export interface FakeOptions {
   fillerFrom?: number;
   /** Do not come back after the loader. */
   stayAway?: boolean;
+  /**
+   * After the loader the device descriptor still says Maskrom (even
+   * bcdUSB), as a real RK3576 does once usbplug runs: `ld` keeps printing
+   * Maskrom although the loader answers commands.
+   */
+  loaderLooksLikeMaskrom?: boolean;
 }
 
 class Storage {
@@ -108,7 +114,7 @@ export class FakeBoard {
     // Loader device appears a moment later.
     this.devices = [];
     if (this.opts.stayAway) return;
-    setTimeout(() => { this.devices = [new FakeUsbDevice(this, true)]; }, 300);
+    setTimeout(() => { this.devices = [new FakeUsbDevice(this, true, !this.opts.loaderLooksLikeMaskrom)]; }, 300);
   }
 
   contents(code: number, length: number): Uint8Array {
@@ -127,8 +133,8 @@ class FakeUsbDevice {
   private pending: { op: number; tag: number; addr: number; count: number; reserved: number; len: number } | null = null;
   private inQueue: Uint8Array[] = [];
 
-  constructor(private board: FakeBoard, private loader: boolean) {
-    this.usbVersionSubminor = loader ? 1 : 0;
+  constructor(private board: FakeBoard, private loader: boolean, private showsAsLoader = loader) {
+    this.usbVersionSubminor = showsAsLoader ? 1 : 0;
   }
 
   async open() { this.opened = true; }
@@ -142,7 +148,7 @@ class FakeUsbDevice {
   async controlTransferIn(setup: any, length: number) {
     if (setup.requestType === 'standard' && setup.request === 6) {
       const type = setup.value >> 8;
-      const d = type === 1 ? deviceDescriptor(this.loader) : type === 2 ? configDescriptor() : null;
+      const d = type === 1 ? deviceDescriptor(this.showsAsLoader) : type === 2 ? configDescriptor() : null;
       if (!d) return { status: 'stall', data: new DataView(new ArrayBuffer(0)) };
       return { status: 'ok', data: new DataView(d.buffer, 0, Math.min(length, d.byteLength)) };
     }
