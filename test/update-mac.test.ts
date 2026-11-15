@@ -55,7 +55,8 @@ describe('upgrading through Homebrew', () => {
     const run: Run = async (cmd, args, o) => {
       calls.push([cmd, ...args]);
       o?.onOutput?.(`output of ${args[0]}\n`);
-      const code = args[0] === 'update' ? codes.update ?? 0 : codes.upgrade ?? 0;
+      const step = args[0] === 'update' ? 'update' : 'upgrade';
+      const code = step in codes ? codes[step]! : 0;
       return { code, output: '' };
     };
     const go = (signal?: AbortSignal) => brewUpgrade({
