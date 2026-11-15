@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActionList, ActionListGroup, ActionListItem, Alert, AlertActionCloseButton, AlertActionLink, Button, ClipboardCopy, ClipboardCopyButton, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
+  ActionList, ActionListGroup, ActionListItem, Alert, AlertActionCloseButton, AlertActionLink, Button, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, EmptyState, EmptyStateActions, EmptyStateBody,
   EmptyStateFooter, ExpandableSection, Flex, FlexItem, Form, FormGroup, FormSelect, FormSelectOption, Masthead,
   MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter, ModalHeader, Page,
@@ -386,7 +386,7 @@ function DriversNote() {
           The .deb and .rpm packages install a udev rule that lets you use the board without root. With the
           AppImage, add the rule once:
         </Content>
-        <CopyBlock id="udev-rule" text={'echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"\' | sudo tee /etc/udev/rules.d/70-roxora-imager.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger'} />
+        <CopyBlock text={'echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"\' | sudo tee /etc/udev/rules.d/70-roxora-imager.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger'} />
       </>
     );
   }
@@ -650,25 +650,25 @@ function copyText(text: string): void {
   else navigator.clipboard?.writeText(text).catch(() => {});
 }
 
-/** One line of text with a Copy button that says "Copied". */
-function CopyLine({ text }: { text: string }) {
-  return (
-    <ClipboardCopy isReadOnly hoverTip="Copy" clickTip="Copied" onCopy={() => copyText(text)}>{text}</ClipboardCopy>
-  );
-}
-
-/** A code block of commands with a Copy button. */
-function CopyBlock({ id, text }: { id: string; text: string }) {
+/**
+ * Commands in a code block with a Copy button. The button itself says
+ * "Copied" for a moment: feedback that does not depend on a tooltip.
+ */
+function CopyBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const t = setTimeout(() => setCopied(false), 2500);
+    return () => clearTimeout(t);
+  }, [copied]);
   const actions = (
     <CodeBlockAction>
-      <ClipboardCopyButton id={`${id}-copy`} textId={id} aria-label="Copy" variant="plain"
-        onClick={() => { copyText(text); setCopied(true); }} onTooltipHidden={() => setCopied(false)}>
+      <Button variant="link" className="copy-button" aria-live="polite" onClick={() => { copyText(text); setCopied(true); }}>
         {copied ? 'Copied' : 'Copy'}
-      </ClipboardCopyButton>
+      </Button>
     </CodeBlockAction>
   );
-  return <CodeBlock actions={actions}><CodeBlockCode id={id}>{text}</CodeBlockCode></CodeBlock>;
+  return <CodeBlock actions={actions}><CodeBlockCode>{text}</CodeBlockCode></CodeBlock>;
 }
 
 /** What pressing Update will do, by how this copy was installed. Shown before anything is downloaded. */
@@ -728,7 +728,7 @@ function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onClose: (
           {brew && !canInstall && (
             <>
               <Content component="p">This copy was installed with Homebrew. Update it in Terminal with:</Content>
-              <CopyLine text="brew upgrade --cask roxora-imager" />
+              <CopyBlock text="brew upgrade --cask roxora-imager" />
             </>
           )}
           {!brew && !canInstall && (
@@ -752,7 +752,7 @@ function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onClose: (
           {result && (
             <Alert isInline variant={result.ok ? 'success' : 'danger'} title={result.ok ? result.message : result.reason} />
           )}
-          {result && !result.ok && result.command && <CopyLine text={result.command} />}
+          {result && !result.ok && result.command && <CopyBlock text={result.command} />}
           {log && (
             <ExpandableSection toggleText="Output" className="log">
               <CodeBlock><CodeBlockCode>{log}</CodeBlockCode></CodeBlock>

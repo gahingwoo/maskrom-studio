@@ -155,12 +155,12 @@ for (const [w, h, tag] of [[1100, 760, 'd'], [720, 640, 'm']]) {
       await app.evaluate(({ clipboard }) => clipboard.writeText('something else'));
       await page.click('button:has-text("Update with Homebrew")');
       await page.waitForSelector('text=Homebrew was not found on this Mac');
-      await page.click('.pf-v6-c-clipboard-copy button');
-      await page.waitForSelector('.pf-v6-c-tooltip:has-text("Copied")');
+      await page.click('.copy-button');
+      await page.waitForSelector('.copy-button:has-text("Copied")');
       const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
       if (copied !== 'brew upgrade --cask roxora-imager') throw new Error(`the Copy button put "${copied}" on the clipboard`);
       console.log(`Copy button: the clipboard holds "${copied}"`);
-      // Without moving the pointer away: the "Copied" tip is the point.
+      // At once: the button says "Copied" only for a moment.
       const b64 = await app.evaluate(async ({ BrowserWindow }) =>
         (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
       writeFileSync(`${out}/6-update-brew-copied-${tag}-light.png`, Buffer.from(b64, 'base64'));
