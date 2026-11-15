@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.6
 
 - macOS: updates are installed inside the app. A Homebrew install is
   updated by running Homebrew for you after you confirm ("brew update", then

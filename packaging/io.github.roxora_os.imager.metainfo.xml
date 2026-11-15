@@ -29,6 +29,11 @@
   <url type="bugtracker">https://github.com/roxora-os/imager/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.6" date="2026-11-15">
+      <description>
+        <p>Writing an RK3576 board over USB no longer stops after the loader. On macOS, updates install inside the app, through Homebrew or from the DMG. Copy buttons work.</p>
+      </description>
+    </release>
     <release version="0.1.5" date="2026-11-15">
       <description>
         <p>Downloads Roxora's desktop images, which releases carry in parts, joining and checking them. Roxora's colours in the light and dark theme.</p>
