@@ -11,16 +11,32 @@ mkdirSync(out, { recursive: true });
 const env = { ...process.env, ROXORA_IMAGER_HIDDEN: '1', ROXORA_IMAGER_SAMPLE: '0', ROXORA_IMAGER_FAKE_DRIVES: '1', ROXORA_IMAGER_FAKE_UPDATE: 'current' };
 delete env.ELECTRON_RUN_AS_NODE;
 
+// The app asks GitHub's API without a token, and CI runners share their
+// addresses, so the 60 requests an hour can run out: try a few times.
+async function openWithReleases(theme) {
+  for (let attempt = 1; ; attempt++) {
+    const app = await electron.launch({ args: ['.'], env });
+    try {
+      const page = await app.firstWindow();
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1100, 760));
+      await page.evaluate((t) => { localStorage.setItem('theme', t); }, theme);
+      await page.reload();
+      await page.waitForSelector('h2:has-text("Board")');
+      // The real releases: wait until a board from them is listed.
+      await page.waitForSelector('text=Radxa ROCK 4D', { timeout: 60000 });
+      await page.waitForTimeout(800);
+      return { app, page };
+    } catch (e) {
+      await app.close();
+      if (attempt >= 3) throw e;
+      console.log(`attempt ${attempt} found no releases (${e.message.split('\n')[0]}); waiting a minute`);
+      await new Promise((r) => setTimeout(r, 60000));
+    }
+  }
+}
+
 for (const theme of ['light', 'dark']) {
-  const app = await electron.launch({ args: ['.'], env });
-  const page = await app.firstWindow();
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1100, 760));
-  await page.evaluate((t) => { localStorage.setItem('theme', t); }, theme);
-  await page.reload();
-  await page.waitForSelector('h2:has-text("Board")');
-  // The real releases: wait until a board from them is listed.
-  await page.waitForSelector('text=Radxa ROCK 4D', { timeout: 60000 });
-  await page.waitForTimeout(800);
+  const { app, page } = await openWithReleases(theme);
   const shot = async (name) => {
     await page.mouse.move(1, 1);
     await page.waitForTimeout(400);
