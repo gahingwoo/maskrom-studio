@@ -320,7 +320,7 @@ function BoardPicker({ boards, board, setBoard, find }: {
 }
 
 const IMAGE_COLUMNS: [ImageSortKey, string][] = [
-  ['release', 'Release'], ['ubuntu', 'Ubuntu'], ['desktop', 'Desktop'], ['kernel', 'Kernel'], ['size', 'Download'],
+  ['release', 'Release'], ['ubuntu', 'Ubuntu'], ['desktop', 'Desktop'], ['kernel', 'Kernel'], ['size', 'Size'],
 ];
 
 function ImageStep({ board, imageId, setImage, lp }: {
@@ -357,7 +357,7 @@ function ImageStep({ board, imageId, setImage, lp }: {
                 <Td dataLabel="Ubuntu">{img.ubuntuVersion} ({img.release})</Td>
                 <Td dataLabel="Desktop">{flavorWords(img.flavor)}</Td>
                 <Td dataLabel="Kernel">{img.kernel ? `${img.kernel} ` : ''}{img.branch}</Td>
-                <Td dataLabel="Download">{formatBytes(img.size)}</Td>
+                <Td dataLabel="Size">{formatBytes(img.size)}</Td>
               </Tr>
             ))}
           </Tbody>

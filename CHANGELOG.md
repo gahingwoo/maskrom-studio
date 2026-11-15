@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Image step: click a column header (Release, Ubuntu, Desktop, Kernel,
-  Download) to sort the images by it, again to reverse; the desktop flavor
+  Size; the download size) to sort the images by it, again to reverse; the desktop flavor
   has its own column.
 - Fix: a write that ended with an unexpected error left the app thinking it
   was still writing, which greyed out Update in Settings until a restart. It
