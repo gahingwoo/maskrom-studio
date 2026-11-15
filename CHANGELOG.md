@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5
 
 - Images in parts. GitHub takes no release file of 2 GiB or more, so Roxora
   releases carry the desktop images as `<file>.part1`, `<file>.part2`, ...
