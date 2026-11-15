@@ -1082,9 +1082,18 @@ export function App() {
       setRun((cur) => cur && { ...cur, stages: cur.stages.map((s) => (s.id === id ? { ...s, percent: pct }
         : s.id === 'download' && id !== 'download' ? { ...s, percent: 100 } : s)) });
     });
-    const res = local && api.writeLocalImage ? await api.writeLocalImage(local.token, target.device)
-      : await api.writeSd(image!.id, target.device);
-    off();
+    // A write that throws (an IPC call that failed) must still end the run:
+    // a run without a result counts as a write in progress, which hides the
+    // update notice and greys out Update until the app is restarted.
+    let res: Awaited<ReturnType<typeof api.writeSd>>;
+    try {
+      res = local && api.writeLocalImage ? await api.writeLocalImage(local.token, target.device)
+        : await api.writeSd(image!.id, target.device);
+    } catch (e) {
+      res = { ok: false, reason: 'The write stopped with an error.', detail: String((e as Error)?.message ?? e) } as typeof res;
+    } finally {
+      off();
+    }
     setRun((cur) => cur && {
       ...cur,
       result: res.ok
@@ -1148,7 +1157,13 @@ export function App() {
       progress: (s, pct) => { if (s === 'write' || s === 'verify') setStage(s, { percent: pct }); },
     });
     maskromJob.current = job;
-    const res = await job.done;
+    let res: Awaited<typeof job.done>;
+    try {
+      res = await job.done;
+    } catch (e) {
+      // As in startSd: never leave a run without a result.
+      res = { ok: false, reason: 'The write stopped with an error.', detail: String((e as Error)?.message ?? e) };
+    }
     maskromJob.current = null;
     setReconnect(false);
     if (source !== 'file') api.releaseMaskrom(prepared.token);
