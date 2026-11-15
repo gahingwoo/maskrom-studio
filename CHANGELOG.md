@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.9
 
 - Image step: click a column header (Release, Ubuntu, Desktop, Kernel,
   Size; the download size) to sort the images by it, again to reverse; the desktop flavor

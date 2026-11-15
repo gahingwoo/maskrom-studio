@@ -29,6 +29,11 @@
   <url type="bugtracker">https://github.com/roxora-os/imager/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.9" date="2026-11-15">
+      <description>
+        <p>Sort the images by release, Ubuntu version, desktop, kernel or size. A write that ends with an unexpected error no longer leaves the app thinking it is still writing.</p>
+      </description>
+    </release>
     <release version="0.1.8" date="2026-11-15">
       <description>
         <p>When a board's loader cannot read back past a point over USB, the result says how much was verified instead of failing.</p>
