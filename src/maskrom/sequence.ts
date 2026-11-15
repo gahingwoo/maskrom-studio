@@ -44,6 +44,12 @@ export interface FlashPlan {
 export type FlashResult =
   | { ok: true; verified: 'match'; sha256: string; capacity: number | null }
   | { ok: true; verified: 'skipped'; sha256: string; capacity: number | null }
+  /**
+   * Everything before verifiedBytes read back as written; from there on the
+   * loader returned 0xCC filler (RK3576 loaders over USB), so the rest could
+   * not be read back. On a ROCK 4D such a card booted normally.
+   */
+  | { ok: true; verified: 'partial'; verifiedBytes: number; sha256: string; capacity: number | null }
   | { ok: false; reason: string; detail?: string };
 
 export class FlashError extends Error {}
@@ -235,15 +241,16 @@ export async function flash(r: Runner, plan: FlashPlan, hooks: Hooks): Promise<F
       const sectors = Math.ceil(plan.source.size / SECTOR);
       await step('verify', ['rl', '0', `0x${sectors.toString(16)}`, sinkPath], 'Reading back');
       const got = rb.digest();
-      if (got !== expected) {
-        if (rb.fillerAt !== null) {
-          return { ok: false, reason: `Could not verify: from ${rb.fillerAt} bytes on, the loader returns filler instead of data. The write itself may be fine.`,
-            detail: `read back ${got}, expected ${expected}` };
-        }
+      if (got === expected) {
+        result = { ok: true, verified: 'match', sha256: got, capacity };
+      } else if (rb.fillerAt !== null && rb.firstDiff !== null && rb.firstDiff >= rb.fillerAt) {
+        // Every byte before the filler matched; past it nothing can be read.
+        hooks.log(`Read-back matched up to ${rb.fillerAt} bytes; from there the loader returns filler (read back ${got}, expected ${expected}).`);
+        result = { ok: true, verified: 'partial', verifiedBytes: rb.fillerAt, sha256: expected, capacity };
+      } else {
         return { ok: false, reason: `Read-back does not match: first difference at byte ${rb.firstDiff}.`,
           detail: `read back ${got}, expected ${expected}` };
       }
-      result = { ok: true, verified: 'match', sha256: got, capacity };
     } else {
       result = { ok: true, verified: 'skipped', sha256: expected ?? '', capacity };
     }

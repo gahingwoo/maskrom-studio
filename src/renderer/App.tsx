@@ -53,7 +53,7 @@ interface Run {
   kind: Method;
   stages: { id: string; label: string; percent: number | null; detail?: string }[];
   log: string[];
-  result: { ok: boolean; title: string; text: string; detail?: string } | null;
+  result: { ok: boolean; warning?: boolean; title: string; text: string; detail?: string } | null;
 }
 
 const RELEASES_URL = 'https://github.com/roxora-os/build/releases';
@@ -624,7 +624,7 @@ function RunView({ run, onCancel, onDone, reconnect }: { run: Run; onCancel: () 
           </Alert>
         )}
         {run.result && (
-          <Alert isInline variant={run.result.ok ? 'success' : 'danger'} title={run.result.title}>
+          <Alert isInline variant={run.result.ok ? (run.result.warning ? 'warning' : 'success') : 'danger'} title={run.result.title}>
             {run.result.text && <p>{run.result.text}</p>}
             {run.result.detail && <p className="detail">{run.result.detail}</p>}
           </Alert>
@@ -1136,9 +1136,16 @@ export function App() {
     maskromJob.current = null;
     setReconnect(false);
     if (source !== 'file') api.releaseMaskrom(prepared.token);
-    finish(res.ok
-      ? { ok: true, title: 'Written and verified', text: `${prepared.name} is on the ${st.label}. The read-back matches (SHA-256 ${res.sha256}).${settingsNow.resetAfterMaskrom ? ' The board is restarting.' : ''}` }
-      : { ok: false, title: res.reason, text: 'Check the connection and the output below.', ...(res.detail ? { detail: res.detail } : {}) });
+    const restarting = settingsNow.resetAfterMaskrom ? ' The board is restarting.' : '';
+    const mib = (n: number) => `${Math.floor(n / 1048576)} MiB`;
+    finish(!res.ok
+      ? { ok: false, title: res.reason, text: 'Check the connection and the output below.', ...(res.detail ? { detail: res.detail } : {}) }
+      : res.verified === 'match'
+        ? { ok: true, title: 'Written and verified', text: `${prepared.name} is on the ${st.label}. The read-back matches (SHA-256 ${res.sha256}).${restarting}` }
+        : res.verified === 'partial'
+          ? { ok: true, warning: true, title: `Written; the first ${mib(res.verifiedBytes)} verified`,
+            text: `${prepared.name} is on the ${st.label}. The first ${mib(res.verifiedBytes)} read back as written. Past that, this board's loader returns filler when the ${st.label} is read over USB, so the rest could not be checked; the write itself went through. Booting the board from it shows it works.${restarting}` }
+          : { ok: true, warning: true, title: 'Written, not verified', text: `${prepared.name} is on the ${st.label}. There was no checksum to compare it with, so it was not read back.${restarting}` });
   };
 
   const onWrite = () => setConfirm(true);

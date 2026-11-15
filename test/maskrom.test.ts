@@ -114,7 +114,7 @@ describe.skipIf(!haveWasm)('Maskrom flash through the WASM rkdeveloptool', () =>
     const board = new FakeBoard({ storages: { 1: 64 * MiB }, defaultStorage: 1, fillerFrom: 4 * MiB });
     const { runner } = await setup(board);
     const res = await flash(runner, plan(image), hooks([]));
-    expect((res as { reason: string }).reason).toMatch(new RegExp(`^Could not verify: from ${4 * MiB} bytes on`));
+    expect(res).toMatchObject({ ok: true, verified: 'partial', verifiedBytes: 4 * MiB });
   });
 
   it('stops when the written bytes do not match the release checksum', async () => {

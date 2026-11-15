@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Maskrom: when the board's loader returns filler past a point on read-back
+  (an RK3576 reading the SD card over USB, from 32 MiB on), the result says
+  how much was verified, as a warning instead of an error; on a ROCK 4D such
+  a card booted normally. A write with no checksum to compare no longer says
+  "verified".
+
 ## 0.1.7
 
 - Maskrom on the RK3576: a board whose loader still runs from an earlier
