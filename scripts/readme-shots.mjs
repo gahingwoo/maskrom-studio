@@ -50,6 +50,11 @@ for (const theme of ['light', 'dark']) {
   await page.click('.pf-v6-c-wizard__footer button:has-text("Next")');
   await page.waitForSelector('h2:has-text("Image")');
   await shot('2-image');
+  // Older releases folded away; opened here to show them, then closed.
+  await page.click('.older-releases .pf-v6-c-expandable-section__toggle');
+  await page.locator('#older-release').scrollIntoViewIfNeeded();
+  await shot('2-image-older');
+  await page.click('.older-releases .pf-v6-c-expandable-section__toggle');
   await page.click('.pf-v6-c-wizard__footer button:has-text("Next")');
   await page.waitForSelector('text=SanDisk');
   await shot('3-destination');
