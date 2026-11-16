@@ -16,8 +16,8 @@ import {
   compareImages, flavorWords, groupByBoard, splitByRelease, type Board, type CatalogImage, type CatalogRelease, type ImageSortKey,
 } from '../shared/catalog';
 import { BOARD_REQUEST_URL, queryWords, vendorCounts, visibleBoards } from '../shared/boardsearch';
-import { formatBytes } from '../shared/format';
-import type { CatalogResult, ImagerApi, JobProgress, LocalImage, PreparedFile } from '../shared/ipc';
+import { formatBytes, uncompressedName } from '../shared/format';
+import type { CatalogResult, ImagerApi, JobProgress, LocalImage, PreparedFile, SaveSubject, SaveTarget } from '../shared/ipc';
 import { INTERNAL_WORDS, type HiddenDrive, type Target } from '../shared/targets';
 import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
 import { maskromBoard, STORAGES, type StorageId } from '../maskrom/boards';
@@ -46,19 +46,46 @@ const RPI_IMAGER_URL = 'https://www.raspberrypi.com/software/';
 // Rockchip's loader is not shipped with the app (maskrom/loaders.ts).
 const LOADER_NOTE = `The first Maskrom write downloads Rockchip's loader from ${RKBIN_HOST} (rockchip-linux/rkbin) and checks it.`;
 
-type Method = 'sd' | 'maskrom';
+type Method = 'sd' | 'maskrom' | 'file';
 type MaskromSource = 'release' | 'spi' | 'file';
 /** A release file being downloaded or checked: what, and how far. */
 interface Checking { label: string; done: number; total: number }
 
 interface Run {
   kind: Method;
-  stages: { id: string; label: string; percent: number | null; detail?: string }[];
+  /** `done`: what to show in place of a percentage that is not known (bytes so far). */
+  stages: { id: string; label: string; percent: number | null; detail?: string; done?: string }[];
   log: string[];
   result: { ok: boolean; warning?: boolean; title: string; text: string; detail?: string } | null;
+  /** A save to a file: its token, for Show in folder. */
+  saved?: string;
 }
 
 const RELEASES_URL = 'https://github.com/roxora-os/build/releases';
+
+/** A UEFI image (release contract: board `generic-<soc>-uefi`), for boards with UEFI firmware instead of a board of its own. */
+function isUefiImage(img: CatalogImage | undefined): boolean {
+  return !!img && /^generic-.*-uefi$/.test(img.board);
+}
+
+/*
+ * Where a saved .img boots, said plainly: a board image only on its board;
+ * the UEFI image on arm64 UEFI firmware, so in a virtual machine an arm64
+ * one, and with Ventoy an arm64 UEFI computer. Never an x86 PC.
+ */
+const UEFI_VM = 'an arm64 (aarch64) UEFI machine, such as QEMU virt with edk2 (AAVMF) or UTM on Apple silicon';
+function bootNote(img: CatalogImage | undefined, custom: boolean): string {
+  if (custom) {
+    return `Where it boots depends on the image: a Roxora board image only on its board, the generic RK3576 UEFI image in ${UEFI_VM}. Not on an x86 PC.`;
+  }
+  if (isUefiImage(img)) {
+    return `This UEFI image boots in ${UEFI_VM}, and from Ventoy only on an arm64 UEFI computer. Not on an x86 PC.`;
+  }
+  return `${img ? `This image boots only on the ${img.boardName}` : 'A board image boots only on its board'}. For a virtual machine or Ventoy use the generic RK3576 UEFI image, which needs ${UEFI_VM}. Neither boots on an x86 PC.`;
+}
+
+/** The last part of a path, for Windows paths as well. */
+const fileName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 /** What a Maskrom write takes by default: the whole image where it fits, else the release's SPI bootloader, else a file. */
 function defaultSource(m: ReturnType<typeof maskromBoard>, img: CatalogImage | undefined): MaskromSource {
@@ -471,6 +498,8 @@ function DestinationStep(p: {
   custom: boolean;
   /** Why the chosen file must not go to SPI NOR flash (maskrom/spi-check.ts). */
   spiProblem: string | null;
+  /** Save as an image file: where, choosing it, and why it cannot go there. */
+  saveTarget: SaveTarget | null; pickSave: () => void; savePicking: boolean; saveError: string | null;
 }) {
   const mb = maskromBoard(p.boardId);
   // A file picker under the radio it belongs to, indented like the radio's description.
@@ -554,6 +583,20 @@ function DestinationStep(p: {
               description={p.custom ? 'Not for the image file chosen in the Image step. Choose a board and one of its release images to write over USB; a file can be chosen there as well.'
                 : mb ? `Through the board's USB-C port: ${mb.storages.map((s) => STORAGES[s].label).join(', or ')}. ${LOADER_NOTE}`
                 : `Maskrom writing is not set up for ${p.boardName}.`} />
+            {api.pickSaveFile && (
+              <Radio id="method-file" name="method" isChecked={p.method === 'file'} onChange={() => p.setMethod('file')}
+                label="Save as an image file"
+                description={`The uncompressed .img, for Ventoy and similar boot-from-file devices, or a virtual machine. ${bootNote(p.image, p.custom)}`}
+                body={p.method === 'file' ? (
+                  <Stack hasGutter>
+                    {fileRow(
+                      <Button variant="secondary" onClick={p.pickSave} isLoading={p.savePicking} isDisabled={p.savePicking}>Choose where to save</Button>,
+                      p.saveTarget ? p.saveTarget.path : 'No place chosen',
+                    )}
+                    {p.saveError && <Alert variant="danger" isInline isPlain title={p.saveError} />}
+                  </Stack>
+                ) : undefined} />
+            )}
           </FormGroup>
         )}
 
@@ -659,7 +702,7 @@ function DestinationStep(p: {
   );
 }
 
-function ReviewFooter({ canWrite, why, onWrite }: { canWrite: boolean; why: string | null; onWrite: () => void }) {
+function ReviewFooter({ canWrite, why, onWrite, save }: { canWrite: boolean; why: string | null; onWrite: () => void; save: boolean }) {
   const { goToPrevStep } = useWizardContext();
   return (
     <WizardFooterWrapper>
@@ -669,7 +712,11 @@ function ReviewFooter({ canWrite, why, onWrite }: { canWrite: boolean; why: stri
         <ActionList>
           <ActionListGroup>
             <ActionListItem><Button variant="secondary" onClick={goToPrevStep}>Back</Button></ActionListItem>
-            <ActionListItem><Button variant="danger" onClick={onWrite} isDisabled={!canWrite}>Erase and write</Button></ActionListItem>
+            <ActionListItem>
+              {/* A save erases nothing: the save dialog already asked before replacing a file. */}
+              {save ? <Button variant="primary" onClick={onWrite} isDisabled={!canWrite}>Save</Button>
+                : <Button variant="danger" onClick={onWrite} isDisabled={!canWrite}>Erase and write</Button>}
+            </ActionListItem>
           </ActionListGroup>
         </ActionList>
       </Stack>
@@ -679,10 +726,11 @@ function ReviewFooter({ canWrite, why, onWrite }: { canWrite: boolean; why: stri
 
 /* The write itself replaces the wizard, as the installer's progress page does. */
 function RunView({ run, onCancel, onDone, reconnect }: { run: Run; onCancel: () => void; onDone: () => void; reconnect: boolean }) {
+  const working = run.kind === 'file' ? 'Saving' : 'Writing';
   return (
-    <PageSection isFilled aria-label="Writing">
+    <PageSection isFilled aria-label={working}>
       <Stack hasGutter className="step">
-        <Title headingLevel="h2">{run.result ? (run.result.ok ? 'Done' : 'Stopped') : 'Writing'}</Title>
+        <Title headingLevel="h2">{run.result ? (run.result.ok ? 'Done' : 'Stopped') : working}</Title>
         {/* Twice the space between stages as between a stage's title and its bar. */}
         <Flex direction={{ default: 'column' }} spaceItems={{ default: 'spaceItemsXl' }}>
           {run.stages.map((s) => (
@@ -691,7 +739,7 @@ function RunView({ run, onCancel, onDone, reconnect }: { run: Run; onCancel: () 
                 title={s.label + (s.detail ? `: ${s.detail}` : '')}
                 value={s.percent ?? 0}
                 // A stage with no percentage (the loader) says so in words.
-                {...(s.percent === null ? { label: 'Waiting', valueText: 'Waiting' } : {})}
+                {...(s.percent === null ? { label: s.done ?? 'Waiting', valueText: s.done ?? 'Waiting' } : {})}
                 measureLocation={ProgressMeasureLocation.top}
                 aria-label={s.label}
               />
@@ -711,9 +759,16 @@ function RunView({ run, onCancel, onDone, reconnect }: { run: Run; onCancel: () 
           </Alert>
         )}
         <StackItem>
-          {run.result
-            ? <Button variant="primary" onClick={onDone}>Write another</Button>
-            : <Button variant="secondary" onClick={onCancel}>Cancel</Button>}
+          {!run.result ? <Button variant="secondary" onClick={onCancel}>Cancel</Button> : (
+            <ActionList>
+              <ActionListGroup>
+                <ActionListItem><Button variant="primary" onClick={onDone}>{run.kind === 'file' ? 'Start over' : 'Write another'}</Button></ActionListItem>
+                {run.result.ok && run.saved && api.showSavedFile && (
+                  <ActionListItem><Button variant="secondary" onClick={() => api.showSavedFile!(run.saved!)}>Show in folder</Button></ActionListItem>
+                )}
+              </ActionListGroup>
+            </ActionList>
+          )}
         </StackItem>
         {run.log.length > 0 && (
           <ExpandableSection toggleText="rkdeveloptool output" className="log">
@@ -972,6 +1027,10 @@ export function App() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [jump, setJump] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  // Save as an image file: where (chosen in the save dialog).
+  const [saveTarget, setSaveTarget] = useState<SaveTarget | null>(null);
+  const [savePicking, setSavePicking] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Linux desktop only: built-in disks (linuxDiskFacts in shared/targets.ts).
   const internalSwitch = !WEB && api.platform === 'linux';
   const [showInternal, setShowInternal] = useState(false);
@@ -1056,7 +1115,8 @@ export function App() {
     if (img) {
       chooseBoard(img.board);
       setImageId(img.id);
-    } else {
+    } else if (method === 'maskrom') {
+      // Maskrom takes release images only; a custom file goes to a drive or a file.
       setMethod('sd');
     }
     setJump('image');
@@ -1127,6 +1187,26 @@ export function App() {
   // A picked release file belongs to one image and one kind.
   useEffect(() => { setReleaseFile(null); setProxyError(null); }, [imageId, source]);
 
+  // Save as an image file. The dialog offers the .img name of what is
+  // saved, so another image means choosing again.
+  const saveName = uncompressedName(local ? local.name : image?.file ?? 'roxora.img');
+  useEffect(() => { setSaveTarget(null); setSaveError(null); }, [saveName]);
+  // What the file will take: unknown before reading for a gzip or bzip2 custom image.
+  const saveNeed = custom ? local!.extractSize : image?.extractSize ?? local?.extractSize ?? 0;
+  const saveShort = !!saveTarget && saveTarget.free >= 0 && saveNeed > 0 && saveTarget.free < saveNeed
+    ? `There is not enough free space in ${saveTarget.dir}: the image needs ${formatBytes(saveNeed)}, ${formatBytes(saveTarget.free)} is free. Choose another place.`
+    : null;
+  const pickSave = async () => {
+    if (!api.pickSaveFile || savePicking) return;
+    setSavePicking(true);
+    setSaveError(null);
+    const r = await api.pickSaveFile(saveName);
+    setSavePicking(false);
+    if (!r) return;
+    if ('error' in r) { setSaveError(r.error); return; }
+    setSaveTarget(r);
+  };
+
   const target = drives?.targets.find((t) => t.device === device);
   const spiProblem = method === 'maskrom' && storage === 'spinor' && source === 'file' && file
     ? spiFileProblem(file, {
@@ -1135,18 +1215,69 @@ export function App() {
       spiFile: image?.spi?.file ?? null,
     }) : null;
   const destReady = method === 'sd' ? !!target
+    : method === 'file' ? !!saveTarget && !saveShort
     : !!storage && (source === 'file' ? !!file && !spiProblem
       : source === 'spi' ? !!image?.spi && storage === 'spinor' && (!WEB || !!releaseFile)
         : !!image && !!mb?.wholeImage.includes(storage) && (!WEB || !!releaseFile));
 
   let why: string | null = null;
-  if (sample && !custom) why = 'Sample data cannot be written.';
+  if (sample && !custom) why = method === 'file' ? 'Sample data cannot be saved.' : 'Sample data cannot be written.';
   else if (!destReady) why = 'Choose a destination first.';
 
-  const erasedWhat = method === 'sd'
+  const erasedWhat = method === 'file' ? '' : method === 'sd'
     ? (target ? `${target.internal ? `the built-in ${INTERNAL_WORDS[target.internal]}, ` : ''}${target.description} (${target.device}, ${formatBytes(target.size)})` : '')
     : (storage && mb ? `the ${storage === 'sd' ? 'SD card in the board' : STORAGES[storage].label} (${mb.boardName}, connected over USB)` : '');
   const erased = erasedWhat ? `Everything on ${erasedWhat}.` : '';
+  const saveChecks = custom
+    ? 'Nothing is compared with a Roxora release; the SHA-256 of the saved image is shown when it is done. Until it is complete, it is a temporary file in the same folder, so a cancelled or failed save leaves nothing under the chosen name.'
+    : `${local ? 'The file is checked against the release SHA-256 again.' : 'The download is checked against the release SHA-256.'} The decompressed image must have the size and SHA-256 the release gives. Until then it is a temporary file in the same folder, so a cancelled or failed save leaves nothing under the chosen name.`;
+
+  /** The progress of a drive write or a save, on the run's stages. Returns the unsubscribe. */
+  const followProgress = () => api.onProgress((p: JobProgress) => {
+    const id = p.stage === 'check' || p.stage === 'download' ? 'download' : p.stage;
+    const pct = p.total ? Math.min(100, Math.floor(p.bytes * 100 / p.total)) : null;
+    // A save of a gzip or bzip2 image does not know its size: bytes so far instead.
+    const done = pct === null && p.bytes > 0 ? `${formatBytes(p.bytes)} so far` : undefined;
+    // A stage that has started means the ones before it are done.
+    setRun((cur) => cur && { ...cur, stages: cur.stages.map((s) => (s.id === id ? { ...s, percent: pct, done }
+      : s.id === 'download' && id !== 'download' ? { ...s, percent: 100 } : s)) });
+  });
+
+  const startSave = async () => {
+    const t = saveTarget;
+    if (!t || !api.saveImage || (!local && !image)) return;
+    const name = local ? local.name : image!.file;
+    const what: SaveSubject = local ? { localToken: local.token } : { imageId: image!.id };
+    setRun({
+      kind: 'file', log: [], result: null, saved: t.token,
+      stages: [
+        ...(custom ? [] : [{ id: 'download', percent: 0, label: local ? 'Check the file against the release' : 'Download and check' }]),
+        { id: 'write', percent: 0, label: `${uncompressedName(name) === name ? 'Save' : 'Decompress and save'} ${fileName(t.path)}`
+          + (custom ? '' : ', and compare with the release') },
+      ],
+    });
+    const off = followProgress();
+    // As in startSd: never leave a run without a result.
+    let res: Awaited<ReturnType<NonNullable<typeof api.saveImage>>>;
+    try {
+      res = await api.saveImage(what, t.token);
+    } catch (e) {
+      res = { ok: false, reason: 'The save stopped with an error.', detail: String((e as Error)?.message ?? e) };
+    } finally {
+      off();
+    }
+    setRun((cur) => cur && {
+      ...cur,
+      // A bar that counted bytes without a total ends full.
+      stages: res.ok ? cur.stages.map((s) => ({ ...s, percent: 100, done: undefined })) : cur.stages,
+      result: res.ok
+        ? { ok: true, title: custom ? 'Saved' : 'Saved and checked', text: custom
+          ? `${t.path} holds ${name}, decompressed (SHA-256 ${res.sha256}). The file is not a Roxora release image and was not checked against one.`
+          : `${t.path} holds ${name}, decompressed. It matches the release (SHA-256 ${res.sha256}).` }
+        : { ok: false, title: res.reason, text: /Nothing was saved/.test(res.reason) ? '' : 'Nothing was saved under that name.',
+          ...(res.detail ? { detail: res.detail } : {}) },
+    });
+  };
 
   const startSd = async () => {
     if (!target || (!local && !image)) return;
@@ -1161,13 +1292,7 @@ export function App() {
       ],
     };
     setRun(r);
-    const off = api.onProgress((p: JobProgress) => {
-      const id = p.stage === 'check' || p.stage === 'download' ? 'download' : p.stage;
-      const pct = p.total ? Math.min(100, Math.floor(p.bytes * 100 / p.total)) : null;
-      // A stage that has started means the ones before it are done.
-      setRun((cur) => cur && { ...cur, stages: cur.stages.map((s) => (s.id === id ? { ...s, percent: pct }
-        : s.id === 'download' && id !== 'download' ? { ...s, percent: 100 } : s)) });
-    });
+    const off = followProgress();
     // A write that throws (an IPC call that failed) must still end the run:
     // a run without a result counts as a write in progress, which hides the
     // update notice and greys out Update until the app is restarted.
@@ -1265,7 +1390,8 @@ export function App() {
           : { ok: true, warning: true, title: 'Written, not verified', text: `${prepared.name} is on the ${st.label}. There was no checksum to compare it with, so it was not read back.${restarting}` });
   };
 
-  const onWrite = () => setConfirm(true);
+  // A save erases nothing, so it needs no second question.
+  const onWrite = () => { if (method === 'file') startSave(); else setConfirm(true); };
   const doWrite = () => {
     setConfirm(false);
     if (method === 'sd') { startSd(); return; }
@@ -1282,7 +1408,7 @@ export function App() {
     else api.cancel();
   };
 
-  const finishRun = () => { setRun(null); setDevice(null); };
+  const finishRun = () => { setRun(null); setDevice(null); setSaveTarget(null); };
 
   // Notices about the whole app sit under the first step's title. The ones
   // that stop a write (sample data, no WebUSB) show again on the review.
@@ -1344,11 +1470,13 @@ export function App() {
                 storage={storage} setStorage={(s) => { setStorage(s); setSource(mb?.wholeImage.includes(s) ? 'release' : s === 'spinor' && image?.spi ? 'spi' : 'file'); }}
                 source={source} setSource={setSource} file={file} pickFile={pickFile} picking={picking} fileError={fileError}
                 releaseFile={releaseFile} pickRelease={pickRelease} checking={checking}
-                downloadRelease={downloadRelease} proxyError={proxyError} custom={custom} spiProblem={spiProblem} />
+                downloadRelease={downloadRelease} proxyError={proxyError} custom={custom} spiProblem={spiProblem}
+                saveTarget={saveTarget} pickSave={pickSave} savePicking={savePicking} saveError={saveError ?? saveShort} />
             </WizardStep>
             <WizardStep name="Review" id="review" isDisabled={!destReady}
-              footer={<ReviewFooter canWrite={!why} why={why} onWrite={onWrite} />}>
-              <StepPage title="Review" lead="Nothing has been written yet. Check this before you go on." notices={writeNotices}>
+              footer={<ReviewFooter canWrite={!why} why={why} onWrite={onWrite} save={method === 'file'} />}>
+              <StepPage title="Review" notices={writeNotices}
+                lead={`Nothing has been ${method === 'file' ? 'saved' : 'written'} yet. Check this before you go on.`}>
                 {erasedWhat && <Alert isInline variant="danger" title={`Everything on ${erasedWhat} will be erased.`} />}
               <DescriptionList isHorizontal>
                 {!custom && <DescriptionListGroup><DescriptionListTerm>Board</DescriptionListTerm><DescriptionListDescription>{cur?.boardName}</DescriptionListDescription></DescriptionListGroup>}
@@ -1358,13 +1486,13 @@ export function App() {
                     <DescriptionListGroup><DescriptionListTerm>Release</DescriptionListTerm><DescriptionListDescription>Not a Roxora release image. It was not checked against one.</DescriptionListDescription></DescriptionListGroup>
                   </>
                 )}
-                {!custom && (method === 'sd' || source === 'release') && image && (
+                {!custom && (method !== 'maskrom' || source === 'release') && image && (
                   <>
                     <DescriptionListGroup><DescriptionListTerm>Image</DescriptionListTerm><DescriptionListDescription>{image.file}</DescriptionListDescription></DescriptionListGroup>
                     <DescriptionListGroup><DescriptionListTerm>Release</DescriptionListTerm><DescriptionListDescription>{releaseWords(image)}, {image.releaseInfo.date}</DescriptionListDescription></DescriptionListGroup>
                   </>
                 )}
-                {method === 'sd' && local?.imageId && (
+                {method !== 'maskrom' && local?.imageId && (
                   <DescriptionListGroup><DescriptionListTerm>File</DescriptionListTerm><DescriptionListDescription>{local.name} on this computer; its SHA-256 matches the release</DescriptionListDescription></DescriptionListGroup>
                 )}
                 {method === 'maskrom' && source === 'spi' && image?.spi && (
@@ -1378,10 +1506,15 @@ export function App() {
                 )}
                 <DescriptionListGroup><DescriptionListTerm>Destination</DescriptionListTerm><DescriptionListDescription>
                   {method === 'sd' ? (target ? `${target.description}, ${target.device}, ${formatBytes(target.size)}` : '')
+                    : method === 'file' ? (saveTarget ? `${saveTarget.path}${saveNeed ? `, ${formatBytes(saveNeed)}` : ''}` : '')
                     : (storage ? `${STORAGES[storage].label} of the board, over USB in Maskrom mode` : '')}
                 </DescriptionListDescription></DescriptionListGroup>
+                {method === 'file' && (
+                  <DescriptionListGroup><DescriptionListTerm>Boots</DescriptionListTerm><DescriptionListDescription>{bootNote(image, custom)}</DescriptionListDescription></DescriptionListGroup>
+                )}
                 <DescriptionListGroup><DescriptionListTerm>Checks</DescriptionListTerm><DescriptionListDescription>
-                  {custom ? 'The image is read once to take its SHA-256. After writing, the drive is read back and compared with it. Nothing is compared with a Roxora release.'
+                  {method === 'file' ? saveChecks
+                    : custom ? 'The image is read once to take its SHA-256. After writing, the drive is read back and compared with it. Nothing is compared with a Roxora release.'
                     : method === 'sd' && local ? 'The file is checked against the release SHA-256 again. After writing, the drive is read back and compared with the release SHA-256.'
                     : method === 'sd' || source === 'release' || source === 'spi'
                     ? 'The download is checked against the release SHA-256. After writing, the destination is read back and compared with the release SHA-256.'
