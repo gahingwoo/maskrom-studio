@@ -572,10 +572,10 @@ function DestinationStep(p: {
               </Flex>
             )}>
             {p.showInternal && (
-              <Content component="p" id="show-internal-note" className="muted">
+              <div id="show-internal-note" className="muted">
                 Built-in disks (a board&apos;s eMMC, SD card slot or NVMe drive) are listed after the removable drives, only
                 when nothing on them is mounted or in use. The disk the system runs from never is.
-              </Content>
+              </div>
             )}
             {!p.drives ? <Spinner size="md" aria-label="Looking for drives" /> : p.drives.targets.length === 0 ? (
               <Content component="p">No SD card or USB drive found. Insert one and click Refresh.</Content>
