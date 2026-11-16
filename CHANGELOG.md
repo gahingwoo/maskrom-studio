@@ -13,6 +13,8 @@
   app. The notice still says a new version is out; the dialog says that
   the system's software updates bring it and shows the apt command to
   update at once.
+- Linux packages: the .deb and .rpm depend on libgbm and ALSA, which the
+  app needs to start, and no longer on libXss, which it does not use.
 
 ## 0.1.9
 
