@@ -335,14 +335,31 @@ export interface Board {
   images: CatalogImage[];
 }
 
+/**
+ * Orders versions such as 2026.11.5 and 2026.12.1-beta.2: by the numbers,
+ * then a release after its own betas, then by beta number.
+ */
 function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
+  const nums = (v: string) => v.split('.').map((x) => Number.parseInt(x, 10) || 0);
+  const [ma, sa] = splitSuffix(a);
+  const [mb, sb] = splitSuffix(b);
+  const pa = nums(ma);
+  const pb = nums(mb);
+  for (let i = 0; i < Math.max(pa.length, pb.length, 3); i++) {
     const d = (pa[i] ?? 0) - (pb[i] ?? 0);
     if (d !== 0) return d;
   }
-  return 0;
+  if (sa === sb) return 0;
+  if (sa === null) return 1;
+  if (sb === null) return -1;
+  const qa = nums(sa.replace(/^[^.\d]*\.?/, ''));
+  const qb = nums(sb.replace(/^[^.\d]*\.?/, ''));
+  return (qa[0] ?? 0) - (qb[0] ?? 0) || sa.localeCompare(sb);
+}
+
+function splitSuffix(v: string): [string, string | null] {
+  const i = v.indexOf('-');
+  return i < 0 ? [v, null] : [v.slice(0, i), v.slice(i + 1)];
 }
 
 /** The Image step's sortable columns. */
@@ -395,6 +412,33 @@ export function groupByBoard(images: CatalogImage[]): Board[] {
       || flavorRank(x.flavor) - flavorRank(y.flavor) || x.flavor.localeCompare(y.flavor));
   }
   return [...map.values()].sort((a, b) => a.boardName.localeCompare(b.boardName));
+}
+
+/** One release's images for a board. */
+export interface ReleaseImages {
+  release: CatalogRelease;
+  images: CatalogImage[];
+}
+
+/**
+ * A board's images split by release: the one the image step shows, the
+ * newest normal release (the newest beta when there is no normal one yet),
+ * and every other release, newest first, which it folds away. Betas newer
+ * than the shown release are among the others: they are optional.
+ */
+export function splitByRelease(images: CatalogImage[]): { current: ReleaseImages | null; others: ReleaseImages[] } {
+  const map = new Map<string, ReleaseImages>();
+  for (const img of images) {
+    let r = map.get(img.releaseInfo.tag);
+    if (!r) {
+      r = { release: img.releaseInfo, images: [] };
+      map.set(img.releaseInfo.tag, r);
+    }
+    r.images.push(img);
+  }
+  const all = [...map.values()].sort((a, b) => compareVersions(b.release.version, a.release.version));
+  const current = all.find((r) => !r.release.prerelease) ?? all[0] ?? null;
+  return { current, others: all.filter((r) => r !== current) };
 }
 
 /** The parts of a GitHub release (GET /repos/{repo}/releases) the imager reads. */

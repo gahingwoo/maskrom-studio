@@ -12,7 +12,9 @@ import {
 } from '@patternfly/react-core';
 import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
-import { compareImages, flavorWords, groupByBoard, type Board, type CatalogImage, type ImageSortKey } from '../shared/catalog';
+import {
+  compareImages, flavorWords, groupByBoard, splitByRelease, type Board, type CatalogImage, type CatalogRelease, type ImageSortKey,
+} from '../shared/catalog';
 import { BOARD_REQUEST_URL, queryWords, vendorCounts, visibleBoards } from '../shared/boardsearch';
 import { formatBytes } from '../shared/format';
 import type { CatalogResult, ImagerApi, JobProgress, LocalImage, PreparedFile } from '../shared/ipc';
@@ -319,55 +321,98 @@ function BoardPicker({ boards, board, setBoard, find }: {
   );
 }
 
+// The release is named above each table, so it is no column.
 const IMAGE_COLUMNS: [ImageSortKey, string][] = [
-  ['release', 'Release'], ['ubuntu', 'Ubuntu'], ['desktop', 'Desktop'], ['kernel', 'Kernel'], ['size', 'Size'],
+  ['ubuntu', 'Ubuntu'], ['desktop', 'Desktop'], ['kernel', 'Kernel'], ['size', 'Size'],
 ];
+
+type ImageSort = { key: ImageSortKey; dir: 'asc' | 'desc' } | null;
+
+function releaseLabel(r: CatalogRelease): string {
+  return `${r.prerelease ? 'Beta' : 'Release'} ${r.version} (${r.date})`;
+}
+
+function ImageTable({ label, images, selected, setImage, sort, setSort }: {
+  label: string; images: CatalogImage[]; selected: string | null; setImage: (id: string) => void;
+  sort: ImageSort; setSort: (s: ImageSort) => void;
+}) {
+  const rows = sort ? [...images].sort((x, y) => (sort.dir === 'asc' ? 1 : -1) * compareImages(x, y, sort.key)) : images;
+  return (
+    <Table aria-label={label} variant="compact">
+      <Thead><Tr><Th screenReaderText="Select" />
+        {IMAGE_COLUMNS.map(([key, name], col) => (
+          <Th key={key} sort={{
+            columnIndex: col + 1,
+            sortBy: sort ? { index: IMAGE_COLUMNS.findIndex(([k]) => k === sort.key) + 1, direction: sort.dir } : {},
+            onSort: (_e, _i, dir) => setSort({ key, dir }),
+          }}>{name}</Th>
+        ))}
+      </Tr></Thead>
+      <Tbody>
+        {rows.map((img, i) => (
+          <Tr key={img.id} isClickable onRowClick={() => setImage(img.id)} isRowSelected={selected === img.id}>
+            <Td select={{ rowIndex: i, variant: 'radio', isSelected: selected === img.id, onSelect: () => setImage(img.id) }} />
+            <Td dataLabel="Ubuntu">{img.ubuntuVersion} ({img.release})</Td>
+            <Td dataLabel="Desktop">{flavorWords(img.flavor)}</Td>
+            <Td dataLabel="Kernel">{img.kernel ? `${img.kernel} ` : ''}{img.branch}</Td>
+            <Td dataLabel="Size">{formatBytes(img.size)}</Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
+  );
+}
 
 function ImageStep({ board, imageId, setImage, lp }: {
   board: Board | undefined; imageId: string | null; setImage: (id: string) => void; lp: LocalPick;
 }) {
   // Sorting by a column header; none means the default order (newest
-  // release, newest Ubuntu LTS, command line, edge).
-  const [sort, setSort] = useState<{ key: ImageSortKey; dir: 'asc' | 'desc' } | null>(null);
+  // Ubuntu LTS, command line, edge).
+  const [sort, setSort] = useState<ImageSort>(null);
+  // Only the newest release is shown; older releases and betas are folded
+  // away, one release at a time.
+  const [olderOpen, setOlderOpen] = useState(false);
+  const [olderTag, setOlderTag] = useState<string | null>(null);
   if (!board && !lp.local) return null;
   // A custom file takes the place of a release image; a file that is a
   // release image keeps that image selected.
   const custom = !!lp.local && !lp.local.imageId;
   const selected = custom ? null : imageId;
   const sel = board?.images.find((i) => i.id === selected);
+  const { current, others } = splitByRelease(board?.images ?? []);
+  const selOlder = !!sel && sel.releaseInfo.tag !== current?.release.tag;
+  // A selected image of an older release keeps its release open.
+  const older = others.find((r) => r.release.tag === (olderTag ?? (selOlder ? sel!.releaseInfo.tag : null))) ?? others[0];
+  const tableProps = { selected, setImage, sort, setSort };
   return (
-    <StepPage title="Image" lead={board ? `Images for ${board.boardName}, newest first.`
-      : 'No board is chosen, so no release images are listed.'}>
-      {board && (
-        <Table aria-label="Images" variant="compact">
-          <Thead><Tr><Th screenReaderText="Select" />
-            {IMAGE_COLUMNS.map(([key, label], col) => (
-              <Th key={key} modifier={key === 'kernel' || key === 'size' ? 'nowrap' : undefined} sort={{
-                columnIndex: col + 1,
-                sortBy: sort ? { index: IMAGE_COLUMNS.findIndex(([k]) => k === sort.key) + 1, direction: sort.dir } : {},
-                onSort: (_e, _i, dir) => setSort({ key, dir }),
-              }}>{label}</Th>
-            ))}
-          </Tr></Thead>
-          <Tbody>
-            {(sort ? [...board.images].sort((x, y) => (sort.dir === 'asc' ? 1 : -1) * compareImages(x, y, sort.key)) : board.images).map((img, i) => (
-              <Tr key={img.id} isClickable onRowClick={() => setImage(img.id)} isRowSelected={selected === img.id}>
-                <Td select={{ rowIndex: i, variant: 'radio', isSelected: selected === img.id, onSelect: () => setImage(img.id) }} />
-                <Td dataLabel="Release" modifier="nowrap">{img.releaseInfo.version}{img.releaseInfo.prerelease ? ' (beta)' : ''}<div className="muted">{img.releaseInfo.date}</div></Td>
-                <Td dataLabel="Ubuntu">{img.ubuntuVersion} ({img.release})</Td>
-                <Td dataLabel="Desktop">{flavorWords(img.flavor)}</Td>
-                <Td dataLabel="Kernel" modifier="nowrap">{img.kernel ? `${img.kernel} ` : ''}{img.branch}</Td>
-                <Td dataLabel="Size" modifier="nowrap">{formatBytes(img.size)}</Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
+    <StepPage title="Image" lead={!board ? 'No board is chosen, so no release images are listed.'
+      : current ? <>Images for {board.boardName} from Roxora {current.release.version}
+        {current.release.prerelease ? ' (a beta)' : ''}, released {current.release.date}.{' '}
+        <Button variant="link" isInline component="a" href={current.release.url} target="_blank">Release notes</Button></>
+      : `Images for ${board.boardName}.`}>
+      {current && <ImageTable label={`Images of Roxora ${current.release.version}`} images={current.images} {...tableProps} />}
+      {older && (
+        <ExpandableSection className="older-releases" isExpanded={olderOpen || selOlder}
+          onToggle={(_e, open) => setOlderOpen(open)}
+          toggleText={`Older releases and betas (${others.length})`}>
+          <Stack hasGutter>
+            <FormGroup label="Release" fieldId="older-release">
+              <FormSelect id="older-release" value={older.release.tag} onChange={(_e, v) => setOlderTag(v)}>
+                {others.map((r) => <FormSelectOption key={r.release.tag} value={r.release.tag} label={releaseLabel(r.release)} />)}
+              </FormSelect>
+            </FormGroup>
+            <Alert isInline isPlain variant="info" title={older.release.prerelease
+              ? 'A beta: optional, for trying what comes next.'
+              : `An older release. ${current?.release.version ?? 'The newest'} is the safer choice; an installed Roxora system upgrades to it with apt.`}>
+              <Button variant="link" isInline component="a" href={older.release.url} target="_blank">Release notes</Button>
+            </Alert>
+            <ImageTable label={`Images of Roxora ${older.release.version}`} images={older.images} {...tableProps} />
+          </Stack>
+        </ExpandableSection>
       )}
-      {sel && (
+      {sel && selOlder && (
         <Content component="p" className="step-lead">
-          {sel.releaseInfo.prerelease
-            ? 'A beta: the newest release is the safer choice. ' : ''}
-          <Button variant="link" isInline component="a" href={sel.releaseInfo.url} target="_blank">Release notes</Button>
+          Selected: {releaseWords(sel)}, an image {sel.releaseInfo.prerelease ? 'of a beta' : 'of an older release'}.
         </Content>
       )}
       <LocalImageRow lp={lp} />

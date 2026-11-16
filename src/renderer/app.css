@@ -94,6 +94,7 @@ html, body, #root { height: 100%; }
 .step { max-width: 72rem; }
 .step .pf-v6-c-title { font-weight: var(--pf-t--global--font--weight--body--default); }
 .step-lead { color: var(--pf-t--global--text--color--subtle); }
+.older-releases { margin-top: var(--pf-t--global--spacer--md); }
 .muted { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
 .footer-note { color: var(--pf-t--global--text--color--subtle); }
 .detail { font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--sm); word-break: break-all; }

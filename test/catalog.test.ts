@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  catalogAssets, checkAgainstRelease, compareImages, flavorWords, groupByBoard, isLts, parseCatalog, type GithubRelease,
+  catalogAssets, checkAgainstRelease, compareImages, flavorWords, groupByBoard, isLts, parseCatalog, splitByRelease, type GithubRelease,
 } from '../src/shared/catalog';
 
 const sample = JSON.parse(readFileSync(new URL('../resources/sample-catalog.json', import.meta.url), 'utf8'));
@@ -354,5 +354,41 @@ describe('GitHub releases', () => {
     const p = checkAgainstRelease(parseCatalog(real()), noDigest);
     expect(p.images).toHaveLength(2);
     expect(p.images[0].releaseInfo.prerelease).toBe(false);
+  });
+});
+
+describe('splitByRelease', () => {
+  const base = parseCatalog(real()).images[0];
+  const mk = (version: string, prerelease = false, id = version) => ({
+    ...base, id, releaseInfo: { ...base.releaseInfo, tag: `v${version}`, version, prerelease },
+  });
+
+  it('shows the newest normal release and folds away the rest, newest first', () => {
+    const s = splitByRelease([mk('2026.11.3'), mk('2026.11.5'), mk('2026.11.5', false, 'b'), mk('2026.11.4')]);
+    expect(s.current?.release.version).toBe('2026.11.5');
+    expect(s.current?.images.map((i) => i.id)).toEqual(['2026.11.5', 'b']);
+    expect(s.others.map((r) => r.release.version)).toEqual(['2026.11.4', '2026.11.3']);
+  });
+
+  it('keeps a newer beta among the folded releases', () => {
+    const s = splitByRelease([mk('2026.11.5'), mk('2026.12.1-beta.1', true)]);
+    expect(s.current?.release.version).toBe('2026.11.5');
+    expect(s.others.map((r) => r.release.version)).toEqual(['2026.12.1-beta.1']);
+  });
+
+  it('shows the newest beta when there is no normal release', () => {
+    const s = splitByRelease([mk('2026.11.1-beta.1', true), mk('2026.11.1-beta.2', true)]);
+    expect(s.current?.release.version).toBe('2026.11.1-beta.2');
+    expect(s.others).toHaveLength(1);
+  });
+
+  it('orders betas by number and a release after its betas', () => {
+    const s = splitByRelease([mk('2026.12.1-beta.2', true), mk('2026.12.1-beta.10', true), mk('2026.12.1'), mk('2026.11.5')]);
+    expect(s.current?.release.version).toBe('2026.12.1');
+    expect(s.others.map((r) => r.release.version)).toEqual(['2026.12.1-beta.10', '2026.12.1-beta.2', '2026.11.5']);
+  });
+
+  it('has nothing to show without images', () => {
+    expect(splitByRelease([])).toEqual({ current: null, others: [] });
   });
 });

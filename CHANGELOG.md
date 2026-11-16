@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Image step: only the newest release is listed, named with its date and
+  release notes above the table. Older releases and betas are folded away
+  under "Older releases and betas", one release at a time, picked from a
+  list. Selecting an image of an older release keeps that section open.
+- Fix: beta versions (2026.12.1-beta.2) sort by their beta number and
+  before their release.
+
 ## 0.1.9
 
 - Image step: click a column header (Release, Ubuntu, Desktop, Kernel,
