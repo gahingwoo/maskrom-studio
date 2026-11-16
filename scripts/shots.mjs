@@ -3,14 +3,21 @@
 // catalog and stubs the drive list so no real disk appears in a picture.
 //   node scripts/shots.mjs OUT_DIR
 import { _electron as electron } from 'playwright-core';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 const out = process.argv[2] ?? 'dev/shots';
 mkdirSync(out, { recursive: true });
 // No question to GitHub about a newer app version either: the pictures must not depend on what is published.
-const env = { ...process.env, ROXORA_IMAGER_HIDDEN: '1', ROXORA_IMAGER_SAMPLE: '1', ROXORA_IMAGER_FAKE_DRIVES: '1', ROXORA_IMAGER_FAKE_UPDATE: 'current' };
+// Where "Save as an image file" saves, instead of the save dialog's answer.
+const saveTo = join(mkdtempSync(join(tmpdir(), 'shots-save-')), 'roxora-radxa-rock-4d-noble-edge-2026.11.0.img');
+const env = {
+  ...process.env, ROXORA_IMAGER_HIDDEN: '1', ROXORA_IMAGER_SAMPLE: '1', ROXORA_IMAGER_FAKE_DRIVES: '1', ROXORA_IMAGER_FAKE_UPDATE: 'current',
+  ROXORA_IMAGER_TEST_SAVE: saveTo,
+};
 delete env.ELECTRON_RUN_AS_NODE;
 const errors = [];
 
@@ -98,6 +105,21 @@ for (const [w, h, tag] of [[1100, 760, 'd'], [720, 640, 'm']]) {
     await shot('3-destination-maskrom');
     await page.locator('#src-spi').scrollIntoViewIfNeeded();
     await shot('3-destination-maskrom-source');
+    // Save as an image file: the third choice, then a place to save (the
+    // app is told where; there is no dialog to click here), then the review.
+    await page.click('label[for=method-file]');
+    await page.waitForSelector('text=No place chosen');
+    await page.locator('h2:has-text("Destination")').scrollIntoViewIfNeeded();
+    await shot('3-destination-file');
+    await page.click('button:has-text("Choose where to save")');
+    await page.waitForSelector(`.file-row:has-text("${saveTo}")`);
+    await shot('3-destination-file-chosen');
+    await page.click('.pf-v6-c-wizard__footer button:has-text("Review")');
+    await page.waitForSelector('h2:has-text("Review")');
+    if (await page.locator('text=will be erased').count()) throw new Error('the review of a save says something will be erased');
+    if (!(await page.locator('.pf-v6-c-wizard__footer button:has-text("Save")').count())) throw new Error('the review of a save has no Save button');
+    await page.waitForSelector('text=Sample data cannot be saved.');
+    await shot('4-review-file');
     await page.click('.pf-v6-c-masthead button:has-text("Settings")');
     await page.waitForSelector('#settings-title');
     await shot('5-settings');
@@ -166,6 +188,60 @@ for (const [w, h, tag] of [[1100, 760, 'd'], [720, 640, 'm']]) {
   if (await page.locator('text=Not a Roxora release image').count()) throw new Error('the custom file stayed after a board was chosen');
   await shot('2-image-after-custom');
   await app.close();
+}
+// Saving an image file for real: a gzip-compressed custom image on this
+// computer, saved decompressed through the app (main process, no writer, no
+// administrator rights). The file must hold the image and nothing else may
+// be left in the folder. Both sizes, both themes.
+for (const [w, h, tag] of [[1100, 760, 'd'], [720, 640, 'm']]) {
+  for (const theme of ['light', 'dark']) {
+    const data = Buffer.alloc(4 * 1024 * 1024);
+    for (let i = 0; i < data.length; i += 4) data.writeUInt32LE(i, i);
+    const pick = join(mkdtempSync(join(tmpdir(), 'shots-')), 'my-own-build.img.gz');
+    writeFileSync(pick, gzipSync(data));
+    const dir = mkdtempSync(join(tmpdir(), 'shots-saved-'));
+    const dest = join(dir, 'my-own-build.img');
+    const app = await electron.launch({ args: ['.', '--dev-sample'], env: { ...env, ROXORA_IMAGER_TEST_PICK: pick, ROXORA_IMAGER_TEST_SAVE: dest } });
+    const page = await app.firstWindow();
+    page.on('pageerror', (e) => errors.push(`save-${tag}-${theme}: ${e.message}`));
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(`save-${tag}-${theme} console: ${m.text()}`); });
+    await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [w, h]);
+    await page.evaluate((t) => { localStorage.setItem('theme', t); }, theme);
+    await page.reload();
+    await page.waitForSelector('h2:has-text("Board")');
+    const shot = async (name) => {
+      await page.mouse.move(1, 1);
+      await page.waitForTimeout(400);
+      const b64 = await app.evaluate(async ({ BrowserWindow }) =>
+        (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+      writeFileSync(`${out}/${name}-${tag}-${theme}.png`, Buffer.from(b64, 'base64'));
+    };
+    await page.click('button:has-text("Use an image file on this computer")');
+    await page.waitForSelector('text=Not a Roxora release image');
+    await page.click('.pf-v6-c-wizard__footer button:has-text("Next")');
+    await page.waitForSelector('h2:has-text("Destination")');
+    await page.click('label[for=method-file]');
+    await page.click('button:has-text("Choose where to save")');
+    await page.waitForSelector(`.file-row:has-text("${dest}")`);
+    await page.click('.pf-v6-c-wizard__footer button:has-text("Review")');
+    await page.waitForSelector('h2:has-text("Review")');
+    await shot('4-review-file-custom');
+    await page.click('.pf-v6-c-wizard__footer button:has-text("Save")');
+    await page.waitForSelector('h2:has-text("Done"), h2:has-text("Stopped")', { timeout: 60000 });
+    if (await page.locator('h2:has-text("Stopped")').count()) {
+      throw new Error(`the save stopped: ${await page.locator('.pf-v6-c-alert').first().innerText()}`);
+    }
+    await page.waitForSelector('button:has-text("Show in folder")');
+    await shot('7-saved-file');
+    const saved = readFileSync(dest);
+    if (!saved.equals(data)) throw new Error(`the saved file is not the image (${saved.length} bytes, ${data.length} expected)`);
+    const left = readdirSync(dir);
+    if (left.length !== 1) throw new Error(`the save left more than the file: ${left.join(', ')}`);
+    const sha = createHash('sha256').update(data).digest('hex');
+    if (!(await page.locator(`text=${sha}`).count())) throw new Error('the result does not give the SHA-256 of the saved image');
+    console.log(`save ${tag}-${theme}: ${dest} holds the ${data.length} bytes of the image, SHA-256 ${sha}; nothing else in ${dir}`);
+    await app.close();
+  }
 }
 // The update notice, the update dialog and the answers to "Check now" in the
 // settings, with a made-up answer instead of GitHub (unpackaged builds only).
