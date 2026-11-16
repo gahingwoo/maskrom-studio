@@ -4,10 +4,13 @@
 // with one JSON object per line.
 //
 //   write-helper --socket PATH --token T --image FILE.img.xz --device DEV
-//                --extract-size N --extract-sha256 HEX
+//                --extract-size N --extract-sha256 HEX [--allow-internal]
 //
 // It checks the target again (the app's list could be stale, and this
-// process trusts nothing it is told), writes with etcher-sdk, then reads the
+// process trusts nothing it is told): on Linux with lsblk's view of every
+// disk as well, so the disk the system runs from is refused here too, and a
+// built-in disk only with --allow-internal, which the app passes after the
+// user confirmed that disk. Then it writes with etcher-sdk, and reads the
 // drive back and compares the SHA-256 of the image's bytes with the release's
 // extract_sha256.
 
@@ -21,6 +24,7 @@ import * as multiWrite from 'etcher-sdk/build/multi-write';
 import { guardReadsAfterClose } from './read-guard';
 import * as sourceDestination from 'etcher-sdk/build/source-destination';
 import { isOfferedTarget, type DriveInfo } from '../shared/targets';
+import { withDiskFacts } from '../main/linux-disks';
 
 export interface HelperArgs {
   socket: string;
@@ -31,6 +35,8 @@ export interface HelperArgs {
   extractSha256: string;
   /** Only for the CI test: allow /dev/loopN, which is never a system disk. */
   allowLoop: boolean;
+  /** A built-in disk (eMMC, SD card slot, NVMe) that holds nothing in use may be written. */
+  allowInternal: boolean;
 }
 
 export type HelperMessage =
@@ -53,6 +59,7 @@ export function parseArgs(argv: string[]): HelperArgs {
     socket: get('socket'), token: get('token'), image: get('image'), device: get('device'),
     extractSize, extractSha256,
     allowLoop: argv.includes('--allow-loop') && process.env.ROXORA_IMAGER_TEST === '1',
+    allowInternal: argv.includes('--allow-internal'),
   };
 }
 
@@ -98,8 +105,9 @@ export async function runWrite(a: HelperArgs, send: (m: HelperMessage) => void):
     send({ type: 'done', ok: false, reason: `${a.device} is no longer connected.` });
     return;
   }
-  if (!loop && !isOfferedTarget(a.device, drives as unknown as DriveInfo[], { minSize: a.extractSize, platform: process.platform })) {
-    send({ type: 'done', ok: false, reason: `${a.device} is not a drive the imager writes to (system disk, read-only or too small). Nothing was written.` });
+  const checked = loop ? [] : await withDiskFacts(drives as unknown as DriveInfo[]);
+  if (!loop && !isOfferedTarget(a.device, checked, { minSize: a.extractSize, platform: process.platform, internal: a.allowInternal })) {
+    send({ type: 'done', ok: false, reason: `${a.device} is not a drive the imager writes to (system disk, a built-in disk in use, read-only or too small). Nothing was written.` });
     return;
   }
 

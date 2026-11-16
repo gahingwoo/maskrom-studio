@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import * as drivelist from 'drivelist';
 import { formatBytes } from '../shared/format';
 import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
+import { withDiskFacts } from './linux-disks';
 import type { JobProgress, JobResult, LocalImage, PreparedFile } from '../shared/ipc';
 import type { CatalogImage } from '../shared/catalog';
 import { partitionedSize } from '../maskrom/spi-check';
@@ -107,18 +108,28 @@ const fakeDrives: DriveInfo[] = [
     isReadOnly: false, isSystem: false, isVirtual: false, isRemovable: true, isCard: false, isUSB: true },
   { device: '/dev/roxora-test-mmcblk0', description: 'SD card reader, 2 GB card', size: 1977614336, mountpoints: [],
     isReadOnly: false, isSystem: false, isVirtual: false, isRemovable: true, isCard: true, isUSB: false },
+  // A board running from its SD card, with an eMMC and an NVMe drive, as linuxDiskFacts describes them.
+  { device: '/dev/roxora-test-mmcblk1', description: 'SD64G', size: 63864569856, mountpoints: [{ path: '/' }, { path: '/boot' }],
+    isReadOnly: false, isSystem: true, isVirtual: false, isRemovable: false, isCard: null, isUSB: false,
+    internal: 'sd', allMounts: ['/', '/boot'], busy: null },
+  { device: '/dev/roxora-test-mmcblk2', description: 'A3A561', size: 62537072640, mountpoints: [],
+    isReadOnly: false, isSystem: true, isVirtual: false, isRemovable: false, isCard: null, isUSB: false,
+    internal: 'emmc', allMounts: [], busy: null },
+  { device: '/dev/roxora-test-nvme0n1', description: 'Samsung SSD 980 500GB', size: 500107862016, mountpoints: [],
+    isReadOnly: false, isSystem: true, isVirtual: false, isRemovable: false, isCard: null, isUSB: false,
+    internal: 'nvme', allMounts: [], busy: null },
 ];
 
-ipcMain.handle('drives:list', async (_e, minSize: number) => {
-  const drives = FAKE_DRIVES ? fakeDrives : await drivelist.list();
-  return classifyDrives(drives as unknown as DriveInfo[], { minSize, platform: process.platform });
+ipcMain.handle('drives:list', async (_e, minSize: number, internal?: boolean) => {
+  const drives = FAKE_DRIVES ? fakeDrives : await withDiskFacts(await drivelist.list() as unknown as DriveInfo[]);
+  return classifyDrives(drives, { minSize, platform: process.platform, internal: internal === true });
 });
 
 ipcMain.handle('job:cancel', () => { job?.abort(); });
 
 /** Write an image file to a drive and read it back: macOS through authopen, else the elevated writer. */
 async function writeDrive(wc: WebContents, signal: AbortSignal,
-  w: { file: string; device: string; extractSize: number; extractSha256: string }): Promise<JobResult> {
+  w: { file: string; device: string; extractSize: number; extractSha256: string; internal: boolean }): Promise<JobResult> {
   const out = process.platform === 'darwin'
     ? await macWrite({
       signal, image: w.file, device: w.device, extractSize: w.extractSize, extractSha256: w.extractSha256,
@@ -131,6 +142,7 @@ async function writeDrive(wc: WebContents, signal: AbortSignal,
       args: (socket, token) => [
         '--socket', socket, '--token', token, '--image', w.file, '--device', w.device,
         '--extract-size', String(w.extractSize), '--extract-sha256', w.extractSha256,
+        ...(w.internal ? ['--allow-internal'] : []),
       ],
       onMessage: (m) => {
         if (m.type === 'progress') {
@@ -143,7 +155,7 @@ async function writeDrive(wc: WebContents, signal: AbortSignal,
   return { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) };
 }
 
-ipcMain.handle('sd:write', async (e, imageId: string, device: string): Promise<JobResult> => {
+ipcMain.handle('sd:write', async (e, imageId: string, device: string, internal?: boolean): Promise<JobResult> => {
   const img = writableImage(imageId);
   if (!img || img.sample) return { ok: false, reason: 'This image is not from a published release and cannot be written.' };
   if (job) return { ok: false, reason: 'Another write is running.' };
@@ -151,7 +163,7 @@ ipcMain.handle('sd:write', async (e, imageId: string, device: string): Promise<J
   const wc = e.sender;
   try {
     const file = await fetchImage(img, cacheDir(), (p) => sendProgress(wc, p), job.signal);
-    return await writeDrive(wc, job.signal, { file, device, extractSize: img.extractSize, extractSha256: img.extractSha256 });
+    return await writeDrive(wc, job.signal, { file, device, extractSize: img.extractSize, extractSha256: img.extractSha256, internal: internal === true });
   } catch (err) {
     if (job?.signal.aborted) return { ok: false, reason: 'Cancelled.' };
     return { ok: false, reason: String((err as Error).message ?? err) };
@@ -198,7 +210,7 @@ ipcMain.handle('sd:drop', async (_e, path: unknown) => {
   return describeForPage(path);
 });
 
-ipcMain.handle('sd:write-file', async (e, token: string, device: string): Promise<JobResult> => {
+ipcMain.handle('sd:write-file', async (e, token: string, device: string, internal?: boolean): Promise<JobResult> => {
   const l = localImage;
   if (!l || l.token !== token) return { ok: false, reason: 'Choose the image file again. Nothing was written.' };
   if (job) return { ok: false, reason: 'Another write is running.' };
@@ -222,12 +234,12 @@ ipcMain.handle('sd:write-file', async (e, token: string, device: string): Promis
       const m = await measureFile(l.path, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: Math.max(l.sizeHint, bytes) }), signal);
       extractSize = m.size;
       extractSha256 = m.sha256;
-      const drives = await drivelist.list() as unknown as DriveInfo[];
-      if (!isOfferedTarget(device, drives, { minSize: m.size, platform: process.platform })) {
+      const drives = await withDiskFacts(await drivelist.list() as unknown as DriveInfo[]);
+      if (!isOfferedTarget(device, drives, { minSize: m.size, platform: process.platform, internal: internal === true })) {
         return { ok: false, reason: `${device} is smaller than the image (${formatBytes(m.size)}), or no longer a drive the imager writes to. Nothing was written.` };
       }
     }
-    return await writeDrive(wc, signal, { file: l.path, device, extractSize, extractSha256 });
+    return await writeDrive(wc, signal, { file: l.path, device, extractSize, extractSha256, internal: internal === true });
   } catch (err) {
     if (signal.aborted) return { ok: false, reason: 'Cancelled. Nothing was written.' };
     return { ok: false, reason: String((err as Error).message ?? err) };

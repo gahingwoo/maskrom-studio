@@ -18,7 +18,7 @@ import {
 import { BOARD_REQUEST_URL, queryWords, vendorCounts, visibleBoards } from '../shared/boardsearch';
 import { formatBytes } from '../shared/format';
 import type { CatalogResult, ImagerApi, JobProgress, LocalImage, PreparedFile } from '../shared/ipc';
-import type { HiddenDrive, Target } from '../shared/targets';
+import { INTERNAL_WORDS, type HiddenDrive, type Target } from '../shared/targets';
 import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
 import { maskromBoard, STORAGES, type StorageId } from '../maskrom/boards';
 import { RKBIN_HOST } from '../maskrom/loaders';
@@ -460,6 +460,8 @@ function DestinationStep(p: {
   method: Method; setMethod: (m: Method) => void;
   drives: { targets: Target[]; hidden: HiddenDrive[] } | null; refreshDrives: () => void;
   device: string | null; setDevice: (d: string) => void;
+  /** Linux desktop: the "Show internal disks" switch, null where there is none. */
+  showInternal: boolean | null; setShowInternal: (v: boolean) => void;
   storage: StorageId | null; setStorage: (s: StorageId) => void;
   source: MaskromSource; setSource: (s: MaskromSource) => void;
   file: PreparedFile | null; pickFile: () => void; picking: boolean; fileError: string | null;
@@ -557,7 +559,7 @@ function DestinationStep(p: {
 
         {p.method === 'sd' && (
           <FormGroup fieldId="drives" label="Drive"
-            labelInfo={<Button variant="link" isInline onClick={p.refreshDrives}>Refresh</Button>}>
+            labelInfo={<Button variant="link" isInline onClick={() => p.refreshDrives()}>Refresh</Button>}>
             {!p.drives ? <Spinner size="md" aria-label="Looking for drives" /> : p.drives.targets.length === 0 ? (
               <Content component="p">No SD card or USB drive found. Insert one and click Refresh.</Content>
             ) : (
@@ -568,7 +570,7 @@ function DestinationStep(p: {
                     <Tr key={t.device} isClickable={!t.disabled} onRowClick={() => !t.disabled && p.setDevice(t.device)} isRowSelected={p.device === t.device}>
                       <Td select={{ rowIndex: i, variant: 'radio', isSelected: p.device === t.device, isDisabled: !!t.disabled, onSelect: () => p.setDevice(t.device) }} />
                       <Td dataLabel="Drive">
-                        {t.description}
+                        {t.internal ? `${INTERNAL_WORDS[t.internal]}${t.description ? `: ${t.description}` : ''}` : t.description}
                         {t.disabled && <div className="muted">{t.disabled}</div>}
                         {t.warning && !t.disabled && <div className="muted">{t.warning}</div>}
                       </Td>
@@ -578,6 +580,17 @@ function DestinationStep(p: {
                   ))}
                 </Tbody>
               </Table>
+            )}
+            {p.showInternal !== null && (
+              <Switch id="show-internal" className="show-internal" label="Show internal disks" isChecked={p.showInternal}
+                onChange={(_e, v) => p.setShowInternal(v)}
+                aria-describedby="show-internal-note" />
+            )}
+            {p.showInternal !== null && (
+              <Content component="p" id="show-internal-note" className="muted">
+                Built-in disks of this computer, such as a board&apos;s eMMC, SD card slot or NVMe drive. One is offered only
+                when nothing on it is mounted or in use; the disk the system runs from never is.
+              </Content>
             )}
             {p.drives && p.drives.hidden.length > 0 && (
               <ExpandableSection toggleText={`${p.drives.hidden.length} ${p.drives.hidden.length === 1 ? 'drive is' : 'drives are'} not offered`}>
@@ -953,6 +966,11 @@ export function App() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [jump, setJump] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  // Linux desktop only: built-in disks (linuxDiskFacts in shared/targets.ts).
+  const internalSwitch = !WEB && api.platform === 'linux';
+  const [showInternal, setShowInternal] = useState(false);
+  // A built-in disk the user clicked, waiting for the extra confirmation.
+  const [askInternal, setAskInternal] = useState<Target | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const [settings, setSettings] = useState(false);
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
@@ -1002,13 +1020,19 @@ export function App() {
   }, [imageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const minSize = local && !local.imageId ? local.extractSize : image?.extractSize ?? 0;
-  const refreshDrives = useCallback(() => {
+  const refreshDrives = useCallback((internal: boolean = showInternal) => {
     setDrives(null);
-    api.listDrives(minSize).then((d) => {
+    api.listDrives(minSize, internalSwitch && internal).then((d) => {
       setDrives(d);
       setDevice((cur) => (d.targets.some((t) => t.device === cur && !t.disabled) ? cur : null));
     });
-  }, [minSize]);
+  }, [minSize, showInternal, internalSwitch]);
+  const toggleInternal = (v: boolean) => { setShowInternal(v); refreshDrives(v); };
+  // A built-in disk is chosen only after a second question that names it.
+  const chooseDevice = (d: string) => {
+    const t = drives?.targets.find((x) => x.device === d);
+    if (t?.internal && d !== device) setAskInternal(t); else setDevice(d);
+  };
 
   // An image file on this computer for the SD/USB path. One that is a
   // release image selects that image; any other is a custom image.
@@ -1114,7 +1138,7 @@ export function App() {
   else if (!destReady) why = 'Choose a destination first.';
 
   const erasedWhat = method === 'sd'
-    ? (target ? `${target.description} (${target.device}, ${formatBytes(target.size)})` : '')
+    ? (target ? `${target.internal ? `the built-in ${INTERNAL_WORDS[target.internal]}, ` : ''}${target.description} (${target.device}, ${formatBytes(target.size)})` : '')
     : (storage && mb ? `the ${storage === 'sd' ? 'SD card in the board' : STORAGES[storage].label} (${mb.boardName}, connected over USB)` : '');
   const erased = erasedWhat ? `Everything on ${erasedWhat}.` : '';
 
@@ -1143,8 +1167,8 @@ export function App() {
     // update notice and greys out Update until the app is restarted.
     let res: Awaited<ReturnType<typeof api.writeSd>>;
     try {
-      res = local && api.writeLocalImage ? await api.writeLocalImage(local.token, target.device)
-        : await api.writeSd(image!.id, target.device);
+      res = local && api.writeLocalImage ? await api.writeLocalImage(local.token, target.device, !!target.internal)
+        : await api.writeSd(image!.id, target.device, !!target.internal);
     } catch (e) {
       res = { ok: false, reason: 'The write stopped with an error.', detail: String((e as Error)?.message ?? e) } as typeof res;
     } finally {
@@ -1309,7 +1333,8 @@ export function App() {
             <WizardStep name="Destination" id="dest" isDisabled={!imageId && !local} footer={{ isNextDisabled: !destReady, isCancelHidden: true, nextButtonText: 'Review' }}>
               <DestinationStep boardName={cur?.boardName ?? ''} boardId={board ?? ''} image={image}
                 method={method} setMethod={(m) => { setMethod(m); if (m === 'sd') refreshDrives(); }}
-                drives={drives} refreshDrives={refreshDrives} device={device} setDevice={setDevice}
+                drives={drives} refreshDrives={refreshDrives} device={device} setDevice={chooseDevice}
+                showInternal={internalSwitch ? showInternal : null} setShowInternal={toggleInternal}
                 storage={storage} setStorage={(s) => { setStorage(s); setSource(mb?.wholeImage.includes(s) ? 'release' : s === 'spinor' && image?.spi ? 'spi' : 'file'); }}
                 source={source} setSource={setSource} file={file} pickFile={pickFile} picking={picking} fileError={fileError}
                 releaseFile={releaseFile} pickRelease={pickRelease} checking={checking}
@@ -1362,6 +1387,23 @@ export function App() {
           </Wizard>
         </PageSection>
       )}
+
+      <Modal isOpen={!!askInternal} onClose={() => setAskInternal(null)} variant="small" aria-labelledby="internal-title">
+        <ModalHeader title="Use a built-in disk?" labelId="internal-title" titleIconVariant="warning" />
+        {askInternal && askInternal.internal && (
+          <ModalBody>
+            {askInternal.device} is the built-in {INTERNAL_WORDS[askInternal.internal]} of this computer
+            ({askInternal.description ? `${askInternal.description}, ` : ''}{formatBytes(askInternal.size)}). Nothing on it is
+            mounted now, but it may hold a system or data you need. Writing the image erases all of it.
+          </ModalBody>
+        )}
+        <ModalFooter>
+          <Button variant="danger" onClick={() => { if (askInternal) setDevice(askInternal.device); setAskInternal(null); }}>
+            Use {askInternal?.device ?? 'this disk'}
+          </Button>
+          <Button variant="link" onClick={() => setAskInternal(null)}>Cancel</Button>
+        </ModalFooter>
+      </Modal>
 
       <Modal isOpen={confirm} onClose={() => setConfirm(false)} variant="small" aria-labelledby="confirm-title">
         <ModalHeader title="Erase and write?" labelId="confirm-title" titleIconVariant="warning" />

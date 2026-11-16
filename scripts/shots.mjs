@@ -49,6 +49,25 @@ for (const [w, h, tag] of [[1100, 760, 'd'], [720, 640, 'm']]) {
     await page.click('.pf-v6-c-wizard__footer button:has-text("Next")');
     await page.waitForSelector('text=SanDisk');
     await shot('3-destination-sd');
+    if (process.platform === 'linux') {
+      // Built-in disks (Linux): the made-up board runs from its SD card
+      // slot and has an eMMC and an NVMe drive. The switch shows the two
+      // that hold nothing; the slot with / is never offered; choosing one
+      // asks again, naming it.
+      if (await page.locator('#drives >> text=A3A561').count()) throw new Error('a built-in disk is offered with the switch off');
+      await page.click('label[for=show-internal]');
+      await page.waitForSelector('#drives >> text=NVMe drive: Samsung SSD 980 500GB');
+      await page.waitForSelector('#drives >> text=eMMC: A3A561');
+      if (await page.locator('#drives >> text=SD64G').count()) throw new Error('the SD card slot the system runs from is offered');
+      await shot('3-destination-internal');
+      await page.click('#drives >> text=eMMC: A3A561');
+      await page.waitForSelector('#internal-title');
+      await page.waitForSelector('text=/dev/roxora-test-mmcblk2 is the built-in eMMC of this computer');
+      await shot('3-destination-internal-confirm');
+      await page.click('.pf-v6-c-modal-box__footer button:has-text("Cancel")');
+      await page.click('label[for=show-internal]');
+      await page.waitForSelector('#drives >> text=SanDisk');
+    }
     await page.click('text=SanDisk');
     await page.click('.pf-v6-c-wizard__footer button:has-text("Review")');
     await shot('4-review');

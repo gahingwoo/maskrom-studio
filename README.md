@@ -124,7 +124,16 @@ Safety rules:
 - Drives that hold the running system are never offered: drivelist's
   system flag, any system mount point (`/`, `/boot`, `/home`, `C:\`, ...),
   read-only, virtual and loop devices are all hidden. The target is checked
-  again just before it is written.
+  again just before it is written, by the elevated writer itself.
+- Built-in disks (Linux only): a board's eMMC, SD card slot or NVMe drive,
+  or any fixed disk. They are hidden until **Show internal disks** is turned
+  on in the Destination step. lsblk and sysfs tell what each one is and
+  every mount on it, also through LUKS or LVM. A built-in disk that holds
+  `/`, `/boot`, `/usr`, swap or the like is never offered, and neither is
+  one with anything else mounted (other than where the desktop mounts a
+  card by itself, `/media/<user>/...`), or used by LVM, RAID or a ZFS
+  pool. Choosing one asks again, naming the disk. On Windows and macOS
+  the switch does not exist: the system's own disks stay hidden as before.
 - The review page says exactly what will be erased, and writing needs a
   second confirmation.
 - Every write is read back and its SHA-256 compared with the release's

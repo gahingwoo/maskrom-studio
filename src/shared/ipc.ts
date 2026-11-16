@@ -53,14 +53,16 @@ export interface ImagerApi {
   version: string;
   devSample: boolean;
   loadCatalog(opts: { sample: boolean }): Promise<CatalogResult>;
-  listDrives(minSize: number): Promise<{ targets: Target[]; hidden: HiddenDrive[] }>;
-  writeSd(imageId: string, device: string): Promise<JobResult>;
+  /** `internal`: also offer built-in disks that hold nothing in use (Linux; "Show internal disks"). */
+  listDrives(minSize: number, internal?: boolean): Promise<{ targets: Target[]; hidden: HiddenDrive[] }>;
+  /** `internal`: the device is a built-in disk the user confirmed; the writer checks it again. */
+  writeSd(imageId: string, device: string, internal?: boolean): Promise<JobResult>;
   /** Desktop only: choose an image file on this computer for the SD/USB path. */
   pickLocalImage?(): Promise<LocalImage | { error: string } | null>;
   /** Desktop only: the same for a file dropped onto the window. */
   dropLocalImage?(file: File): Promise<LocalImage | { error: string }>;
   /** Desktop only: write the file chosen with one of the two above. */
-  writeLocalImage?(token: string, device: string): Promise<JobResult>;
+  writeLocalImage?(token: string, device: string, internal?: boolean): Promise<JobResult>;
   cancel(): Promise<void>;
   onProgress(cb: (p: JobProgress) => void): () => void;
   prepareMaskrom(imageId: string, what?: 'image' | 'spi'): Promise<PreparedFile | { error: string }>;

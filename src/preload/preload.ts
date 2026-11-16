@@ -7,12 +7,12 @@ const info = ipcRenderer.sendSync('app:info') as { platform: string; version: st
 const api: ImagerApi = {
   ...info,
   loadCatalog: (opts) => ipcRenderer.invoke('catalog:load', opts),
-  listDrives: (minSize) => ipcRenderer.invoke('drives:list', minSize),
-  writeSd: (imageId, device) => ipcRenderer.invoke('sd:write', imageId, device),
+  listDrives: (minSize, internal) => ipcRenderer.invoke('drives:list', minSize, internal === true),
+  writeSd: (imageId, device, internal) => ipcRenderer.invoke('sd:write', imageId, device, internal === true),
   pickLocalImage: () => ipcRenderer.invoke('sd:pick'),
   // Only the preload script can tell where a dropped file is.
   dropLocalImage: (file) => ipcRenderer.invoke('sd:drop', webUtils.getPathForFile(file)),
-  writeLocalImage: (token, device) => ipcRenderer.invoke('sd:write-file', token, device),
+  writeLocalImage: (token, device, internal) => ipcRenderer.invoke('sd:write-file', token, device, internal === true),
   cancel: () => ipcRenderer.invoke('job:cancel'),
   onProgress: (cb) => {
     const h = (_e: unknown, p: JobProgress) => cb(p);
