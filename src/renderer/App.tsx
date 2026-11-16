@@ -322,8 +322,9 @@ function BoardPicker({ boards, board, setBoard, find }: {
 }
 
 // The release is named above each table, so it is no column.
-const IMAGE_COLUMNS: [ImageSortKey, string][] = [
-  ['ubuntu', 'Ubuntu'], ['desktop', 'Desktop'], ['kernel', 'Kernel'], ['size', 'Size'],
+// Fixed widths, so the newest release's table and an older one line up.
+const IMAGE_COLUMNS: [ImageSortKey, string, 15 | 20 | 25 | 30][] = [
+  ['ubuntu', 'Ubuntu', 25], ['desktop', 'Desktop', 30], ['kernel', 'Kernel', 25], ['size', 'Size', 15],
 ];
 
 type ImageSort = { key: ImageSortKey; dir: 'asc' | 'desc' } | null;
@@ -340,8 +341,8 @@ function ImageTable({ label, images, selected, setImage, sort, setSort }: {
   return (
     <Table aria-label={label} variant="compact">
       <Thead><Tr><Th screenReaderText="Select" />
-        {IMAGE_COLUMNS.map(([key, name], col) => (
-          <Th key={key} sort={{
+        {IMAGE_COLUMNS.map(([key, name, width], col) => (
+          <Th key={key} width={width} sort={{
             columnIndex: col + 1,
             sortBy: sort ? { index: IMAGE_COLUMNS.findIndex(([k]) => k === sort.key) + 1, direction: sort.dir } : {},
             onSort: (_e, _i, dir) => setSort({ key, dir }),
