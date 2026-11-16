@@ -62,7 +62,8 @@ for (const [w, h, tag] of [[1100, 760, 'd'], [720, 640, 'm']]) {
       await shot('3-destination-internal');
       await page.click('#drives >> text=eMMC: A3A561');
       await page.waitForSelector('#internal-title');
-      await page.waitForSelector('text=/dev/roxora-test-mmcblk2 is the built-in eMMC of this computer');
+      // has-text, not text=: a text= starting with / is read as a regular expression.
+      await page.waitForSelector('.pf-v6-c-modal-box__body:has-text("/dev/roxora-test-mmcblk2 is the built-in eMMC of this computer")');
       await shot('3-destination-internal-confirm');
       await page.click('.pf-v6-c-modal-box__footer button:has-text("Cancel")');
       await page.click('label[for=show-internal]');
