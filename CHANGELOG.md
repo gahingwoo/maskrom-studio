@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.10
 
 - Image step: only the newest release is listed, named with its date and
   release notes above the table. Older releases and betas are folded away
