@@ -3,17 +3,27 @@
 <img src="resources/icons/roxora-imager.svg" alt="Roxora Imager icon: an SD card in the three Roxora bands in front of an eMMC chip" width="96" height="96">
 
 A desktop app that installs [Roxora](https://github.com/roxora-os/build)
-images in two ways:
+images in two ways, or saves them as a file:
 
 - **SD card or USB drive.** Downloads the image from a Roxora release, checks
   it against the release SHA-256, writes it, then reads the drive back and
   compares it with the release.
 - **Board storage over USB (Maskrom).** Writes a board's eMMC or SPI NOR
   flash through its USB-C port, with the same read-back check.
+- **Save as an image file.** Saves the uncompressed .img where you choose,
+  for Ventoy and similar boot-from-file devices or a virtual machine. The
+  download is checked as above, and the decompressed file against the
+  release's size and SHA-256 before it gets its name. No administrator
+  rights are needed. Board images boot only on their board. The generic
+  RK3576 UEFI image is the one for UEFI firmware; in a virtual machine it
+  needs an arm64 (aarch64) UEFI machine (QEMU virt with edk2/AAVMF, UTM on
+  Apple silicon), and Ventoy runs it only on an arm64 UEFI computer too.
+  None of them boots on an x86 PC. Desktop app only.
 
 An image you have already downloaded can be written to an SD card or USB
-drive too: **Use an image file on this computer** on the first two steps, or
-drop the file on the window (.img, .img.xz, .img.gz, .img.bz2).
+drive, or saved decompressed as a file, too: **Use an image file on this
+computer** on the first two steps, or drop the file on the window (.img,
+.img.xz, .img.gz, .img.bz2).
 
 - A file with the name of an image in the Roxora releases must be that
   image: its SHA-256 is compared with the release, and it is then written
@@ -163,7 +173,7 @@ entries are marked as samples and cannot be written.
 ## Tests
 
 ```sh
-npm test                                   # catalog, targets, local image files, SPI file checks, Maskrom through the WASM, download proxy
+npm test                                   # catalog, targets, local image files, saving as a file, SPI file checks, Maskrom through the WASM, download proxy
 node scripts/electron-maskrom-e2e.mjs      # Maskrom path inside Electron
 node test/e2e/sd-loop.mjs                  # SD write to a loop device (Linux, sudo)
 node test/e2e/sd-ramdisk-mac.mjs           # SD write through authopen to a RAM disk (macOS, sudo; changes the authorization database, meant for CI)

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Destination: a third choice, Save as an image file, saves the
+  uncompressed .img in a folder you pick in the system's save dialog, for
+  Ventoy and similar boot-from-file devices or a virtual machine. A release
+  image is downloaded (or taken from the cache) and checked against the
+  release SHA-256 as for a drive; the decompressed image must then have the
+  release's size and SHA-256. It is written to a temporary file in
+  the same folder and gets its name only at the end, so a cancelled or
+  failed save leaves nothing under that name. The free space is checked
+  before it starts. The result page has Show in folder. No administrator
+  rights are asked for. An image file chosen on this computer (.img.xz,
+  .img.gz, .img.bz2) can be saved decompressed the same way. Board images
+  boot only on their board; the generic RK3576 UEFI image needs an arm64
+  (aarch64) UEFI machine, in a virtual machine as with Ventoy, and none
+  boots on an x86 PC. The web version does not have this choice.
+
 ## 0.1.10
 
 - Image step: only the newest release is listed, named with its date and
