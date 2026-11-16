@@ -15,6 +15,11 @@
   update at once.
 - Linux packages: the .deb and .rpm depend on libgbm and ALSA, which the
   app needs to start, and no longer on libXss, which it does not use.
+- Linux: built-in disks (a board's eMMC, SD card slot or NVMe drive) can be
+  written. They are listed with their kind and size once Show internal
+  disks is turned on in the Destination step, and choosing one asks again,
+  naming it. A disk with /, /boot, /usr or swap, or one with anything else
+  mounted or in use, is never offered; the writer checks this again.
 
 ## 0.1.9
 
