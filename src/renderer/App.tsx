@@ -1271,9 +1271,10 @@ export function App() {
       // A bar that counted bytes without a total ends full.
       stages: res.ok ? cur.stages.map((s) => ({ ...s, percent: 100, done: undefined })) : cur.stages,
       result: res.ok
-        ? { ok: true, title: custom ? 'Saved' : 'Saved and checked', text: custom
-          ? `${t.path} holds ${name}, decompressed (SHA-256 ${res.sha256}). The file is not a Roxora release image and was not checked against one.`
-          : `${t.path} holds ${name}, decompressed. It matches the release (SHA-256 ${res.sha256}).` }
+        // The SHA-256 on a line of its own, in the detail style: a path and a hash in one sentence wrap badly.
+        ? { ok: true, title: custom ? 'Saved' : 'Saved and checked', detail: `SHA-256 ${res.sha256}`, text: custom
+          ? `${t.path} holds ${name}, decompressed. The file is not a Roxora release image and was not checked against one.`
+          : `${t.path} holds ${name}, decompressed. It matches the release.` }
         : { ok: false, title: res.reason, text: /Nothing was saved/.test(res.reason) ? '' : 'Nothing was saved under that name.',
           ...(res.detail ? { detail: res.detail } : {}) },
     });
