@@ -52,16 +52,8 @@ for (const theme of ['light', 'dark']) {
   await shot('2-image');
   // Older releases folded away; opened here to show them, then closed.
   await page.click('.older-releases .pf-v6-c-expandable-section__toggle button');
-  const dbg = async (when) => console.log(when, JSON.stringify(await page.evaluate(() => {
-    const t = document.querySelector('.older-releases .pf-v6-c-expandable-section__toggle button');
-    const sel = document.querySelector('#older-release');
-    return { count: document.querySelectorAll('.older-releases').length, expanded: t?.getAttribute('aria-expanded'),
-      cls: document.querySelector('.older-releases')?.className, select: !!sel, h: sel?.getBoundingClientRect().height };
-  })));
-  await dbg('after click');
   await page.waitForSelector('#older-release', { state: 'visible' });
-  await page.locator('#older-release').scrollIntoViewIfNeeded();
-  await dbg('before shot');
+  await page.locator('.older-releases table tbody tr').last().scrollIntoViewIfNeeded();
   await shot('2-image-older');
   await page.click('.older-releases .pf-v6-c-expandable-section__toggle button');
   await page.click('.pf-v6-c-wizard__footer button:has-text("Next")');

@@ -403,7 +403,7 @@ function ImageStep({ board, imageId, setImage, lp }: {
             </FormGroup>
             <Alert isInline isPlain variant="info" title={older.release.prerelease
               ? 'A beta: optional, for trying what comes next.'
-              : `An older release. ${current?.release.version ?? 'The newest'} is the safer choice; an installed Roxora system upgrades to it with apt.`}>
+              : `An older release: ${current ? `Roxora ${current.release.version}` : 'the newest release'} is the safer choice.`}>
               <Button variant="link" isInline component="a" href={older.release.url} target="_blank">Release notes</Button>
             </Alert>
             <ImageTable label={`Images of Roxora ${older.release.version}`} images={older.images} {...tableProps} />
