@@ -59,6 +59,27 @@ for (const [w, h, tag] of [[1100, 760, 'd'], [720, 640, 'm']]) {
       await page.waitForSelector('#drives >> text=NVMe drive: Samsung SSD 980 500GB');
       await page.waitForSelector('#drives >> text=eMMC: A3A561');
       if (await page.locator('#drives >> text=SD64G').count()) throw new Error('the SD card slot the system runs from is offered');
+      // The layout: the switch in the Drive header, in the window and above
+      // the list; removable drives first, then built-in disks; sizes on one line.
+      const layout = await page.evaluate(() => {
+        const sw = document.querySelector('.show-internal').getBoundingClientRect();
+        const table = document.querySelector('#drives').getBoundingClientRect();
+        const devices = [...document.querySelectorAll('#drives tbody td[data-label="Device"]')].map((td) => td.textContent.trim());
+        const sizeLines = [...document.querySelectorAll('#drives tbody td[data-label="Size"]')].map((td) => {
+          const r = document.createRange();
+          r.selectNodeContents(td);
+          return new Set([...r.getClientRects()].map((c) => Math.round(c.top))).size;
+        });
+        return { swBottom: sw.bottom, swTop: sw.top, tableTop: table.top, height: window.innerHeight,
+          width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth, devices, sizeLines };
+      });
+      if (layout.swTop < 0 || layout.swBottom > layout.height) throw new Error(`the switch is outside the window: ${JSON.stringify(layout)}`);
+      if (layout.swBottom > layout.tableTop) throw new Error(`the switch is not above the drive list: ${JSON.stringify(layout)}`);
+      if (layout.scrollWidth > layout.width) throw new Error(`the page is wider than the window: ${JSON.stringify(layout)}`);
+      const order = ['/dev/roxora-test-mmcblk0', '/dev/roxora-test-sdb', '/dev/roxora-test-mmcblk2', '/dev/roxora-test-nvme0n1'];
+      if (JSON.stringify(layout.devices) !== JSON.stringify(order)) throw new Error(`drive order ${layout.devices.join(', ')}`);
+      if (layout.sizeLines.some((n) => n !== 1)) throw new Error(`a size wraps: ${layout.sizeLines.join(', ')}`);
+      console.log(`internal disks ${tag}-${theme}: ${layout.devices.join(', ')}; switch at ${Math.round(layout.swTop)}-${Math.round(layout.swBottom)} of ${layout.height}, list from ${Math.round(layout.tableTop)}`);
       await shot('3-destination-internal');
       await page.click('#drives >> text=eMMC: A3A561');
       await page.waitForSelector('#internal-title');

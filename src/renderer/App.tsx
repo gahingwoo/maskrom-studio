@@ -559,12 +559,29 @@ function DestinationStep(p: {
 
         {p.method === 'sd' && (
           <FormGroup fieldId="drives" label="Drive"
-            labelInfo={<Button variant="link" isInline onClick={() => p.refreshDrives()}>Refresh</Button>}>
+            labelInfo={(
+              <Flex className="drive-actions" spaceItems={{ default: 'spaceItemsLg' }} alignItems={{ default: 'alignItemsCenter' }}
+                justifyContent={{ default: 'justifyContentFlexEnd' }} flexWrap={{ default: 'nowrap' }}>
+                {p.showInternal !== null && (
+                  <FlexItem>
+                    <Switch id="show-internal" className="show-internal" label="Show internal disks" isChecked={p.showInternal}
+                      onChange={(_e, v) => p.setShowInternal(v)} aria-describedby="show-internal-note" />
+                  </FlexItem>
+                )}
+                <FlexItem><Button variant="link" isInline onClick={() => p.refreshDrives()}>Refresh</Button></FlexItem>
+              </Flex>
+            )}>
+            {p.showInternal && (
+              <Content component="p" id="show-internal-note" className="muted">
+                Built-in disks (a board&apos;s eMMC, SD card slot or NVMe drive) are listed after the removable drives, only
+                when nothing on them is mounted or in use. The disk the system runs from never is.
+              </Content>
+            )}
             {!p.drives ? <Spinner size="md" aria-label="Looking for drives" /> : p.drives.targets.length === 0 ? (
               <Content component="p">No SD card or USB drive found. Insert one and click Refresh.</Content>
             ) : (
               <Table aria-label="Drives" variant="compact" id="drives">
-                <Thead><Tr><Th screenReaderText="Select" /><Th>Drive</Th><Th>Device</Th><Th>Size</Th></Tr></Thead>
+                <Thead><Tr><Th screenReaderText="Select" /><Th>Drive</Th><Th>Device</Th><Th modifier="nowrap">Size</Th></Tr></Thead>
                 <Tbody>
                   {p.drives.targets.map((t, i) => (
                     <Tr key={t.device} isClickable={!t.disabled} onRowClick={() => !t.disabled && p.setDevice(t.device)} isRowSelected={p.device === t.device}>
@@ -575,22 +592,11 @@ function DestinationStep(p: {
                         {t.warning && !t.disabled && <div className="muted">{t.warning}</div>}
                       </Td>
                       <Td dataLabel="Device">{t.device}</Td>
-                      <Td dataLabel="Size">{formatBytes(t.size)}</Td>
+                      <Td dataLabel="Size" modifier="nowrap">{formatBytes(t.size)}</Td>
                     </Tr>
                   ))}
                 </Tbody>
               </Table>
-            )}
-            {p.showInternal !== null && (
-              <Switch id="show-internal" className="show-internal" label="Show internal disks" isChecked={p.showInternal}
-                onChange={(_e, v) => p.setShowInternal(v)}
-                aria-describedby="show-internal-note" />
-            )}
-            {p.showInternal !== null && (
-              <Content component="p" id="show-internal-note" className="muted">
-                Built-in disks of this computer, such as a board&apos;s eMMC, SD card slot or NVMe drive. One is offered only
-                when nothing on it is mounted or in use; the disk the system runs from never is.
-              </Content>
             )}
             {p.drives && p.drives.hidden.length > 0 && (
               <ExpandableSection toggleText={`${p.drives.hidden.length} ${p.drives.hidden.length === 1 ? 'drive is' : 'drives are'} not offered`}>

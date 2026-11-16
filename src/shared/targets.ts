@@ -138,7 +138,8 @@ export function classifyDrives(drives: DriveInfo[], opts: ClassifyOptions = {}):
     const disabled = opts.minSize && d.size < opts.minSize ? 'Too small for this image' : null;
     targets.push({ device: d.device, description: d.description, size: d.size, mountpoints: mounts, kind, internal, warning, disabled });
   }
-  targets.sort((a, b) => a.device.localeCompare(b.device));
+  // Removable drives first, then built-in disks; each by device name.
+  targets.sort((a, b) => Number(!!a.internal) - Number(!!b.internal) || a.device.localeCompare(b.device));
   return { targets, hidden };
 }
 

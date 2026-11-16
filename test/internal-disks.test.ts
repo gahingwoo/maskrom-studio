@@ -174,6 +174,15 @@ describe('a USB drive', () => {
     expect(offered(drives, false)).toEqual([['/dev/sda', null, 'usb']]);
     expect(offered(drives, true)).toEqual([['/dev/sda', null, 'usb']]);
   });
+  it('comes before the built-in disks, each group by device name', () => {
+    const d = machine([
+      nvme([part('/dev/nvme0n1p1')]),
+      emmc([part('/dev/mmcblk0p1')]),
+      { ...usb([]), name: '/dev/sdb', kname: '/dev/sdb' },
+      usb([]),
+    ], MMC);
+    expect(offered(d, true).map((t) => t[0])).toEqual(['/dev/sda', '/dev/sdb', '/dev/mmcblk0', '/dev/nvme0n1']);
+  });
   it('is never offered while it holds the system', () => {
     const d = machine([usb([part('/dev/sda1', '/boot'), part('/dev/sda2', '/')])], {});
     expect(offered(d, true)).toEqual([]);
