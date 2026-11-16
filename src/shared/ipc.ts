@@ -48,6 +48,20 @@ export interface LocalImage {
   imageId: string | null;
 }
 
+/** What to save as an image file: a release image, or the image file chosen on this computer. */
+export type SaveSubject = { imageId: string } | { localToken: string };
+
+/** Where the image is to be saved, chosen in the save dialog. */
+export interface SaveTarget {
+  token: string;
+  /** The full path, shown to the user. */
+  path: string;
+  /** The folder it is in. */
+  dir: string;
+  /** Bytes free there, or -1 when the system cannot tell. */
+  free: number;
+}
+
 export interface ImagerApi {
   platform: string;
   version: string;
@@ -63,6 +77,20 @@ export interface ImagerApi {
   dropLocalImage?(file: File): Promise<LocalImage | { error: string }>;
   /** Desktop only: write the file chosen with one of the two above. */
   writeLocalImage?(token: string, device: string, internal?: boolean): Promise<JobResult>;
+  /**
+   * Desktop only: choose where to save the image as a plain .img file, in
+   * the system's save dialog. `name` is the name it offers. Null when the
+   * dialog was cancelled.
+   */
+  pickSaveFile?(name: string): Promise<SaveTarget | { error: string } | null>;
+  /**
+   * Desktop only: download (or read) the image, decompress it and save it
+   * where pickSaveFile said, checked against the release. Needs no
+   * administrator rights.
+   */
+  saveImage?(what: SaveSubject, saveToken: string): Promise<JobResult>;
+  /** Desktop only: show the saved file in the system's file manager. */
+  showSavedFile?(saveToken: string): Promise<void>;
   cancel(): Promise<void>;
   onProgress(cb: (p: JobProgress) => void): () => void;
   prepareMaskrom(imageId: string, what?: 'image' | 'spi'): Promise<PreparedFile | { error: string }>;

@@ -4,12 +4,12 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, net, session, shell, type WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { open } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import * as drivelist from 'drivelist';
 import { formatBytes } from '../shared/format';
 import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
-import type { JobProgress, JobResult, LocalImage, PreparedFile } from '../shared/ipc';
+import type { JobProgress, JobResult, LocalImage, PreparedFile, SaveSubject, SaveTarget } from '../shared/ipc';
 import type { CatalogImage } from '../shared/catalog';
 import { partitionedSize } from '../maskrom/spi-check';
 import { loadReleases, loadSample, writableImage, writableImages, type CatalogState } from './catalog-source';
@@ -19,6 +19,7 @@ import { ensureLoader } from './loader-cache';
 import { describeLocal, measureFile, sha256OfFile } from './local-image';
 import { handleProtocol, ORIGIN, registerScheme } from './protocol';
 import { macWrite } from './mac-write';
+import { freeBytes, saveImage } from './save-image';
 import { loadSettings, saveSettings } from './settings';
 import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restartApp } from './updater';
 import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
@@ -174,7 +175,7 @@ ipcMain.handle('sd:write', async (e, imageId: string, device: string, internal?:
 
 // An image file on this computer for the SD/USB path (local-image.ts). The
 // page only holds a token; the path stays here.
-let localImage: { token: string; path: string; image: CatalogImage | null; sizeHint: number } | null = null;
+let localImage: { token: string; path: string; image: CatalogImage | null; sizeHint: number; extractSize: number } | null = null;
 
 async function describeForPage(path: string): Promise<LocalImage | { error: string }> {
   if (job) return { error: 'Another job is running.' };
@@ -182,7 +183,7 @@ async function describeForPage(path: string): Promise<LocalImage | { error: stri
   try {
     const d = await describeLocal(path, writableImages(), { signal: job.signal });
     const token = randomBytes(16).toString('hex');
-    localImage = { token, path, image: d.image, sizeHint: d.extractSize || d.size };
+    localImage = { token, path, image: d.image, sizeHint: d.extractSize || d.size, extractSize: d.extractSize };
     return { token, name: d.name, size: d.size, extractSize: d.extractSize, imageId: d.image?.id ?? null };
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
@@ -210,6 +211,16 @@ ipcMain.handle('sd:drop', async (_e, path: unknown) => {
   return describeForPage(path);
 });
 
+/** A file on this computer that is a release image, checked against the release again, as a download is. Null when it matches. */
+async function checkLocalRelease(wc: WebContents, path: string, image: CatalogImage, signal: AbortSignal,
+  done: 'written' | 'saved'): Promise<JobResult | null> {
+  const total = image.size;
+  const got = await sha256OfFile(path, (bytes) => sendProgress(wc, { stage: 'check', bytes, total }), signal);
+  if (got === image.sha256) return null;
+  return { ok: false, reason: `The file no longer matches the release. Nothing was ${done}.`,
+    detail: `sha256 ${got}, release ${image.sha256}` };
+}
+
 ipcMain.handle('sd:write-file', async (e, token: string, device: string, internal?: boolean): Promise<JobResult> => {
   const l = localImage;
   if (!l || l.token !== token) return { ok: false, reason: 'Choose the image file again. Nothing was written.' };
@@ -221,13 +232,8 @@ ipcMain.handle('sd:write-file', async (e, token: string, device: string, interna
     let extractSize: number;
     let extractSha256: string;
     if (l.image) {
-      // A release image: checked against the release again, as a download is.
-      const total = l.image.size;
-      const got = await sha256OfFile(l.path, (bytes) => sendProgress(wc, { stage: 'check', bytes, total }), signal);
-      if (got !== l.image.sha256) {
-        return { ok: false, reason: 'The file no longer matches the release. Nothing was written.',
-          detail: `sha256 ${got}, release ${l.image.sha256}` };
-      }
+      const changed = await checkLocalRelease(wc, l.path, l.image, signal, 'written');
+      if (changed) return changed;
       ({ extractSize, extractSha256 } = l.image);
     } else {
       // A custom image: its own decompressed data is what the drive must read back as.
@@ -246,6 +252,83 @@ ipcMain.handle('sd:write-file', async (e, token: string, device: string, interna
   } finally {
     job = null;
   }
+});
+
+// Saving the image as a plain .img file (save-image.ts): for Ventoy and the
+// like, and for virtual machines. No writer, no pkexec or authopen: the app
+// writes the file itself. The page only holds a token for the chosen path.
+let saveTarget: { token: string; path: string } | null = null;
+
+// Unpackaged builds only: the path "chosen" without a dialog, for the screenshots.
+const TEST_SAVE = !app.isPackaged ? process.env.ROXORA_IMAGER_TEST_SAVE : undefined;
+
+ipcMain.handle('save:pick', async (_e, name: unknown): Promise<SaveTarget | { error: string } | null> => {
+  if (job) return { error: 'Another job is running.' };
+  // Only a name: the folder is the Downloads folder, then wherever the user goes.
+  const offered = typeof name === 'string' ? basename(name) : '';
+  let path = TEST_SAVE;
+  if (!path) {
+    const r = await dialog.showSaveDialog(win!, {
+      title: 'Save the image as',
+      defaultPath: join(app.getPath('downloads'), offered || 'roxora.img'),
+      buttonLabel: 'Choose',
+      filters: [{ name: 'Disk images', extensions: ['img'] }, { name: 'All files', extensions: ['*'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (r.canceled || !r.filePath) return null;
+    path = r.filePath;
+  }
+  const dir = dirname(path);
+  const free = await freeBytes(dir).catch(() => -1);
+  saveTarget = { token: randomBytes(16).toString('hex'), path };
+  return { token: saveTarget.token, path, dir, free };
+});
+
+ipcMain.handle('save:run', async (e, what: SaveSubject, saveToken: string): Promise<JobResult> => {
+  const t = saveTarget;
+  if (!t || t.token !== saveToken) return { ok: false, reason: 'Choose where to save the image again. Nothing was saved.' };
+  if (job) return { ok: false, reason: 'Another job is running.' };
+  job = new AbortController();
+  const wc = e.sender;
+  const signal = job.signal;
+  const onProgress = (bytes: number, total: number) => sendProgress(wc, { stage: 'write', bytes, total });
+  try {
+    let source: string;
+    let expected: { size: number; sha256: string } | null;
+    let sizeHint = 0;
+    if ('imageId' in what) {
+      const img = writableImage(what.imageId);
+      if (!img || img.sample) return { ok: false, reason: 'This image is not from a published release and cannot be saved.' };
+      // The cache and the checks of the SD path: the download (or its parts, joined) against the release sha256.
+      source = await fetchImage(img, cacheDir(), (p) => sendProgress(wc, p), signal);
+      expected = { size: img.extractSize, sha256: img.extractSha256 };
+    } else {
+      const l = localImage;
+      if (!l || l.token !== what.localToken) return { ok: false, reason: 'Choose the image file again. Nothing was saved.' };
+      source = l.path;
+      if (l.image) {
+        const changed = await checkLocalRelease(wc, l.path, l.image, signal, 'saved');
+        if (changed) return changed;
+        expected = { size: l.image.extractSize, sha256: l.image.extractSha256 };
+      } else {
+        // A custom image: nothing to compare with; its own SHA-256 is reported.
+        expected = null;
+        // 0 for gzip and bzip2: then a full disk shows only when it fills.
+        sizeHint = l.extractSize;
+      }
+    }
+    const out = await saveImage({ source, dest: t.path, expected, sizeHint, onProgress, signal });
+    return { ok: true, sha256: out.sha256 };
+  } catch (err) {
+    if (signal.aborted) return { ok: false, reason: 'Cancelled. Nothing was saved.' };
+    return { ok: false, reason: String((err as Error).message ?? err) };
+  } finally {
+    job = null;
+  }
+});
+
+ipcMain.handle('save:show', (_e, saveToken: string) => {
+  if (saveTarget && saveTarget.token === saveToken) shell.showItemInFolder(saveTarget.path);
 });
 
 /** The size of the disk a plain image's partition table describes, for the SPI NOR check (maskrom/spi-check.ts). */

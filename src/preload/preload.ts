@@ -13,6 +13,9 @@ const api: ImagerApi = {
   // Only the preload script can tell where a dropped file is.
   dropLocalImage: (file) => ipcRenderer.invoke('sd:drop', webUtils.getPathForFile(file)),
   writeLocalImage: (token, device, internal) => ipcRenderer.invoke('sd:write-file', token, device, internal === true),
+  pickSaveFile: (name) => ipcRenderer.invoke('save:pick', name),
+  saveImage: (what, saveToken) => ipcRenderer.invoke('save:run', what, saveToken),
+  showSavedFile: (saveToken) => ipcRenderer.invoke('save:show', saveToken),
   cancel: () => ipcRenderer.invoke('job:cancel'),
   onProgress: (cb) => {
     const h = (_e: unknown, p: JobProgress) => cb(p);
