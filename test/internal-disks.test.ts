@@ -22,9 +22,14 @@ interface Node extends LsblkNode {
   children?: Node[];
 }
 
-const part = (name: string, mountpoint: string | null = null, more: Partial<Node> = {}): Node => ({
+// A partition mounted at one place, at several (a list: lsblk's MOUNTPOINT
+// shows the first, MOUNTPOINTS all of them), or nowhere.
+const part = (name: string, mount: string | string[] | null = null, more: Partial<Node> = {}): Node => ({
   name, kname: name, type: 'part', size: 8 * GB, rm: false, hotplug: false, ro: false, tran: null,
-  fstype: 'ext4', mountpoint, label: null, partlabel: null, model: null, vendor: null, ...more,
+  fstype: 'ext4', label: null, partlabel: null, model: null, vendor: null,
+  mountpoint: Array.isArray(mount) ? mount[0] : mount,
+  mountpoints: Array.isArray(mount) ? mount : [mount],
+  ...more,
 });
 const sd = (name: string, children: Node[]): Node => ({
   name, kname: name, type: 'disk', size: 64 * GB, rm: false, hotplug: false, ro: false, tran: null,
@@ -49,11 +54,29 @@ const usb = (children: Node[]): Node => ({
   subsystems: 'block:scsi:usb:platform', children,
 });
 
-/** A machine: what classifyDrives sees, from one lsblk tree and the MMC card types. */
+/**
+ * The tree as `lsblk --json --output ...,MOUNTPOINTS` (LINUX_LSBLK_ARGS)
+ * gives it with util-linux 2.39: no "mountpoint", "mountpoints" a list
+ * that is [null] for a device mounted nowhere.
+ */
+function asMountpoints(n: Node): Node {
+  const { mountpoint, mountpoints, children, ...rest } = n;
+  return {
+    ...rest,
+    mountpoints: mountpoints ?? [mountpoint ?? null],
+    ...(children ? { children: children.map(asMountpoints) } : {}),
+  };
+}
+
+/**
+ * A machine: what classifyDrives sees. drivelist parses the tree with both
+ * columns (it runs lsblk --output-all), linuxDiskFacts the tree as
+ * LINUX_LSBLK_ARGS returns it.
+ */
 function machine(nodes: Node[], mmcTypes: Record<string, string>): DriveInfo[] {
-  const tree = { blockdevices: nodes };
-  const drives = parse(JSON.stringify(tree)) as unknown as DriveInfo[];
-  return withLinuxFacts(drives, linuxDiskFacts(tree, mmcTypes));
+  const full = nodes.map((n) => ({ ...n, mountpoints: n.mountpoints ?? [n.mountpoint ?? null] }));
+  const drives = parse(JSON.stringify({ blockdevices: full })) as unknown as DriveInfo[];
+  return withLinuxFacts(drives, linuxDiskFacts({ blockdevices: nodes.map(asMountpoints) }, mmcTypes));
 }
 
 const MMC = { '/dev/mmcblk0': 'MMC\n', '/dev/mmcblk1': 'SD\n' };
@@ -73,7 +96,7 @@ describe('a board running from its SD card, with eMMC and NVMe', () => {
   it('offers no built-in disk until internal disks are shown, and says why', () => {
     expect(offered(drives, false)).toEqual([]);
     expect(reasons(drives, false)).toEqual({
-      '/dev/mmcblk1': 'system disk: holds /boot',
+      '/dev/mmcblk1': 'system disk: holds /',
       '/dev/mmcblk0': 'eMMC; built-in disks are shown with "Show internal disks"',
       '/dev/mmcblk0boot0': 'read-only',
       '/dev/mmcblk0boot1': 'read-only',
@@ -82,7 +105,7 @@ describe('a board running from its SD card, with eMMC and NVMe', () => {
   });
   it('then offers the eMMC and the NVMe drive, never the SD card the system runs from', () => {
     expect(offered(drives, true)).toEqual([['/dev/mmcblk0', 'emmc', 'disk'], ['/dev/nvme0n1', 'nvme', 'disk']]);
-    expect(reasons(drives, true)['/dev/mmcblk1']).toBe('system disk: holds /boot');
+    expect(reasons(drives, true)['/dev/mmcblk1']).toBe('system disk: holds /');
     const emmcTarget = classifyDrives(drives, { platform: 'linux', internal: true }).targets[0];
     expect(emmcTarget.warning).toMatch(/^Built-in eMMC/);
     expect(emmcTarget.size).toBe(58 * GB);
@@ -103,7 +126,7 @@ describe('a board running from its eMMC, with a card in the SD slot', () => {
       ], MMC);
       expect(offered(drives, false), String(mount)).toEqual([]);
       expect(offered(drives, true), String(mount)).toEqual([['/dev/mmcblk1', 'sd', 'sd']]);
-      expect(reasons(drives, true)['/dev/mmcblk0']).toBe('system disk: holds /boot');
+      expect(reasons(drives, true)['/dev/mmcblk0']).toBe('system disk: holds /');
     }
   });
   it('does not offer a card mounted anywhere else', () => {
@@ -130,12 +153,12 @@ describe('a board running from NVMe, its root on LUKS', () => {
   ], MMC);
   it('never offers the NVMe drive, and offers the eMMC with internal disks shown', () => {
     expect(offered(drives, true)).toEqual([['/dev/mmcblk0', 'emmc', 'disk']]);
-    expect(reasons(drives, true)['/dev/nvme0n1']).toMatch(/^system disk: holds \/boot\/efi/);
+    expect(reasons(drives, true)['/dev/nvme0n1']).toBe('system disk: holds /');
   });
   it('sees the / inside the encrypted volume', () => {
     const facts = linuxDiskFacts({ blockdevices: [nvme([part('/dev/nvme0n1p1', null, { children: [
       { name: '/dev/mapper/root', type: 'crypt', mountpoint: '/' },
-    ] as Node[] })])] });
+    ] as Node[] })])].map(asMountpoints) });
     expect(facts['/dev/nvme0n1'].allMounts).toEqual(['/']);
     const d = machine([nvme([part('/dev/nvme0n1p1', null, { children: [{ name: '/dev/mapper/root', type: 'crypt', mountpoint: '/' }] as Node[] })])], {});
     expect(reasons(d, true)['/dev/nvme0n1']).toBe('system disk: holds /');
@@ -181,7 +204,42 @@ describe('when the facts are missing or say the disk is in use', () => {
     expect(classifyDrives(drives, { platform: 'darwin', internal: true }).targets).toEqual([]);
   });
   it('calls an MMC disk of unknown type an internal disk', () => {
-    expect(linuxDiskFacts({ blockdevices: [emmc([])] })['/dev/mmcblk0'].internal).toBe('disk');
-    expect(linuxDiskFacts({ blockdevices: [usb([])] })['/dev/sda'].internal).toBeNull();
+    expect(linuxDiskFacts({ blockdevices: [emmc([])].map(asMountpoints) })['/dev/mmcblk0'].internal).toBe('disk');
+    expect(linuxDiskFacts({ blockdevices: [usb([])].map(asMountpoints) })['/dev/sda'].internal).toBeNull();
+  });
+});
+
+describe('a device mounted in several places (lsblk MOUNTPOINTS)', () => {
+  it('reads every mount, not only the one MOUNTPOINT shows', () => {
+    // A btrfs root whose subvolumes are mounted at /home and /: MOUNTPOINT
+    // says /home only.
+    const btrfs = part('/dev/nvme0n1p2', ['/home', '/'], { fstype: 'btrfs' });
+    expect(btrfs.mountpoint).toBe('/home');
+    const facts = linuxDiskFacts({ blockdevices: [nvme([part('/dev/nvme0n1p1', '/boot/efi'), btrfs])].map(asMountpoints) });
+    expect(facts['/dev/nvme0n1'].allMounts).toEqual(['/boot/efi', '/home', '/']);
+  });
+  it('never offers a disk whose btrfs root is seen by drivelist at /home only', () => {
+    const drives = machine([
+      nvme([part('/dev/nvme0n1p2', ['/home', '/'], { fstype: 'btrfs' })]),
+      emmc([part('/dev/mmcblk0p1')]),
+    ], MMC);
+    // drivelist's own view: /home, the first mount point.
+    expect(drives.find((d) => d.device === '/dev/nvme0n1')!.mountpoints.map((m) => m.path)).toEqual(['/home']);
+    expect(offered(drives, true)).toEqual([['/dev/mmcblk0', 'emmc', 'disk']]);
+    expect(reasons(drives, true)['/dev/nvme0n1']).toBe('system disk: holds /');
+    expect(isOfferedTarget('/dev/nvme0n1', drives, { platform: 'linux', internal: true })).toBe(false);
+  });
+  it('does not offer a card in the SD slot that is also mounted outside /media', () => {
+    const drives = machine([
+      emmc([part('/dev/mmcblk0p1', '/')]),
+      sd('/dev/mmcblk1', [part('/dev/mmcblk1p1', ['/media/roxora/x', '/mnt/y'])]),
+    ], MMC);
+    expect(offered(drives, true)).toEqual([]);
+    expect(reasons(drives, true)['/dev/mmcblk1']).toBe('SD card slot, in use: mounted at /mnt/y');
+  });
+  it('takes [null], what lsblk gives for a device mounted nowhere, as no mount', () => {
+    const facts = linuxDiskFacts({ blockdevices: [emmc([part('/dev/mmcblk0p1')])].map(asMountpoints) }, MMC);
+    expect(facts['/dev/mmcblk0']).toEqual({ internal: 'emmc', allMounts: [], busy: null });
+    expect(asMountpoints(emmc([part('/dev/mmcblk0p1')])).mountpoints).toEqual([null]);
   });
 });

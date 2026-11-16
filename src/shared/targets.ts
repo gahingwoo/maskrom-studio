@@ -105,7 +105,8 @@ export function classifyDrives(drives: DriveInfo[], opts: ClassifyOptions = {}):
     const mounts = d.mountpoints.map((m) => m.path);
     // Every mount on the disk, also on devices stacked on its partitions.
     const allMounts = [...new Set([...mounts, ...(d.allMounts ?? [])])];
-    const sys = allMounts.find((m) => systemMount(m, platform));
+    // The reason names / when the disk has it, else the first system mount.
+    const sys = allMounts.includes('/') ? '/' : allMounts.find((m) => systemMount(m, platform));
     // Only Linux knows built-in disks apart (linuxDiskFacts); elsewhere a
     // disk the OS calls a system disk stays hidden.
     const internal = platform === 'linux' ? d.internal ?? null : null;
@@ -155,7 +156,14 @@ export interface LsblkNode {
 }
 
 /** The lsblk call for linuxDiskFacts. */
-export const LINUX_LSBLK_ARGS = ['--json', '--bytes', '--paths', '--output', 'NAME,TYPE,RM,HOTPLUG,TRAN,FSTYPE,MOUNTPOINT'];
+// MOUNTPOINTS, not MOUNTPOINT: MOUNTPOINT shows one of the places a device
+// is mounted (a btrfs root with subvolumes at / and /home may show only
+// /home), and for a built-in disk the mount list is all that keeps the disk
+// the system runs from hidden. MOUNTPOINTS (util-linux 2.37 and later;
+// Ubuntu 24.04 has 2.39) lists them all, [null] when there is none. An
+// older lsblk refuses the column, readLinuxDiskFacts then has no facts, and
+// every built-in disk stays hidden as a system disk.
+export const LINUX_LSBLK_ARGS = ['--json', '--bytes', '--paths', '--output', 'NAME,TYPE,RM,HOTPLUG,TRAN,FSTYPE,MOUNTPOINTS'];
 
 export interface LinuxDiskFacts {
   internal: InternalKind | null;

@@ -11,8 +11,10 @@ import {
 } from '../shared/targets';
 
 /**
- * The facts per disk, or none at all when lsblk fails. Without facts a
- * built-in disk stays what drivelist says: a system disk, never offered.
+ * The facts per disk, or none at all when lsblk fails: also when it is
+ * older than util-linux 2.37 and does not know the MOUNTPOINTS column
+ * (LINUX_LSBLK_ARGS). Without facts a built-in disk stays what drivelist
+ * says: a system disk, never offered.
  */
 export async function readLinuxDiskFacts(): Promise<Record<string, LinuxDiskFacts>> {
   if (process.platform !== 'linux') return {};
