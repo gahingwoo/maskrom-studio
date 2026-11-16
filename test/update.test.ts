@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  assetSha256, brewCaskOwns, checkDue, compareVersions, installKind, judgeReleases, newestRelease, pickAsset,
+  aptRepoCarries, assetSha256, brewCaskOwns, checkDue, compareVersions, installKind, judgeReleases, newestRelease, pickAsset,
   UPDATE_INTERVAL, whatsNew, type AppRelease, type ReleaseAsset,
 } from '../src/shared/update';
 
@@ -97,6 +97,13 @@ describe('what a check says', () => {
     const r = judgeReleases('0.1.3', [rel('0.1.4', { assets: [asset('SHA256SUMS')] })], o);
     expect(r).toMatchObject({ state: 'newer', offer: { version: '0.1.4', asset: null } });
   });
+  it('still says a newer version is out for a copy apt updates, with no file to download', () => {
+    const r = judgeReleases('0.1.9', [rel('0.1.10'), rel('0.1.9')], { beta: false, kind: 'apt', arch: 'arm64' });
+    expect(r).toEqual({ state: 'newer', offer: {
+      version: '0.1.10', url: 'https://github.com/roxora-os/imager/releases/tag/v0.1.10', beta: false,
+      notes: 'Fix: something that broke.', kind: 'apt', asset: null,
+    } });
+  });
   it('shortens the notes to one line', () => {
     expect(whatsNew('\nA line first.\n\n- New: `this` thing\n  goes on here.\n- Other.')).toBe('New: this thing goes on here.');
     expect(whatsNew('Just words.\n')).toBe('Just words.');
@@ -117,6 +124,48 @@ describe('how this copy was installed', () => {
     expect(installKind({ platform: 'win32', packaged: true, nsis: true })).toBe('windows');
     expect(installKind({ platform: 'win32', packaged: true })).toBe('none'); // the zip
     expect(installKind({ platform: 'linux', packaged: false, appImage: '/x.AppImage' })).toBe('none');
+  });
+  it('tells a .deb from an apt repository from one installed by hand', () => {
+    expect(installKind({ platform: 'linux', packaged: true, dpkg: true, aptRepo: true })).toBe('apt');
+    expect(installKind({ platform: 'linux', packaged: true, dpkg: true, aptRepo: false })).toBe('deb');
+    // Only dpkg's own copy counts; an AppImage stays an AppImage.
+    expect(installKind({ platform: 'linux', packaged: true, aptRepo: true })).toBe('none');
+    expect(installKind({ platform: 'linux', packaged: true, appImage: '/x.AppImage', dpkg: true, aptRepo: true })).toBe('appimage');
+    expect(installKind({ platform: 'linux', packaged: false, dpkg: true, aptRepo: true })).toBe('none');
+  });
+  it('reads from apt-cache policy whether a repository carries the package', () => {
+    // A Roxora system: installed from Roxora's repository, which also has an older version.
+    const roxora = [
+      'roxora-imager:',
+      '  Installed: 0.1.9',
+      '  Candidate: 0.1.9',
+      '  Version table:',
+      ' *** 0.1.9 500',
+      '        500 https://roxora-os.github.io/apt noble/main arm64 Packages',
+      '        100 /var/lib/dpkg/status',
+      '     0.1.8 500',
+      '        500 https://roxora-os.github.io/apt noble/main arm64 Packages',
+      '',
+    ].join('\n');
+    expect(aptRepoCarries(roxora)).toBe(true);
+    // The .deb from the release page, installed with apt install ./file.deb.
+    const byHand = [
+      'roxora-imager:',
+      '  Installed: 0.1.9',
+      '  Candidate: 0.1.9',
+      '  Version table:',
+      ' *** 0.1.9 100',
+      '        100 /var/lib/dpkg/status',
+      '',
+    ].join('\n');
+    expect(aptRepoCarries(byHand)).toBe(false);
+    // Headings in another language do not matter, only the source lines.
+    expect(aptRepoCarries(roxora.replace('Version table:', 'Versionstabelle:').replace('Installed', 'Installiert'))).toBe(true);
+    // A pinned-down repository still carries it.
+    expect(aptRepoCarries(roxora.replace(/ {8}500 /g, '        -10 '))).toBe(true);
+    // apt-cache missing, or a package apt does not know.
+    expect(aptRepoCarries('')).toBe(false);
+    expect(aptRepoCarries('N: Unable to locate package roxora-imager\n')).toBe(false);
   });
   it('knows a Homebrew cask by the Caskroom', () => {
     const links: Record<string, string> = {
@@ -155,8 +204,9 @@ describe('the file for this install', () => {
     expect(name('rpm', 'x64')).toBe('roxora-imager-0.1.4-1.x86_64.rpm');
     expect(name('rpm', 'arm64')).toBe('roxora-imager-0.1.4-1.aarch64.rpm');
   });
-  it('is nothing for Homebrew, an unknown install, another CPU or a release without it', () => {
+  it('is nothing for Homebrew, apt, an unknown install, another CPU or a release without it', () => {
     expect(pickAsset(a, 'brew', 'arm64')).toBeNull();
+    expect(pickAsset(a, 'apt', 'arm64')).toBeNull();
     expect(pickAsset(a, 'none', 'x64')).toBeNull();
     expect(pickAsset(a, 'windows', 'arm64')).toBeNull();
     expect(pickAsset(a, 'appimage', 'ia32')).toBeNull();

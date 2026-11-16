@@ -8,6 +8,11 @@
   list. Selecting an image of an older release keeps that section open.
 - Fix: beta versions (2026.12.1-beta.2) sort by their beta number and
   before their release.
+- Linux: a .deb that an apt repository carries (Roxora's desktop images
+  install it from Roxora's) is no longer downloaded and replaced by the
+  app. The notice still says a new version is out; the dialog says that
+  the system's software updates bring it and shows the apt command to
+  update at once.
 
 ## 0.1.9
 

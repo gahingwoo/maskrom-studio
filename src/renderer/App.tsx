@@ -19,7 +19,7 @@ import { BOARD_REQUEST_URL, queryWords, vendorCounts, visibleBoards } from '../s
 import { formatBytes } from '../shared/format';
 import type { CatalogResult, ImagerApi, JobProgress, LocalImage, PreparedFile } from '../shared/ipc';
 import type { HiddenDrive, Target } from '../shared/targets';
-import type { UpdateCheck, UpdateOffer, UpdateResult } from '../shared/update';
+import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
 import { maskromBoard, STORAGES, type StorageId } from '../maskrom/boards';
 import { RKBIN_HOST } from '../maskrom/loaders';
 import { SPI_FLASH_FALLBACK, spiFileProblem } from '../maskrom/spi-check';
@@ -757,7 +757,8 @@ function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onClose: (
   useEffect(() => { setResult(null); setProgress(null); setLog(''); }, [offer?.version]);
   if (!offer) return null;
   const brew = offer.kind === 'brew';
-  const canInstall = !!api.installUpdate && (brew || (!!offer.asset && offer.kind !== 'none'));
+  const apt = offer.kind === 'apt';
+  const canInstall = !!api.installUpdate && !apt && (brew || (!!offer.asset && offer.kind !== 'none'));
   const start = async () => {
     setBusy(true);
     setResult(null);
@@ -793,7 +794,16 @@ function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onClose: (
               <CopyBlock text="brew upgrade --cask roxora-imager" />
             </>
           )}
-          {!brew && !canInstall && (
+          {apt && (
+            <>
+              <Content component="p">
+                This copy was installed from a package repository, and the system's software updates keep it up to date.
+                Roxora Imager {offer.version} comes with them once the repository has it. To update now, in a terminal:
+              </Content>
+              <CopyBlock text={APT_COMMAND} />
+            </>
+          )}
+          {!brew && !apt && !canInstall && (
             <Content component="p">
               The app cannot update this copy itself{offer.kind === 'none' ? '' : ': the release has no package for this computer'}.
               Get the new version from the release page.

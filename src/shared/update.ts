@@ -95,10 +95,12 @@ export function whatsNew(body: string | null | undefined, max = 180): string {
  * How this copy of the app got onto the computer, which decides how it is
  * updated: 'brew' a Homebrew cask, 'dmg' a macOS app from the DMG or
  * install.sh, 'windows' the NSIS installer, 'appimage', 'deb', 'rpm';
- * 'none' for anything the app does not update (a development run, the
- * Windows zip, an unpacked folder).
+ * 'apt' a .deb that an apt repository carries (Roxora's, on a Roxora
+ * system), which the system's software updates keep up to date; 'none' for
+ * anything the app does not update (a development run, the Windows zip, an
+ * unpacked folder).
  */
-export type InstallKind = 'brew' | 'dmg' | 'windows' | 'appimage' | 'deb' | 'rpm' | 'none';
+export type InstallKind = 'brew' | 'dmg' | 'windows' | 'appimage' | 'deb' | 'apt' | 'rpm' | 'none';
 
 export interface InstallFacts {
   platform: string;
@@ -112,14 +114,34 @@ export interface InstallFacts {
   /** Linux: the dpkg or rpm database owns the executable. */
   dpkg?: boolean;
   rpm?: boolean;
+  /** Linux, with dpkg: an apt source carries the package (aptRepoCarries). */
+  aptRepo?: boolean;
 }
 
 export function installKind(f: InstallFacts): InstallKind {
   if (!f.packaged) return 'none';
   if (f.platform === 'darwin') return f.brew ? 'brew' : 'dmg';
   if (f.platform === 'win32') return f.nsis ? 'windows' : 'none';
-  if (f.platform === 'linux') return f.appImage ? 'appimage' : f.dpkg ? 'deb' : f.rpm ? 'rpm' : 'none';
+  if (f.platform === 'linux') return f.appImage ? 'appimage' : f.dpkg ? (f.aptRepo ? 'apt' : 'deb') : f.rpm ? 'rpm' : 'none';
   return 'none';
+}
+
+export const APT_PACKAGE = 'roxora-imager';
+export const APT_COMMAND = `sudo apt update && sudo apt install --only-upgrade ${APT_PACKAGE}`;
+
+/**
+ * Does `apt-cache policy roxora-imager` name a repository for the package?
+ * Its version table lists, under each version, where that version comes
+ * from: a repository URI, or /var/lib/dpkg/status for what is installed.
+ * A .deb installed by hand has only the latter. Only the source lines are
+ * read (deeper than the version lines: a priority, then where), so the
+ * translated headings of other languages do not matter.
+ */
+export function aptRepoCarries(policy: string): boolean {
+  return policy.split('\n').some((line) => {
+    const m = /^ {8}\s*-?\d+ (\S+)/.exec(line);
+    return !!m && m[1] !== '/var/lib/dpkg/status';
+  });
 }
 
 export const BREW_CASK = 'roxora-imager';

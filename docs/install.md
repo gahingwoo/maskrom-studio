@@ -134,6 +134,7 @@ cancelled. What happens then depends on how the app was installed:
 | Windows, installer | The setup program is downloaded and started, and Roxora Imager closes so that it can be replaced. |
 | Linux, AppImage | The new AppImage is downloaded into the same folder and put in place of the old file in one step. Restart the app. |
 | Linux, .deb or .rpm | The package is downloaded and installed with apt-get, dnf or zypper through pkexec, which asks for your password. If that is not possible the app shows the command to run in a terminal. Restart the app. |
+| Linux, .deb from an apt repository (Roxora's desktop images) | Not updated by the app: the system's software updates bring the new version once the repository has it (Roxora's within an hour of the release). The notice still says the version is out, and the dialog shows `sudo apt update && sudo apt install --only-upgrade roxora-imager` to update at once. The app tells this from a .deb installed by hand by `apt-cache policy roxora-imager`, which names the repository. |
 | Windows zip, an unpacked folder | Not updated by the app: the notice links to the release page. |
 
 The web version is always the newest and has no update function.

@@ -9,8 +9,10 @@
 // installKind): a Homebrew cask is upgraded by running brew, the app from a
 // DMG is swapped for the one in the new DMG (update-mac.ts), the Windows
 // installer is run, an AppImage is replaced, a .deb or .rpm goes through
-// the package manager. Every download is checked against
-// the SHA-256 GitHub lists for the file (update-install.ts).
+// the package manager. A .deb from an apt repository (Roxora's, on a Roxora
+// system) is never replaced from here: it comes with the system's software
+// updates, and the app only says a new version is out. Every download is
+// checked against the SHA-256 GitHub lists for the file (update-install.ts).
 
 import { app, net, shell, type WebContents } from 'electron';
 import { execFileSync } from 'node:child_process';
@@ -18,7 +20,8 @@ import { existsSync, mkdtempSync, readdirSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
-  assetSha256, BREW_COMMAND, brewCaskOwns, checkDue, installKind, judgeReleases, newestRelease, pickAsset,
+  APT_COMMAND, APT_PACKAGE, aptRepoCarries, assetSha256, BREW_COMMAND, brewCaskOwns, checkDue, installKind, judgeReleases,
+  newestRelease, pickAsset,
   type AppRelease, type InstallKind, type ReleaseAsset, type UpdateCheck, type UpdateResult,
 } from '../shared/update';
 import { loadSettings, saveSettings } from './settings';
@@ -30,6 +33,12 @@ import {
 
 const owns = (cmd: string, args: string[]) => {
   try { execFileSync(cmd, args, { stdio: 'ignore', timeout: 10000 }); return true; } catch { return false; }
+};
+/** What a command prints, in the C locale; empty when it fails or is missing. */
+const output = (cmd: string, args: string[]) => {
+  try {
+    return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10000, env: { ...process.env, LC_ALL: 'C' } });
+  } catch { return ''; }
 };
 
 /** The app bundle on macOS: /Applications/Roxora Imager.app. */
@@ -46,12 +55,16 @@ export function detectInstall(): { kind: InstallKind; arch: string } {
   if (install) return install;
   const exe = app.getPath('exe');
   const platform = process.platform;
+  const dpkg = platform === 'linux' && !process.env.APPIMAGE && owns('dpkg-query', ['-S', exe]);
   const kind = installKind({
     platform, packaged: app.isPackaged, appImage: process.env.APPIMAGE,
     brew: platform === 'darwin' && brewCaskOwns(exe.replace(/\/Contents\/MacOS\/[^/]+$/, ''), { realpath: realpathSync, readdir: readdirSync }),
     nsis: platform === 'win32' && existsSync(join(dirname(exe), 'Uninstall Roxora Imager.exe')),
-    dpkg: platform === 'linux' && !process.env.APPIMAGE && owns('dpkg-query', ['-S', exe]),
+    dpkg,
     rpm: platform === 'linux' && !process.env.APPIMAGE && owns('rpm', ['-qf', exe]),
+    // A .deb that apt can get again from a repository: Roxora's packages on
+    // a Roxora system. The system's updates bring new versions.
+    aptRepo: dpkg && aptRepoCarries(output('apt-cache', ['policy', APT_PACKAGE])),
   });
   // An Intel build on Apple silicon is updated to the Apple silicon build.
   install = { kind, arch: app.runningUnderARM64Translation ? 'arm64' : process.arch };
@@ -63,9 +76,9 @@ const FAKE = !app.isPackaged ? process.env.ROXORA_IMAGER_FAKE_UPDATE : undefined
 function fakeCheck(): UpdateCheck {
   if (FAKE === 'error') return { state: 'error', message: 'Could not reach GitHub.' };
   if (FAKE === 'current') return { state: 'current', version: app.getVersion(), beta: false, newerBeta: null };
-  if (FAKE === 'brew') {
+  if (FAKE === 'brew' || FAKE === 'apt') {
     return { state: 'newer', offer: {
-      version: '9.9.9', url: 'https://github.com/roxora-os/imager/releases', beta: false, kind: 'brew',
+      version: '9.9.9', url: 'https://github.com/roxora-os/imager/releases', beta: false, kind: FAKE,
       notes: 'A made-up version for the screenshots.', asset: null,
     } };
   }
@@ -94,7 +107,7 @@ function judge(list: AppRelease[], beta: boolean): UpdateCheck {
  * does not vanish when the app is restarted. Null: nothing to say.
  */
 export async function checkForUpdate(force = false): Promise<UpdateCheck | null> {
-  if (FAKE) return force || FAKE === 'newer' || FAKE === 'brew' ? fakeCheck() : null;
+  if (FAKE) return force || FAKE === 'newer' || FAKE === 'brew' || FAKE === 'apt' ? fakeCheck() : null;
   const s = loadSettings();
   const now = Date.now();
   const remembered = () => {
@@ -167,6 +180,8 @@ export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
       running = null;
     }
   }
+  // Never swapped from here: apt keeps it, with the rest of the system.
+  if (o.kind === 'apt') return { ok: false, reason: 'This copy is updated with the system\'s software updates. You can also update it in a terminal:', command: APT_COMMAND };
   const asset = o.asset;
   if (o.kind === 'none' || !asset) return { ok: false, reason: 'The app cannot update this copy itself. Get the new version from the release page.' };
   if (!asset.browser_download_url.startsWith(DOWNLOAD_PREFIX)) return { ok: false, reason: 'The release lists a download that is not on the Roxora Imager release page. Nothing was downloaded.' };
