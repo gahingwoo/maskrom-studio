@@ -10,3 +10,8 @@ export function formatBytes(n: number): string {
   }
   return i === 0 ? `${n} bytes` : `${v.toFixed(1)} ${units[i]}`;
 }
+
+/** The name of an image file once decompressed: the .img that a .img.xz, .img.gz or .img.bz2 holds. */
+export function uncompressedName(name: string): string {
+  return name.replace(/\.(xz|gz|bz2)$/i, '') || name;
+}
