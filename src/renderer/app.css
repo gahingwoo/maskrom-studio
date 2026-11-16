@@ -97,7 +97,7 @@ html, body, #root { height: 100%; }
 .older-releases { margin-top: var(--pf-t--global--spacer--md); }
 .muted { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
 /* The Show internal disks switch next to Refresh in the Drive header: the size of the header's label info, as Refresh. */
-.drive-actions .pf-v6-c-switch__label { font-size: inherit; }
+.drive-actions .pf-v6-c-switch, .drive-actions .pf-v6-c-switch__label { font-size: inherit; }
 .footer-note { color: var(--pf-t--global--text--color--subtle); }
 .detail { font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--sm); word-break: break-all; }
 .log .pf-v6-c-code-block__code { max-height: 18rem; overflow: auto; display: block; }
