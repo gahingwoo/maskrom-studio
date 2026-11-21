@@ -1,11 +1,11 @@
-# Installing Roxora Imager
+# Installing WoA RK3576 Imager
 
 Get the package for your system from the
-[releases](https://github.com/roxora-os/imager/releases), or on macOS and
+[releases](https://github.com/gahingwoo/woa-rk3576-imager/releases), or on macOS and
 Linux run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/roxora-os/imager/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gahingwoo/woa-rk3576-imager/main/install.sh | sh
 ```
 
 The script picks the package for the system and checks the download against
@@ -14,7 +14,7 @@ To get the newest beta version instead (a pre-release on GitHub, such as
 0.1.5-beta.1), run it with `BETA=1`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/roxora-os/imager/main/install.sh | BETA=1 sh
+curl -fsSL https://raw.githubusercontent.com/gahingwoo/woa-rk3576-imager/main/install.sh | BETA=1 sh
 ```
 
 While no normal release exists yet, the script installs the newest beta and
@@ -31,7 +31,7 @@ the first time.
 
 ## Windows
 
-1. Run `roxora-imager-<version>-windows-x64-setup.exe`.
+1. Run `woa-rk3576-imager-<version>-windows-x64-setup.exe`.
 2. Windows SmartScreen says "Windows protected your PC". Click
    **More info**, then **Run anyway**.
 
@@ -39,7 +39,7 @@ The zip holds the same app without an installer.
 
 For Maskrom writing Windows needs the WinUSB driver for the board:
 
-1. Put the board in Maskrom mode and connect it (see the app's Destination
+1. Put the board in Maskrom mode and connect it (see the app's Review
    page).
 2. Download Zadig from https://zadig.akeo.ie/ and run it.
 3. Choose the device whose USB ID starts with 2207 (Options, List All
@@ -51,7 +51,7 @@ itself (with libwdi, which Zadig is built on) has not been tested yet.
 
 ## macOS
 
-Open the DMG and drag Roxora Imager to Applications. On first launch macOS
+Open the DMG and drag WoA RK3576 Imager to Applications. On first launch macOS
 may say the app cannot be opened, because it is not notarized:
 
 - macOS 15 and later: open the app once, click Done, then System Settings,
@@ -62,10 +62,10 @@ macOS needs no driver for Maskrom writing.
 
 Writing an SD card or USB drive asks for an administrator's password (or
 Touch ID) once per write, in the dialog of macOS itself. The dialog carries
-the sentence "Roxora Imager will erase ... and write the image to it." with
+the sentence "WoA RK3576 Imager will erase ... and write the image to it." with
 the name of the drive. The right you grant is for that one drive
 (`sys.openfile.readwrite./dev/rdiskN`): Apple's `/usr/libexec/authopen`
-opens it, and no part of Roxora Imager runs as root. Full Disk Access is not
+opens it, and no part of WoA RK3576 Imager runs as root. Full Disk Access is not
 needed, and the app does not ask for it. If macOS offers to initialise or
 eject the drive when the write is done, choose Ignore or Eject.
 
@@ -78,36 +78,24 @@ eject the drive when the write is done, choose Ignore or Eject.
   rule once:
 
   ```sh
-  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/70-roxora-imager.rules
+  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/70-woa-rk3576-imager.rules
   sudo udevadm control --reload-rules && sudo udevadm trigger
   ```
 
 Writing an SD card asks for your password (pkexec), as Etcher does.
 
-## Writing an image you downloaded
+## The Windows image
 
-Roxora Imager downloads release images itself, but it also takes a file you
-already have, for an SD card or USB drive: click **Use an image file on this
-computer** on the Board or Image step, or drop the file on the window. It
-takes .img files, plain or compressed with xz, gzip or bzip2.
-
-- A file from the Roxora releases (for example
-  `roxora-radxa-rock-4d-noble-edge-2026.11.3.img.xz`, under its own name) is
-  recognised: the app compares its SHA-256 with the release, shows the board
-  and Ubuntu version, and reads the drive back against the release after
-  writing. If the file differs from the release it is refused; download it
-  again.
-- Any other file is written as it is. The app cannot know whether it is
-  good, and says that it is not a Roxora release image. After writing, the
-  drive is read back and compared with the file.
-
-For a board's SPI NOR flash (Maskrom) use the release's SPI bootloader. A
-file from this computer is accepted there only if it can be a bootloader:
-not larger than the SPI flash, and not a disk image.
+The app does not download Windows. Give it a Windows 11 23H2 ARM64 ISO, or
+the `install.wim` or `install.esd` from one, on the **Windows image** step
+(or drop the file on the window). It reads the editions from the image and
+refuses x64 images and builds newer than 25999 (Windows 11 24H2 and later
+cannot run on RK3576, which is ARMv8.0). An ISO is read in place: the app
+finds `sources\install.wim` inside it and never copies the file.
 
 ## Updates
 
-The app asks GitHub for the list of Roxora Imager releases when it starts,
+The app asks GitHub for the list of WoA RK3576 Imager releases when it starts,
 at most once a day. When a newer version is out, a notice above the steps
 names it, with the first line of its release notes, a link to the notes and
 an **Update** button. Closing the notice hides that version; Settings still
@@ -129,12 +117,10 @@ cancelled. What happens then depends on how the app was installed:
 
 | Installed as | Update |
 | --- | --- |
-| macOS, Homebrew cask | The app runs Homebrew for you, as your user: `brew update`, then `brew upgrade --cask roxora-imager`. Its output is in the dialog. Then **Restart now**. If Homebrew is not found or fails, the dialog shows its error and the command to copy. Homebrew only has a new version once its tap lists it, which can be a little after the release. |
+| macOS, Homebrew cask | The app runs Homebrew for you, as your user: `brew update`, then `brew upgrade --cask woa-rk3576-imager`. Its output is in the dialog. Then **Restart now**. If Homebrew is not found or fails, the dialog shows its error and the command to copy. Homebrew only has a new version once its tap lists it, which can be a little after the release. |
 | macOS, DMG or install.sh | The DMG for this Mac's CPU goes to the Downloads folder, is mounted out of sight, and its app is copied in place of the running one (into `~/Applications` if the app's folder cannot be written). Then **Restart now**. The old app is kept until the new one is in place. If that is not possible the DMG is opened and you drag the app yourself. |
-| Windows, installer | The setup program is downloaded and started, and Roxora Imager closes so that it can be replaced. |
+| Windows, installer | The setup program is downloaded and started, and WoA RK3576 Imager closes so that it can be replaced. |
 | Linux, AppImage | The new AppImage is downloaded into the same folder and put in place of the old file in one step. Restart the app. |
 | Linux, .deb or .rpm | The package is downloaded and installed with apt-get, dnf or zypper through pkexec, which asks for your password. If that is not possible the app shows the command to run in a terminal. Restart the app. |
-| Linux, .deb from an apt repository (Roxora's desktop images) | Not updated by the app: the system's software updates bring the new version once the repository has it (Roxora's within an hour of the release). The notice still says the version is out, and the dialog shows `sudo apt update && sudo apt install --only-upgrade roxora-imager` to update at once. The app tells this from a .deb installed by hand by `apt-cache policy roxora-imager`, which names the repository. |
 | Windows zip, an unpacked folder | Not updated by the app: the notice links to the release page. |
 
-The web version is always the newest and has no update function.

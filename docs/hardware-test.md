@@ -1,8 +1,104 @@
 # Hardware test
 
-The hardware checks for Roxora Imager are part C of the Roxora hardware test,
-together with the image and hwtool checks that use the same boards:
-https://github.com/roxora-os/build/blob/main/docs/hardware-test.md#part-c-roxora-imager
+Nothing in this app has run on a board yet. Run these on the LCKFB
+TaishanPi 3M first, from a build of `main`, and note the commit.
 
-Run part C from a build of this repository's main branch, or from a release
-once there is one, and say which in the report.
+## What you need
+
+- The TaishanPi 3M, its USB-C port marked OTG+DP connected to the PC, a USB
+  keyboard and an HDMI screen (or LCKFB's DSI screen), the serial console
+  at 1500000 baud.
+- The SD card slot and the USB-A ports empty: the firmware boots them
+  before the eMMC.
+- A Windows 11 23H2 ARM64 ISO (build 22631), or its install.wim or
+  install.esd. 24H2 and later are refused. Enterprise 22631.2428 is what
+  installed before by hand.
+- The eMMC already holding edk2-rk3576 0.4.1 written as "UEFI firmware,
+  whole image" (the app's own firmware write is test 1).
+
+## 1. Firmware over Maskrom (about 2 minutes)
+
+Board, TaishanPi 3M; What to write, "UEFI firmware, keep the partitions";
+Review, Connect and write. Put the board in Maskrom (F4 in the firmware's
+countdown, or the MSK pads).
+
+Watch: the run page goes through "Sending the loader", "Waiting for the
+board to come back", then "Erase and write?" with the eMMC size. Expect
+62008590336 bytes (57.7 GiB). Confirm. Note the result line about samples.
+
+Serial: the board resets and the new firmware banner appears.
+
+Also try "keep the partitions" on an eMMC without the edk2-rk3576 table:
+it must refuse before writing.
+
+## 2. Staged Windows install over Maskrom
+
+Board, TaishanPi 3M; Windows 11 on the eMMC; choose the ISO; pick the
+edition; Review, Connect and write.
+
+| Step | Expected time | Watch |
+|---|---|---|
+| WinPE download (352 MB) and unpack (541 MB) | 1 to 3 minutes, once | progress in the first bar |
+| Hashing the Windows image | under a minute from an SSD | second bar |
+| Loader and reconnect | under 30 seconds | "Erase and write?" names the eMMC size and the partitions it removes (on a fresh firmware write: "data") |
+| Writing | 5 to 15 minutes, not measured yet | bytes per second: please note the total time |
+| Samples | seconds | the result says how many samples matched and how many came back as 0xCC; please note the numbers |
+| Reset | | the board restarts |
+
+Serial console after the reset: the firmware banner, then the boot from
+"eMMC User Data" loading `\EFI\Boot\bootaa64.efi`. Then WinPE takes the
+screen; the serial line stays quiet (WinPE does not use it).
+
+On the screen, in WinPE:
+
+1. "WoA RK3576 Imager: installing <edition>" and a 15 second pause.
+2. "eMMC: disk N. Firmware partition found at sector 64; it is kept."
+3. "Creating the Windows partitions." then "Applying the image" (20 to 40
+   minutes on the eMMC).
+4. "Adding the RK3576 drivers.", "Writing the boot files.", the registry
+   steps.
+5. "Removing the staging partitions and extending the Windows partition."
+6. "Done." and a restart after 15 seconds.
+
+Then Windows sets itself up (a few minutes, one restart) and OOBE
+finishes offline. The desktop shows "Test Mode".
+
+Afterwards, in Windows: `C:\Windows\Logs\woa-stage.log` is the install
+log; Disk Management shows firmware (64 MiB, no letter), EFI, MSR and C:
+up to the end of the eMMC, no staging partitions.
+
+If WinPE stops: the log is on the screen and in `X:\woa-stage\woa-stage.log`.
+Restarting the board runs the install again. To give up, write the
+firmware with "whole image".
+
+Things that would show a wrong assumption, worth a note each:
+
+- The firmware boots something other than the staged WinPE (it should be
+  the only FAT volume on the eMMC with `\EFI\Boot\bootaa64.efi`).
+- WinPE starts but nothing runs: startnet.cmd did not find
+  `woa-debug\collect.cmd`, or the launcher could not find `woa-stage.ini`
+  (is the exFAT volume given a letter?).
+- "Expected one disk with GUID": diskpart's `uniqueid disk` output differs
+  from what the script looks for.
+- Leftover-partition cleanup: diskpart's `detail partition` must print
+  "Offset in Bytes".
+- `delete volume override` or `extend` fails at the end.
+
+## 3. On the board itself
+
+Boot Armbian (vendor or edge) or Fedora from an SD card on the TaishanPi 3M,
+install the arm64 AppImage or .deb, and run it. Expect "This computer is the
+board: LCKFB TaishanPi 3M" on the first page.
+
+- With the system on the SD card: "Write this board directly", firmware
+  "keep the partitions". It asks for the password (pkexec), writes, reads
+  back. Reboot with the SD card in: the firmware banner shows the version.
+- Windows from the board: the same as test 2, the write is read back in
+  full. Then shut down, take the SD card out, power on: WinPE as above.
+- Boot Linux from the eMMC instead: the app must refuse the eMMC (it is
+  mounted).
+
+## 4. CM5-IO
+
+Test 2 on the CM5-IO (Maskrom button). The eMMC should report about
+31272730624 bytes.

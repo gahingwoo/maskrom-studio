@@ -1,157 +1,49 @@
-# Roxora Imager
+# WoA RK3576 Imager
 
-<img src="resources/icons/roxora-imager.svg" alt="Roxora Imager icon: an SD card in the three Roxora bands in front of an eMMC chip" width="96" height="96">
+<img src="resources/icons/woa-rk3576-imager.svg" alt="WoA RK3576 Imager icon: a storage chip with an arrow writing into it" width="96" height="96">
 
-A desktop app that installs [Roxora](https://github.com/roxora-os/build)
-images in two ways, or saves them as a file:
+A desktop app that puts Windows 11 23H2 on the eMMC of a Rockchip RK3576
+board straight from a PC over USB, with no USB stick, and writes the
+boards' [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI
+firmware.
 
-- **SD card or USB drive.** Downloads the image from a Roxora release, checks
-  it against the release SHA-256, writes it, then reads the drive back and
-  compares it with the release.
-- **Board storage over USB (Maskrom).** Writes a board's eMMC or SPI NOR
-  flash through its USB-C port, with the same read-back check.
-- **Save as an image file.** Saves the uncompressed .img where you choose,
-  for Ventoy and similar boot-from-file devices or a virtual machine. The
-  download is checked as above, and the decompressed file against the
-  release's size and SHA-256 before it gets its name. No administrator
-  rights are needed. Board images boot only on their board. The generic
-  RK3576 UEFI image is the one for UEFI firmware; in a virtual machine it
-  needs an arm64 (aarch64) UEFI machine (QEMU virt with edk2/AAVMF, UTM on
-  Apple silicon), and Ventoy runs it only on an arm64 UEFI computer too.
-  None of them boots on an x86 PC. Desktop app only.
+Boards: LCKFB TaishanPi 3M and ArmSoM CM5-IO (Windows and firmware), Radxa
+ROCK 4D (firmware only; it has no eMMC).
 
-An image you have already downloaded can be written to an SD card or USB
-drive, or saved decompressed as a file, too: **Use an image file on this
-computer** on the first two steps, or drop the file on the window (.img,
-.img.xz, .img.gz, .img.bz2).
+Status: first version, not yet run on hardware. See
+[docs/hardware-test.md](docs/hardware-test.md).
 
-- A file with the name of an image in the Roxora releases must be that
-  image: its SHA-256 is compared with the release, and it is then written
-  and read back like a downloaded one.
-- Any other file is a custom image. No release vouches for it and the app
-  says so. It is read once to take the SHA-256 of its decompressed data,
-  written as it is, and the drive is read back and compared with that.
+## What it does
 
-SPI NOR flash takes a bootloader only. A file that is larger than the
-board's SPI flash, or that is a whole disk image (the name of a release
-image, or a partition table reaching past the flash), is refused when it is
-chosen, before the board is connected.
+- **Windows 11 on the eMMC.** You give it a Windows 11 23H2 ARM64 ISO (or
+  its install.wim or install.esd). With the board in Maskrom mode, the app
+  writes [woa-rk3576](https://github.com/gahingwoo/woa-rk3576)'s WinPE and
+  your Windows image into the free space of the eMMC, behind the firmware.
+  The board then boots that WinPE from the eMMC, installs Windows onto the
+  eMMC with DISM, adds the RK3576 drivers, deletes the staging space and
+  restarts into Windows. How and why: [docs/DESIGN.md](docs/DESIGN.md).
+- **UEFI firmware.** The latest edk2-rk3576 release, written as the web
+  flasher [flash.gahingwoo.com](https://flash.gahingwoo.com/) writes it
+  ("whole image" or "keep the partitions"), over Maskrom.
+- **On the board itself.** Run the app under Linux on the board (booted
+  from an SD card or USB drive) and it writes that board's eMMC or SPI NOR
+  directly, no second computer.
+- **The WinPE stick.** woa-rk3576's WinPE image on a USB drive, for the
+  procedure in woa-rk3576's
+  [INSTALL.md](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/INSTALL.md).
 
-The same page also runs in the browser, Maskrom only, at
-https://roxora-os.github.io/imager/ (Chrome, Edge or another browser with
-WebUSB). A browser cannot open a disk, so it cannot write an SD card in the
-computer.
-
-GitHub serves release downloads without CORS headers, so a web page cannot
-download them itself. The web version therefore gets release files in one of
-two ways:
-
-- **Through the download proxy**, when the build has one: a small Cloudflare
-  Worker ([worker/](worker/)) that serves only the release files with CORS
-  headers. The page downloads the file showing progress, checks its size
-  and SHA-256 against the catalog (whose checksums were compared with the
-  digests the GitHub API publishes) while it streams, then writes it and
-  reads it back against `extract_sha256`.
-- **By hand**, when there is no proxy or it fails: the page says why, the
-  release file is downloaded in the browser, picked, and checked the same way
-  before it is written.
-
-The proxy address is set at build time with `ROXORA_DOWNLOAD_PROXY` (the
-Pages workflow takes it from the repository variable of the same name). It is
-empty until the Worker is deployed. The desktop app downloads directly and
-does not use it.
-
-Status: not yet tested on hardware. It lists the Roxora pre-releases, which
-are built and checked in CI but not yet booted on hardware either.
-
-## Screenshots
-
-Writing a Roxora image to an SD card, in the light and the dark theme, with
-the real releases (taken by `scripts/readme-shots.mjs` in CI; the drives are
-stand-ins).
-
-| | |
-| --- | --- |
-| ![Board step: search, a filter by maker and the supported boards with their newest release](docs/screenshots/1-board-light.webp) | ![Image step: the board's images by release, Ubuntu version, desktop, kernel and size, each column sortable](docs/screenshots/2-image-light.webp) |
-| 1. Board: search or filter by maker | 2. Image: Ubuntu version, command line or GNOME, sortable |
-| ![Destination step: an SD card or USB drive, or the board's own storage over USB in Maskrom mode](docs/screenshots/3-destination-dark.webp) | ![Review step: what will be written where, and the checks before and after](docs/screenshots/4-review-dark.webp) |
-| 3. Destination: SD card or USB drive, or the board over USB | 4. Review: what is erased, and how it is checked |
+Windows 11 24H2 and later cannot run on RK3576 (ARMv8.0); images newer than
+build 25999 are refused before anything is written. The app does not
+download Windows.
 
 ## Install
 
-Windows (x64), macOS (Apple silicon and Intel) and Linux (AppImage, .deb,
-.rpm; x86_64 and arm64) packages are attached to the
-[releases](https://github.com/roxora-os/imager/releases). On macOS and Linux:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/roxora-os/imager/main/install.sh | sh
-```
-
-On macOS also with Homebrew:
-
-```sh
-brew trust gahingwoo/tap
-brew install --cask gahingwoo/tap/roxora-imager
-```
-
-The app looks for a newer version once a day and offers to install it
-(Settings has "Check now" and the switch to turn the check off). Normal
-releases are offered to everyone. Beta versions are the pre-releases on
-GitHub, with a version such as 0.1.5-beta.1; they are offered only when
-"Also offer beta versions (pre-releases)" is turned on in Settings, and
-`install.sh` installs one only with `BETA=1`. Updates are installed inside
-the app after you confirm; how depends on how the app was installed (on
-macOS through Homebrew or by replacing the app from the new DMG):
-[docs/install.md](docs/install.md#updates).
-
-What each system asks on first start, and the drivers for Maskrom writing:
-[docs/install.md](docs/install.md). The website lists the packages of the
-newest release: https://roxora-os.github.io/roxora-imager/
-
-## Code signing policy
-
-The Windows packages are not signed yet. They are to be signed under the
-[code signing policy](https://roxora-os.github.io/code-signing/), which
-names who may approve a signature and what is signed. What the app fetches,
-and from where, is in the
-[privacy policy](https://roxora-os.github.io/privacy/).
-
-## How it works
-
-| Part | Where it comes from |
-| --- | --- |
-| Image list | The releases of roxora-os/build and the `roxora-catalog.json` in each, as described in its [release contract](https://github.com/roxora-os/build/blob/main/docs/release-contract.md). The website reads the same releases. |
-| SD/USB writing | Linux and Windows: [etcher-sdk](https://github.com/balena-io-modules/etcher-sdk), in a helper process started with administrator rights the way Etcher starts its writer. macOS: Apple's `authopen` opens the raw disk after the system's password dialog, as in Raspberry Pi Imager and Armbian Imager; a small helper (`src/helper/macos/rawdisk.c`) receives the open disk and writes whole blocks, and nothing runs as root (`src/main/mac-write.ts`). |
-| Maskrom writing | rkdeveloptool compiled to WebAssembly with libusb's WebUSB backend, as in [edk2-webflash](https://github.com/gahingwoo/edk2-webflash), running in a worker inside the app. |
-| Maskrom loader | Not shipped. The first Maskrom write downloads the pieces from Rockchip's [rkbin](https://github.com/rockchip-linux/rkbin) at a pinned commit (raw.githubusercontent.com), checks each against a pinned SHA-256, and builds the loader the way rkbin's boot_merger does (`src/maskrom/loader-merge.ts`, ported from RKDevelopTool-GUI). The result must match the SHA-256 of Rockchip's own build of that loader (`src/maskrom/loaders.ts`). The desktop app keeps it in its user data folder (`loaders/`), the web version in the browser's cache storage. Without a connection the write stops before anything is written and says so. |
-| Interface | Electron, React and [PatternFly](https://www.patternfly.org/). |
-| Icon | [roxora-os/design](https://github.com/roxora-os/design/tree/main/icons/imager) `icons/imager/`, copied unchanged into `resources/icons/` from design commit 8433edd. `scripts/icons.mjs` lays the files out for the packagers: the .icns for macOS, the .ico for Windows, and for Linux the PNGs in `hicolor/<n>x<n>/apps/`, the SVG in `hicolor/scalable/apps/` and the symbolic SVG in `hicolor/symbolic/apps/`, all named after the app ID `io.github.roxora_os.imager`. |
-| Download proxy | A Cloudflare Worker in [worker/](worker/), for the web version only. |
-| Web version | The same React code with a browser adapter (`src/web/`). The xz decoder, image format checks and the cross-origin isolation service worker come from roxora-os/edk2-webflash (`src/web/webflash/`, `resources/xzwasm/`). |
-
-Safety rules:
-
-- Drives that hold the running system are never offered: drivelist's
-  system flag, any system mount point (`/`, `/boot`, `/home`, `C:\`, ...),
-  read-only, virtual and loop devices are all hidden. The target is checked
-  again just before it is written, by the elevated writer itself.
-- Built-in disks (Linux only): a board's eMMC, SD card slot or NVMe drive,
-  or any fixed disk. They are hidden until **Show internal disks** is turned
-  on in the Destination step. lsblk and sysfs tell what each one is and
-  every mount on it, also through LUKS or LVM. A built-in disk that holds
-  `/`, `/boot`, `/usr`, swap or the like is never offered, and neither is
-  one with anything else mounted (other than where the desktop mounts a
-  card by itself, `/media/<user>/...`), or used by LVM, RAID or a ZFS
-  pool. Choosing one asks again, naming the disk. On Windows and macOS
-  the switch does not exist: the system's own disks stay hidden as before.
-- The review page says exactly what will be erased, and writing needs a
-  second confirmation.
-- Every write is read back and its SHA-256 compared with the release's
-  `extract_sha256`, or for a custom image file with the SHA-256 of the
-  file's own decompressed data.
-- A Maskrom write names the storage (eMMC or SPI NOR) and fails before
-  writing anything if the board does not switch to it or the image does not
-  fit.
+Packages for Windows (x64), macOS and Linux (AppImage, .deb, .rpm; x86_64
+and arm64) go on the
+[releases](https://github.com/gahingwoo/woa-rk3576-imager/releases) page
+once there is a release. What each system asks on first start, and the
+drivers for Maskrom (WinUSB through Zadig on Windows, a udev rule on Linux):
+[docs/install.md](docs/install.md).
 
 ## Building
 
@@ -159,35 +51,36 @@ Needs Node.js 22.
 
 ```sh
 npm ci
-npm run writer              # the SD/USB writer: Node.js packed with pkg; on macOS a C helper (needs cc)
-sh scripts/build-wasm.sh    # needs emsdk 3.1.48; or take the CI artifact
+npm run writer              # the elevated writer: Node.js packed with pkg; on macOS a C helper (needs cc)
+sh scripts/build-wasm.sh    # rkdeveloptool in WebAssembly; needs emsdk 3.1.48, or take the CI artifact
 npm run build
-npm start                   # or: npx electron . --dev-sample
-node scripts/build-web.mjs  # the web version, into web-dist/ (?sample=1 shows the sample catalog)
-ROXORA_DOWNLOAD_PROXY=https://... node scripts/build-web.mjs   # the same, downloading through the proxy
+npm start
 ```
-
-`--dev-sample` shows the sample catalog from the release contract. Those
-entries are marked as samples and cannot be written.
 
 ## Tests
 
 ```sh
-npm test                                   # catalog, targets, local image files, saving as a file, SPI file checks, Maskrom through the WASM, download proxy
-node scripts/electron-maskrom-e2e.mjs      # Maskrom path inside Electron
-node test/e2e/sd-loop.mjs                  # SD write to a loop device (Linux, sudo)
-node test/e2e/sd-ramdisk-mac.mjs           # SD write through authopen to a RAM disk (macOS, sudo; changes the authorization database, meant for CI)
-node --test test/webflash/*.test.js        # modules copied from edk2-webflash
-node scripts/shots.mjs dev/shots           # screenshots, light and dark
-node scripts/web-shots.mjs dev/web-shots   # the web version, served under /imager/
+npm test                               # layout, GPT, FAT32, exFAT, UDF, WIM, Maskrom through the WASM against a pretend board
+node scripts/electron-woa-e2e.mjs      # the staged install inside Electron against a pretend TaishanPi 3M
+node scripts/electron-maskrom-e2e.mjs  # Roxora Imager's Maskrom path inside Electron
+node --test test/webflash/*.test.js    # modules copied from edk2-webflash
+node scripts/shots.mjs dev/shots       # screenshots, light and dark
 ```
 
-The Maskrom tests use a pretend board (`test/fake-rockchip.ts`) that speaks
-enough of the Rockusb protocol for the commands the app sends. Real boards
-are tested by hand: [docs/hardware-test.md](docs/hardware-test.md).
+The file system tests use mkfs.vfat and mtools, sfdisk and sgdisk, and
+exfatprogs' fsck.exfat when they are installed (CI installs them).
+
+## Where it comes from
+
+A fork of [Roxora Imager](https://github.com/roxora-os/imager), keeping its
+history; the `upstream` remote points there. The board list and firmware
+sectors are [edk2-webflash](https://github.com/gahingwoo/edk2-webflash)'s,
+copied unchanged. Which parts are shared and which are new:
+[CLAUDE.md](CLAUDE.md).
 
 ## License
 
-GPL-2.0. rkdeveloptool is GPL-2.0-or-later, libusb LGPL-2.1, etcher-sdk
-Apache-2.0. Rockchip's loader is not part of this repository or of the
-packages; it is downloaded from rkbin when it is first needed.
+GPL-2.0, by Ga Hing Woo. rkdeveloptool is GPL-2.0-or-later, libusb
+LGPL-2.1, etcher-sdk Apache-2.0. Rockchip's loader is not part of this
+repository or of the packages; it is downloaded from rkbin when it is first
+needed. Windows is not included and not downloaded.
