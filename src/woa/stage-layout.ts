@@ -51,10 +51,21 @@ export interface StageImage {
   build: number;
 }
 
+/**
+ * Where Windows goes. The eMMC keeps the edk2-rk3576 firmware partition; an
+ * SD card or an NVMe drive gets a fresh GPT with Windows from 1 MiB on.
+ */
+export type DiskTarget = 'emmc' | 'sd' | 'nvme';
+
+/** The smallest SD card or NVMe drive a staged install is offered for. */
+export const MIN_DISK_BYTES = 30e9;
+
 export interface StageInput {
   board: WoaBoard;
+  /** Default 'emmc'. */
+  target?: DiskTarget;
   diskBytes: number;
-  /** Sectors 0..33 of the eMMC as they are now. */
+  /** Sectors 0..33 of the disk as they are now (the eMMC's partition table; ignored for SD and NVMe). */
   head: Uint8Array;
   /** woa-rk3576's WinPE release image, decompressed (winpe.img). */
   winpe: ByteSource;
@@ -115,21 +126,33 @@ export function stageIni(f: Record<string, string | number>): string {
 }
 
 export function planStage(o: StageInput): StagePlan {
-  if (!o.board.windows) throw new StageError(o.board.windowsNote ?? 'Windows is not offered for this board.');
-  const { minBytes, maxBytes } = o.board.windows;
-  if (o.diskBytes < minBytes || o.diskBytes > maxBytes) {
-    throw new StageError(`The eMMC is ${o.diskBytes} bytes, not the size of the ${o.board.name}'s eMMC (${minBytes / 1e9} to ${maxBytes / 1e9} GB). Nothing was written.`);
-  }
+  const target = o.target ?? 'emmc';
   const diskSectors = Math.floor(o.diskBytes / SECTOR);
-  let table;
-  try {
-    table = parsePrimaryGpt(o.head);
-  } catch (e) {
-    throw new StageError(`${(e as Error).message} Write the firmware with "UEFI firmware, whole image" first.`);
+  let fw: GptPartition | null = null;
+  let removed: GptPartition[] = [];
+  let table: ReturnType<typeof parsePrimaryGpt> | null = null;
+  if (target === 'emmc') {
+    if (!o.board.windows) throw new StageError(o.board.windowsNote ?? 'Windows is not offered for this board.');
+    const { minBytes, maxBytes } = o.board.windows;
+    if (o.diskBytes < minBytes || o.diskBytes > maxBytes) {
+      throw new StageError(`The eMMC is ${o.diskBytes} bytes, not the size of the ${o.board.name}'s eMMC (${minBytes / 1e9} to ${maxBytes / 1e9} GB). Nothing was written.`);
+    }
+    try {
+      table = parsePrimaryGpt(o.head);
+    } catch (e) {
+      throw new StageError(`${(e as Error).message} Write the firmware with "UEFI firmware, whole image" first.`);
+    }
+    const found = findFirmwarePartition(table);
+    if (typeof found === 'string') throw new StageError(`${found} Write the firmware with "UEFI firmware, whole image" first.`);
+    fw = found;
+    removed = table.partitions.filter((p) => p !== fw);
+  } else {
+    if (o.diskBytes < MIN_DISK_BYTES) {
+      throw new StageError(`The ${target === 'sd' ? 'SD card' : 'NVMe drive'} is ${(o.diskBytes / 1e9).toFixed(1)} GB; at least ${MIN_DISK_BYTES / 1e9} GB are needed. Nothing was written.`);
+    }
+    try { table = parsePrimaryGpt(o.head); removed = table.partitions; } catch { /* no GPT: nothing to list */ }
   }
-  const fw = findFirmwarePartition(table);
-  if (typeof fw === 'string') throw new StageError(`${fw} Write the firmware with "UEFI firmware, whole image" first.`);
-  const removed = table.partitions.filter((p) => p !== fw);
+  const windowsFirst = target === 'emmc' ? WINDOWS_FIRST_LBA : ALIGN;
 
   // The WinPE volume, with the launcher in place of collect.cmd, as the parts of it that hold something.
   const peVol = winpeVolume(o.winpe);
@@ -180,9 +203,10 @@ export function planStage(o: StageInput): StagePlan {
     board: o.board.id,
     disk_guid: diskGuid,
     disk_bytes: o.diskBytes,
-    fw_offset: FIRMWARE_FIRST_LBA * SECTOR,
-    fw_size: (FIRMWARE_LAST_LBA - FIRMWARE_FIRST_LBA + 1) * SECTOR,
-    windows_offset_kb: (WINDOWS_FIRST_LBA * SECTOR) / 1024,
+    target,
+    fw_offset: fw ? FIRMWARE_FIRST_LBA * SECTOR : 'none',
+    fw_size: fw ? (FIRMWARE_LAST_LBA - FIRMWARE_FIRST_LBA + 1) * SECTOR : 'none',
+    windows_offset_kb: (windowsFirst * SECTOR) / 1024,
     boot_offset: bootFirst * SECTOR,
     data_offset: dataFirst * SECTOR,
     image: o.image.name,
@@ -199,7 +223,7 @@ export function planStage(o: StageInput): StagePlan {
   const dataSectors = first.volumeSectors;
   const dataFirst = alignDown(lastUsable + 1 - dataSectors);
   const bootFirst = dataFirst - bootSectors;
-  const windowsBytes = (bootFirst - WINDOWS_FIRST_LBA) * SECTOR;
+  const windowsBytes = (bootFirst - windowsFirst) * SECTOR;
   if (windowsBytes < MIN_WINDOWS_BYTES) {
     throw new StageError(`The Windows image and WinPE take ${Math.round(((dataSectors + bootSectors) * SECTOR) / 1e9)} GB of the eMMC while they are staged, which leaves ${(windowsBytes / 1e9).toFixed(1)} GB to install into; at least ${MIN_WINDOWS_BYTES / 1e9} GB are needed. Use an image with only the edition you want (wimlib-imagex export, or DISM /Export-Image).`);
   }
@@ -220,7 +244,7 @@ export function planStage(o: StageInput): StagePlan {
   ]);
 
   const gpt = buildGpt({
-    diskSectors, diskGuid, keep: fw, mbr: table.mbr,
+    diskSectors, diskGuid, keep: fw, ...(table && fw ? { mbr: table.mbr } : {}),
     parts: [
       { type: TYPE_BASIC_DATA, guid: bootGuid, firstLba: bootFirst, lastLba: bootFirst + bootSectors - 1, name: 'WOA-STAGE-BOOT' },
       { type: TYPE_BASIC_DATA, guid: dataGuid, firstLba: dataFirst, lastLba: dataFirst + dataSectors - 1, name: 'WOA-STAGE-DATA' },
@@ -236,7 +260,7 @@ export function planStage(o: StageInput): StagePlan {
   regions.push({ lba: 0, source: bytesSource(gpt.primary), label: 'partition table' });
   for (const r of regions) {
     if (r.source.size % SECTOR) throw new StageError(`${r.label} is not a whole number of sectors`);
-    if (r.lba !== 0 && r.lba < WINDOWS_FIRST_LBA) throw new StageError(`${r.label} would overwrite the firmware`);
+    if (r.lba !== 0 && r.lba < windowsFirst) throw new StageError(`${r.label} would overwrite the firmware`);
   }
   return {
     regions, diskGuid, bootFirst, dataFirst, windowsBytes, removed, ini, certificates: certs.map((c) => c.thumbprint),

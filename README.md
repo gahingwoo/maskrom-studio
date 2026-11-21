@@ -24,6 +24,11 @@ Status: first version, not yet run on hardware. See
   The board then boots that WinPE from the eMMC, installs Windows onto the
   eMMC with DISM, adds the RK3576 drivers, deletes the staging space and
   restarts into Windows. How and why: [docs/DESIGN.md](docs/DESIGN.md).
+- **Other targets.** Windows also goes onto an SD card in the PC's reader
+  or an NVMe drive in a USB enclosure, which then goes into the board. On
+  a Windows PC the app can instead build the finished Windows itself with
+  DISM, for these and for the eMMC (written over Maskrom from a virtual
+  disk), so the board starts straight into Windows.
 - **Windows comes out configured.** The RK3576 drivers with their test
   certificate trusted, any extra driver folder you add (display, touch),
   OpenSSH server on port 22 (on by default), and either Windows' own

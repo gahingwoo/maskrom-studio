@@ -184,16 +184,16 @@ export interface BuiltGpt {
 }
 
 /**
- * A complete table for a disk of `diskSectors`: entry 1 is `keep` copied
+ * A complete table for a disk of `diskSectors`: entry 1 is `keep` (if any) copied
  * byte for byte (the firmware partition), then `parts` in order.
  * `mbr` is sector 0 as read; its boot code area is kept and the partition
  * records are replaced with one protective record.
  */
-export function buildGpt(o: { diskSectors: number; diskGuid: string; keep: GptPartition; parts: NewPartition[]; mbr?: Uint8Array }): BuiltGpt {
+export function buildGpt(o: { diskSectors: number; diskGuid: string; keep: GptPartition | null; parts: NewPartition[]; mbr?: Uint8Array }): BuiltGpt {
   const { diskSectors } = o;
   const firstUsable = PRIMARY_SECTORS;
   const lastUsable = diskSectors - 1 - 1 - ENTRIES_SECTORS;
-  const all: Array<{ firstLba: number; lastLba: number }> = [o.keep, ...o.parts];
+  const all: Array<{ firstLba: number; lastLba: number }> = [...(o.keep ? [o.keep] : []), ...o.parts];
   for (const p of all) {
     if (p.firstLba < firstUsable || p.lastLba > lastUsable || p.lastLba < p.firstLba) {
       throw new Error(`partition ${p.firstLba}-${p.lastLba} is outside the usable area ${firstUsable}-${lastUsable}`);
@@ -205,8 +205,9 @@ export function buildGpt(o: { diskSectors: number; diskGuid: string; keep: GptPa
   }
 
   const entries = new Uint8Array(ENTRY_SIZE * ENTRY_COUNT);
-  entries.set(o.keep.raw.subarray(0, ENTRY_SIZE), 0);
-  o.parts.forEach((p, i) => entries.set(entryBytes(p), (i + 1) * ENTRY_SIZE));
+  if (o.keep) entries.set(o.keep.raw.subarray(0, ENTRY_SIZE), 0);
+  const first = o.keep ? 1 : 0;
+  o.parts.forEach((p, i) => entries.set(entryBytes(p), (i + first) * ENTRY_SIZE));
   const entriesCrc = crc32(entries);
 
   const header = (current: number, backup: number, entriesLba: number) => {

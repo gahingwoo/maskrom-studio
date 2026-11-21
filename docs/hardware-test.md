@@ -103,6 +103,30 @@ Repeat test 2 (or run it once with these on):
 - An extra driver folder (for example gt9271 from a newer WinPE run, or
   wddm-mali-g52): the device has the driver after the first start.
 
+## 2c. Other targets and the PC build
+
+Each is new; note per target whether the board started WinPE, finished
+the install, and booted Windows.
+
+- **SD card, staged (Linux or Windows PC).** A card of 32 GB or more in
+  the PC's reader. What to write: Windows 11, "An SD card in this
+  computer's card reader", "On the board". The write is read back in full.
+  Put the card in the TaishanPi 3M with the edk2-rk3576 firmware on the
+  eMMC. Watch serial: the SPL prints "Trying to boot from MMC2", should
+  fail to find a FIT there and go on to the eMMC firmware. Then WinPE from
+  the card, the install onto the card, Windows from the card.
+- **NVMe, staged.** An NVMe drive in a USB enclosure; then in the CM5-IO.
+  If the board boots something else, pick the NVMe in the boot manager.
+- **Windows PC, built here (needs administrator rights).** The same two
+  targets with "Finished here": the console of host-build.cmd shows in the
+  app; the log stays in the app's data folder (host-build\host-build.log)
+  on failure. The card or drive should start straight into Windows.
+- **Windows PC, built here, eMMC.** About 15 GB free in the app's data
+  folder. After the DISM build the app connects over Maskrom; the confirm
+  card shows the eMMC and what is removed; the write sends only the
+  virtual disk's blocks with data (note the size and time). The board
+  restarts into Windows.
+
 ## 3. On the board itself
 
 Boot Armbian (vendor or edge) or Fedora from an SD card on the TaishanPi 3M,

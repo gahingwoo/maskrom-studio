@@ -10,6 +10,8 @@ export type JobProgress = {
   bytes: number;
   total: number;
   speed?: number;
+  /** A line of text instead of a byte count (the Windows host build's steps). */
+  note?: string;
 };
 
 export type JobResult = { ok: true; sha256: string } | { ok: false; reason: string; detail?: string };
@@ -64,7 +66,22 @@ export interface BoardHereInfo {
   noMtdHelp: string;
 }
 
+/** A staged install or a host build onto an SD card or NVMe drive attached to this PC. */
+export interface HostBuildRequest {
+  target: 'emmc' | 'sd' | 'nvme';
+  boardId: BoardId;
+  /** sd, nvme: the drive (drivelist device). */
+  device?: string;
+  windowsToken: string;
+  index: number;
+  setup: SetupOptions;
+  drivers: string | null;
+}
+
+export type HostBuildResult = { ok: true; vhd?: Served } | { ok: false; reason: string; detail?: string };
+
 export type BoardJobRequest =
+  | { kind: 'stage-disk'; target: 'sd' | 'nvme'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
   | { kind: 'stage'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
   | { kind: 'firmware'; boardId: BoardId; device: string; targetId: string }
   | { kind: 'spinor'; boardId: BoardId; device: string };
@@ -91,7 +108,9 @@ export interface ImagerApi {
   prepareExtras(o: { ssh: boolean; drivers: string | null }): Promise<{ files: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
   /** Is this app running on an RK3576 board (Linux)? */
   boardHere(): Promise<BoardHereInfo>;
-  /** Write this board's own eMMC or SPI NOR (elevated helper). */
+  /** Windows host only: build a finished Windows with DISM on a drive here, or in a VHD for the eMMC. */
+  hostBuild(req: HostBuildRequest): Promise<HostBuildResult>;
+  /** Write this board's own eMMC or SPI NOR, or a staged install onto a drive attached here (elevated helper). */
   writeBoard(req: BoardJobRequest): Promise<JobResult>;
   listDrives(minSize: number): Promise<{ targets: Target[]; hidden: HiddenDrive[] }>;
   /** Write the WinPE image to a USB drive (the fallback install stick). */

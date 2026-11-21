@@ -25,6 +25,9 @@ import { applyTheme, readTheme, type Theme } from './theme';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'stick';
 type Via = 'maskrom' | 'here';
+type Dest = 'emmc' | 'sd' | 'nvme';
+type Method = 'stage' | 'host';
+const WIN_HOST = api.platform === 'win32';
 
 const GB = (n: number) => `${(n / 1e9).toFixed(1)} GB`;
 const LOADER = 'rk3576_spl_loader.bin';
@@ -104,6 +107,9 @@ export function App() {
   const [driversError, setDriversError] = useState<string | null>(null);
   const [drives, setDrives] = useState<Target[] | null>(null);
   const [stick, setStick] = useState<string | null>(null);
+  const [dest, setDest] = useState<Dest>('emmc');
+  const [method, setMethod] = useState<Method>('stage');
+  const [disk, setDisk] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
   const [settings, setSettings] = useState(false);
@@ -159,7 +165,9 @@ export function App() {
   const keyErr = ssh ? sshKeyProblem(sshKey) : null;
   const setupOk = !accountErr && !passwordMismatch && !keyErr;
 
-  const refreshDrives = () => { setDrives(null); api.listDrives(600e6).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
+  const refreshDrives = (min = 600e6) => { setDrives(null); api.listDrives(min).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
+  const onPc = task === 'windows' && dest !== 'emmc';
+  const destOk = !(onPc && api.platform === 'darwin' && method === 'stage');
 
   const chooseWindows = async (pick: () => Promise<WindowsChoice | { error: string } | null>) => {
     setWindowsError(null);
@@ -254,7 +262,8 @@ export function App() {
       } else if (m.type === 'result') {
         w.terminate();
         worker.current = null;
-        finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : t('result.firmware'), job.kind === 'stage' ? STAGE_NEXT : undefined));
+        finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc') : t('result.firmware'),
+          job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined));
         if (m.result.ok) update((r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, percent: 100 })) }));
       }
     };
@@ -276,6 +285,27 @@ export function App() {
       setRun({ title: t('run.stick'), log: [], confirm: null, result: null, stages: [{ id: 'write', label: t('run.stick.stage'), percent: 0 }] });
       const r = await withProgress('write', () => api.writeWinpeStick(stick!));
       finish(resultOf(r, t('result.stick'), [t('next.stick.1'), t('next.stick.2')]));
+      return;
+    }
+    if (task === 'windows' && (dest !== 'emmc' || method === 'host')) {
+      const req = { target: dest, boardId: board.id, windowsToken: windows!.token, index: index!, setup, drivers: drivers?.token ?? null };
+      if (method === 'host') {
+        setRun({ title: t('run.host'), log: [], confirm: null, result: null, stages: [
+          { id: 'build', label: dest === 'emmc' ? t('run.host.vhd') : t('run.host.disk'), percent: null },
+          ...(dest === 'emmc' ? [{ id: 'board', label: t('run.board'), percent: null }, { id: 'write', label: t('run.write'), percent: 0 }, { id: 'check', label: t('run.check'), percent: null }] : []),
+        ] });
+        const off = api.onProgress((p) => { if (p.note) addLog(p.note); setStage('build', { note: p.note ?? t(`progress.${p.stage}`, { done: formatBytes(p.bytes), total: formatBytes(p.total) }) }); });
+        const r = await api.hostBuild({ ...req, ...(dest !== 'emmc' ? { device: disk! } : {}) }).finally(off);
+        if (!r.ok) { finish({ ok: false, title: errorText(r.reason), ...(r.detail ? { detail: r.detail } : {}) }); return; }
+        setStage('build', { percent: 100, note: t('run.written') });
+        if (dest !== 'emmc') { finish({ ok: true, title: t('result.hostDisk'), next: [t(`next.disk.${dest}`), t('next.disk.boot')] }); return; }
+        servedTokens.current.push(r.vhd!.token);
+        await startMaskrom(() => ({ kind: 'vhd', boardId: board.id, vhd: { url: r.vhd!.url, size: r.vhd!.size }, spotCheck: true, resetAfter: true }), [], null);
+        return;
+      }
+      setRun({ title: t('run.stagingDisk'), log: [], confirm: null, result: null, stages: [{ id: 'write', label: t('run.stagingDisk.stage'), percent: 0 }] });
+      const r = await withProgress('write', () => api.writeBoard({ kind: 'stage-disk', ...req, target: dest as 'sd' | 'nvme', device: disk! }));
+      finish(resultOf(r, t('result.stagedDisk'), [t(`next.disk.${dest}`), t('next.disk.boot'), ...STAGE_NEXT.slice(1)]));
       return;
     }
     if (onBoard) {
@@ -378,8 +408,8 @@ export function App() {
       )}
       <Form onSubmit={(e) => e.preventDefault()}>
         <FormGroup role="radiogroup" fieldId="task" label={t('task.label')} isStack>
-          <Radio id="task-windows" name="task" label={t('task.windows')} isChecked={task === 'windows'} isDisabled={!board.windows}
-            onChange={() => setTask('windows')} description={board.windows ? t('task.windows.desc') : t('task.windows.rock4d')} />
+          <Radio id="task-windows" name="task" label={t('task.windows.any')} isChecked={task === 'windows'} isDisabled={onBoard && !board.windows}
+            onChange={() => { setTask('windows'); if (!board.windows) setDest('nvme'); }} description={board.windows ? t('task.windows.desc') : t('task.windows.rock4d')} />
           {firmwareTargets(board).map((tg) => (
             <Radio key={tg.id} id={`task-${tg.id}`} name="task" label={fwText(board, tg, 'label')} isChecked={task === tg.id}
               onChange={() => setTask(tg.id as Task)}
@@ -391,6 +421,26 @@ export function App() {
           )}
         </FormGroup>
       </Form>
+      {task === 'windows' && (
+        <Form onSubmit={(e) => e.preventDefault()}>
+          <FormGroup role="radiogroup" fieldId="dest" label={t('dest.label')} isStack>
+            <Radio id="dest-emmc" name="dest" label={t('dest.emmc')} isChecked={dest === 'emmc'} isDisabled={!board.windows}
+              onChange={() => setDest('emmc')} description={board.windows ? t('dest.emmc.desc') : t('task.windows.rock4d')} />
+            <Radio id="dest-sd" name="dest" label={t('dest.sd')} isChecked={dest === 'sd'} isDisabled={onBoard}
+              onChange={() => { setDest('sd'); setDisk(null); refreshDrives(30e9); }} description={t(`dest.sd.desc.${board.id === 'tspi3m' ? 'tspi3m' : 'other'}`)} />
+            <Radio id="dest-nvme" name="dest" label={t('dest.nvme')} isChecked={dest === 'nvme'} isDisabled={onBoard}
+              onChange={() => { setDest('nvme'); setDisk(null); refreshDrives(30e9); }} description={t('dest.nvme.desc')} />
+          </FormGroup>
+          <FormGroup role="radiogroup" fieldId="method" label={t('method.label')} isStack>
+            <Radio id="method-stage" name="method" label={t('method.stage')} isChecked={method === 'stage'} onChange={() => setMethod('stage')}
+              description={t('method.stage.desc')} isDisabled={onPc && api.platform === 'darwin'} />
+            <Radio id="method-host" name="method" label={t('method.host')} isChecked={method === 'host'} onChange={() => setMethod('host')}
+              isDisabled={!WIN_HOST || onBoard} description={WIN_HOST ? t('method.host.desc') : t('method.host.notHere')} />
+          </FormGroup>
+          {board.id === 'rock4d' && <Alert isInline variant="warning" title={t('rock4d.acpi.title')}>{t('rock4d.acpi.text')}</Alert>}
+          {onPc && api.platform === 'darwin' && <Alert isInline variant="warning" title={t('host.macDisk')} />}
+        </Form>
+      )}
       {onBoard && task === 'windows' && here?.emmcRefusal && (
         <Alert isInline variant="danger" title={t('task.emmcRefused')}>{msg(here.emmcRefusal)}</Alert>
       )}
@@ -497,7 +547,7 @@ export function App() {
     </StepPage>
   );
 
-  const maskromCard = board && !onBoard && task !== 'stick' && (
+  const maskromCard = board && !onBoard && task !== 'stick' && !onPc && (
     <Card>
       <CardTitle>{t('maskrom.title')}</CardTitle>
       <CardBody>
@@ -522,16 +572,23 @@ export function App() {
         [t('review.setup'), skip ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
         [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
-        [t('review.erased'), t('review.erased.windows')],
-        [t('review.written'), t('review.written.windows', { size: windows ? formatBytes(windows.imageSize + 560e6) : '' }) + (onBoard ? '' : t('review.written.maskrom'))],
-        [t('review.checked'), onBoard ? t('review.checked.here') : t('review.checked.maskrom')],
-        [t('review.then'), t('review.then.windows')],
+        [t('review.target'), t(`review.target.${dest}.${method}`)],
+        [t('review.erased'), dest === 'emmc' ? t('review.erased.windows') : disk ? t('review.erased.disk', { drive: drives?.find((x) => x.device === disk)?.description ?? disk }) : t('review.disk.choose')],
+        ...(method === 'stage' ? [
+          [t('review.written'), t('review.written.windows', { size: windows ? formatBytes(windows.imageSize + 560e6) : '' }) + (onBoard || dest !== 'emmc' ? '' : t('review.written.maskrom'))],
+          [t('review.checked'), onBoard || dest !== 'emmc' ? t('review.checked.here') : t('review.checked.maskrom')],
+          [t('review.then'), t('review.then.windows')],
+        ] as Array<[string, string]> : [
+          [t('review.checked'), dest === 'emmc' ? t('review.checked.host.emmc') : t('review.checked.host.disk')],
+        ] as Array<[string, string]>),
       ]);
       if (!edition) why = t('why.windows');
       else if (!setupOk) why = t('why.setup');
       if (!releases?.winpe) why = t('why.winpe');
       if (onBoard && here?.emmcRefusal) why = msg(here.emmcRefusal);
-      goLabel = onBoard ? t('go.erase') : t('go.connect');
+      if (dest !== 'emmc' && !disk) why = t('review.disk.choose');
+      if (!destOk) why = t('host.macDisk');
+      goLabel = onBoard || dest !== 'emmc' || method === 'host' ? t('go.erase') : t('go.connect');
     } else if (task === 'stick') {
       reviewRows = reviewRows.concat([
         [t('review.written'), releases?.winpe ? t('review.stick.written', { tag: releases.winpe.tag, file: releases.winpe.file }) : t('review.unavailable')],
@@ -559,6 +616,17 @@ export function App() {
   const reviewStep = (
     <StepPage title={t('step.review')}>
       <Review rows={reviewRows} />
+      {onPc && (
+        <FormGroup role="radiogroup" fieldId="disk" label={t(`review.drive.${dest}`)} isStack>
+          {drives === null ? <Content component="p">{t('review.usb.looking')}</Content>
+            : drives.length === 0 ? <Content component="p">{t('review.drive.none')}</Content>
+              : drives.map((x) => (
+                <Radio key={x.device} id={`disk-${x.device}`} name="disk" isChecked={disk === x.device} onChange={() => setDisk(x.device)}
+                  label={`${x.description} (${formatBytes(x.size)})`} description={x.device} />
+              ))}
+          <Button variant="link" isInline onClick={() => refreshDrives(30e9)}>{t('refresh')}</Button>
+        </FormGroup>
+      )}
       {task === 'stick' && (
         <FormGroup role="radiogroup" fieldId="stick" label={t('review.usb')} isStack>
           {drives === null ? <Content component="p">{t('review.usb.looking')}</Content>
@@ -567,7 +635,7 @@ export function App() {
                 <Radio key={x.device} id={`stick-${x.device}`} name="stick" isChecked={stick === x.device} onChange={() => setStick(x.device)}
                   label={`${x.description} (${formatBytes(x.size)})`} description={x.device} />
               ))}
-          <Button variant="link" isInline onClick={refreshDrives}>{t('refresh')}</Button>
+          <Button variant="link" isInline onClick={() => refreshDrives()}>{t('refresh')}</Button>
         </FormGroup>
       )}
       {maskromCard}
@@ -595,8 +663,11 @@ export function App() {
   ));
 
   const askTitle = !board || !task ? '' : task === 'stick' ? t('ask.stick.title')
+    : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
     : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
   const askText = !board || !task ? '' : task === 'stick' ? t('ask.stick.text')
+    : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
+      : task === 'windows' && method === 'host' ? t('ask.host.text')
     : onBoard ? `${here?.emmc && (task === 'windows' || board.firmwareStorage === 'emmc') ? `${here.emmc.model}, ${here.emmc.device}, ${GB(here.emmc.bytes)}. ` : ''}${task === 'windows' ? t('ask.here.windows') : ''}${t('ask.here.password')}`
       : t('ask.connect.text');
 
@@ -673,7 +744,7 @@ export function App() {
         <ModalHeader title={askTitle} labelId="ask-title" />
         <ModalBody>{askText}</ModalBody>
         <ModalFooter>
-          <Button variant={onBoard || task === 'stick' ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' ? t('go.erase') : t('ask.connect')}</Button>
+          <Button variant={onBoard || task === 'stick' || onPc ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' || onPc ? t('go.erase') : t('ask.connect')}</Button>
           <Button variant="link" onClick={() => setAsk(false)}>{t('cancel')}</Button>
         </ModalFooter>
       </Modal>

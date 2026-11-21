@@ -24,6 +24,7 @@ const api: ImagerApi = {
   pickDrivers: () => ipcRenderer.invoke('woa:pick-drivers'),
   prepareExtras: (o) => ipcRenderer.invoke('woa:prepare-extras', o),
   writeBoard: (req) => ipcRenderer.invoke('woa:write-board', req),
+  hostBuild: (req) => ipcRenderer.invoke('woa:host-build', req),
   listDrives: (minSize) => ipcRenderer.invoke('drives:list', minSize),
   writeWinpeStick: (device) => ipcRenderer.invoke('woa:write-stick', device),
   cancel: () => ipcRenderer.invoke('job:cancel'),

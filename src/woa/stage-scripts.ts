@@ -49,6 +49,77 @@ goto :eof
 echo WoA RK3576 Imager: could not copy the install script from %STAGE% to X:.
 `;
 
+/**
+ * Everything done to the applied Windows, the same on the board (INSTALL)
+ * and on a Windows PC (HOST_BUILD): deploy-windows.cmd's steps and the
+ * first-start files. Needs W: (Windows) and S: (ESP), %WIM%, %DRIVERS%,
+ * %STAGE% (the folder with the generated files), %LOG%, %APPLY_OPTS% and the
+ * W_ settings; jumps to :faillog on an error.
+ */
+export const CONFIGURE = String.raw`rem --- 4. apply, drivers, boot (deploy-windows.cmd) ----------------------------
+echo.
+echo Applying the image. This takes a while ^(20 to 40 minutes on eMMC^).
+dism /English /Apply-Image /ImageFile:"%WIM%" /Index:%W_index% /ApplyDir:W:\ %APPLY_OPTS% >> "%LOG%" 2>&1 || goto :faillog
+
+echo Adding the RK3576 drivers.
+dism /English /Image:W:\ /Add-Driver /Driver:"%DRIVERS%" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+if exist "%STAGE%\extra-drivers" (
+  echo Adding the extra drivers.
+  dism /English /Image:W:\ /Add-Driver /Driver:"%STAGE%\extra-drivers" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+)
+
+echo Writing the boot files.
+bcdboot W:\Windows /s S: /f UEFI >> "%LOG%" 2>&1 || goto :faillog
+bcdedit /store S:\EFI\Microsoft\Boot\BCD /set {default} testsigning on >> "%LOG%" 2>&1 || goto :faillog
+if not exist S:\EFI\Boot\bootaa64.efi (
+  mkdir S:\EFI\Boot 2>nul
+  copy /y S:\EFI\Microsoft\Boot\bootmgfw.efi S:\EFI\Boot\bootaa64.efi >> "%LOG%" 2>&1
+)
+
+echo Making the eMMC's disk driver boot-start, and keeping sdbus off the eMMC.
+reg load HKLM\WOASYS W:\Windows\System32\config\SYSTEM >> "%LOG%" 2>&1 || goto :faillog
+set CS=1
+for /f "tokens=3" %%v in ('reg query HKLM\WOASYS\Select /v Current ^| find "Current"') do set /a CS=%%v
+reg add HKLM\WOASYS\ControlSet00!CS!\Services\sdstor /v Start /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
+rem Windows on the SD card: the SD slot's controller driver must start at boot too.
+if /i "%W_target%"=="sd" reg add HKLM\WOASYS\ControlSet00!CS!\Services\dwcmshc /v Start /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
+reg add HKLM\WOASYS\ControlSet00!CS!\Services\sdbus /v Start /t REG_DWORD /d 4 /f >> "%LOG%" 2>&1
+reg add HKLM\WOASYS\ControlSet00!CS!\Control\Power /v HibernateEnabled /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
+reg add HKLM\WOASYS\ControlSet00!CS!\Control\Power /v HibernateEnabledDefault /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
+reg add "HKLM\WOASYS\ControlSet00!CS!\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
+reg add "HKLM\WOASYS\ControlSet00!CS!\Control\Session Manager" /v PowerSimulateHiberBugcheck /t REG_DWORD /d 0x40 /f >> "%LOG%" 2>&1
+reg unload HKLM\WOASYS >> "%LOG%" 2>&1
+
+echo Letting OOBE finish without a network.
+reg load HKLM\WOAOFF W:\Windows\System32\config\SOFTWARE >> "%LOG%" 2>&1 || goto :faillog
+reg add HKLM\WOAOFF\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f >> "%LOG%" 2>&1
+rem The drivers' test certificates in Root and TrustedPublisher, so Plug and
+rem Play installs them without asking (woa-rk3576 docs/INSTALL.md).
+if exist "%STAGE%\woa-certs.cmd" (
+  echo Trusting the drivers' test certificates.
+  call "%STAGE%\woa-certs.cmd" >> "%LOG%" 2>&1
+)
+reg unload HKLM\WOAOFF >> "%LOG%" 2>&1
+
+rem --- 4b. first start: SetupComplete.cmd, the answer file, OpenSSH -----------
+mkdir W:\Windows\Setup\Scripts 2>nul
+copy /y "%STAGE%\SetupComplete.cmd" W:\Windows\Setup\Scripts\SetupComplete.cmd >nul || goto :faillog
+if exist "%STAGE%\unattend.xml" (
+  echo Setting up the account, so Windows skips its setup screens.
+  mkdir W:\Windows\Panther 2>nul
+  copy /y "%STAGE%\unattend.xml" W:\Windows\Panther\unattend.xml >nul || goto :faillog
+  rem It holds the password (encoded): zero the staging copy.
+  fsutil file setzerodata offset=0 length=1048576 "%STAGE%\unattend.xml" >nul 2>&1
+  echo answer file in place, staging copy zeroed >> "%LOG%"
+)
+if exist "%STAGE%\openssh\sshd.exe" (
+  echo Putting OpenSSH into Program Files.
+  xcopy "%STAGE%\openssh" "W:\Program Files\OpenSSH\" /e /i /q /y >> "%LOG%" 2>&1 || goto :faillog
+  if exist "%STAGE%\ssh-key\administrators_authorized_keys" copy /y "%STAGE%\ssh-key\administrators_authorized_keys" "W:\Program Files\OpenSSH\administrators_authorized_keys" >nul
+)
+
+`;
+
 export const INSTALL = String.raw`@echo off
 rem ---------------------------------------------------------------------------
 rem woa-stage.cmd - install Windows onto the eMMC this WinPE was staged on.
@@ -69,7 +140,7 @@ set INI=X:\woa-stage\woa-stage.ini
 echo WoA RK3576 Imager staged install, %DATE% %TIME% > "%LOG%"
 
 for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%INI%") do set "W_%%a=%%b"
-for %%k in (disk_guid disk_bytes fw_offset fw_size boot_offset data_offset windows_offset_kb image index build) do (
+for %%k in (target disk_guid disk_bytes fw_offset fw_size boot_offset data_offset windows_offset_kb image index build) do (
   if not defined W_%%k (
     echo woa-stage.ini has no %%k. Stopping.
     goto :fail
@@ -135,7 +206,11 @@ if not "!SIZE:~0,2!!SZA:~11,1!"=="!W_disk_bytes:~0,2!!SZB:~11,1!" (
 
 call :checkfw || goto :fail
 echo.
-echo eMMC: disk %DISK%. Firmware partition found at sector 64; it is kept.
+if "%W_fw_offset%"=="none" (
+  echo Target: disk %DISK% ^(%W_target%^), the staged disk.
+) else (
+  echo eMMC: disk %DISK%. Firmware partition found at sector 64; it is kept.
+)
 
 rem --- 2. the image ---------------------------------------------------------
 dism /English /Get-ImageInfo /ImageFile:"%WIM%" /Index:%W_index% > X:\woa-stage\img.txt 2>&1 || (
@@ -214,67 +289,8 @@ if not exist S:\ goto :faillog
 if not exist W:\ goto :faillog
 call :checkfw || goto :faillog
 
-rem --- 4. apply, drivers, boot (deploy-windows.cmd) ----------------------------
-echo.
-echo Applying the image. This takes a while on eMMC ^(20 to 40 minutes^).
-dism /English /Apply-Image /ImageFile:"%WIM%" /Index:%W_index% /ApplyDir:W:\ /Compact /Verify >> "%LOG%" 2>&1 || goto :faillog
-
-echo Adding the RK3576 drivers.
-dism /English /Image:W:\ /Add-Driver /Driver:"%DRIVERS%" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
-if exist "%STAGE%\extra-drivers" (
-  echo Adding the extra drivers.
-  dism /English /Image:W:\ /Add-Driver /Driver:"%STAGE%\extra-drivers" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
-)
-
-echo Writing the boot files.
-bcdboot W:\Windows /s S: /f UEFI >> "%LOG%" 2>&1 || goto :faillog
-bcdedit /store S:\EFI\Microsoft\Boot\BCD /set {default} testsigning on >> "%LOG%" 2>&1 || goto :faillog
-if not exist S:\EFI\Boot\bootaa64.efi (
-  mkdir S:\EFI\Boot 2>nul
-  copy /y S:\EFI\Microsoft\Boot\bootmgfw.efi S:\EFI\Boot\bootaa64.efi >> "%LOG%" 2>&1
-)
-
-echo Making the eMMC's disk driver boot-start, and keeping sdbus off the eMMC.
-reg load HKLM\WOASYS W:\Windows\System32\config\SYSTEM >> "%LOG%" 2>&1 || goto :faillog
-set CS=1
-for /f "tokens=3" %%v in ('reg query HKLM\WOASYS\Select /v Current ^| find "Current"') do set /a CS=%%v
-reg add HKLM\WOASYS\ControlSet00!CS!\Services\sdstor /v Start /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
-reg add HKLM\WOASYS\ControlSet00!CS!\Services\sdbus /v Start /t REG_DWORD /d 4 /f >> "%LOG%" 2>&1
-reg add HKLM\WOASYS\ControlSet00!CS!\Control\Power /v HibernateEnabled /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
-reg add HKLM\WOASYS\ControlSet00!CS!\Control\Power /v HibernateEnabledDefault /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
-reg add "HKLM\WOASYS\ControlSet00!CS!\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
-reg add "HKLM\WOASYS\ControlSet00!CS!\Control\Session Manager" /v PowerSimulateHiberBugcheck /t REG_DWORD /d 0x40 /f >> "%LOG%" 2>&1
-reg unload HKLM\WOASYS >> "%LOG%" 2>&1
-
-echo Letting OOBE finish without a network.
-reg load HKLM\WOAOFF W:\Windows\System32\config\SOFTWARE >> "%LOG%" 2>&1 || goto :faillog
-reg add HKLM\WOAOFF\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f >> "%LOG%" 2>&1
-rem The drivers' test certificates in Root and TrustedPublisher, so Plug and
-rem Play installs them without asking (woa-rk3576 docs/INSTALL.md).
-if exist "%STAGE%\woa-certs.cmd" (
-  echo Trusting the drivers' test certificates.
-  call "%STAGE%\woa-certs.cmd" >> "%LOG%" 2>&1
-)
-reg unload HKLM\WOAOFF >> "%LOG%" 2>&1
-
-rem --- 4b. first start: SetupComplete.cmd, the answer file, OpenSSH -----------
-mkdir W:\Windows\Setup\Scripts 2>nul
-copy /y "%STAGE%\SetupComplete.cmd" W:\Windows\Setup\Scripts\SetupComplete.cmd >nul || goto :faillog
-if exist "%STAGE%\unattend.xml" (
-  echo Setting up the account, so Windows skips its setup screens.
-  mkdir W:\Windows\Panther 2>nul
-  copy /y "%STAGE%\unattend.xml" W:\Windows\Panther\unattend.xml >nul || goto :faillog
-  rem It holds the password (encoded): zero the staging copy.
-  fsutil file setzerodata offset=0 length=1048576 "%STAGE%\unattend.xml" >nul 2>&1
-  echo answer file in place, staging copy zeroed >> "%LOG%"
-)
-if exist "%STAGE%\openssh\sshd.exe" (
-  echo Putting OpenSSH into Program Files.
-  xcopy "%STAGE%\openssh" "W:\Program Files\OpenSSH\" /e /i /q /y >> "%LOG%" 2>&1 || goto :faillog
-  if exist "%STAGE%\ssh-key\administrators_authorized_keys" copy /y "%STAGE%\ssh-key\administrators_authorized_keys" "W:\Program Files\OpenSSH\administrators_authorized_keys" >nul
-)
-
-rem --- 5. remove the staging partitions, give their space to Windows ---------
+set APPLY_OPTS=/Compact /Verify
+${CONFIGURE}rem --- 5. remove the staging partitions, give their space to Windows ---------
 echo Removing the staging partitions and extending the Windows partition.
 mkdir W:\Windows\Logs 2>nul
 copy /y "%LOG%" W:\Windows\Logs\woa-stage.log >nul
@@ -307,6 +323,8 @@ wpeutil reboot
 goto :end
 
 :checkfw
+rem An SD card or NVMe drive has no firmware partition to keep.
+if "%W_fw_offset%"=="none" exit /b 0
 set P0OFF=
 set P0SIZE=
 for /f "tokens=1,2 delims==" %%a in ('wmic partition where "DiskIndex=%DISK% and Index=0" get StartingOffset^,Size /value ^| find "="') do (
@@ -344,6 +362,142 @@ echo this install again. To stop for good, write the firmware with "whole
 echo image" from WoA RK3576 Imager or flash.gahingwoo.com.
 :end
 endlocal
+`;
+
+/**
+ * host-build.cmd: a finished Windows built on a Windows PC with its own DISM,
+ * as Windows on Raspberry's tools do it (the PC may be x64; DISM applies and
+ * services an ARM64 image). Run elevated by the app from a folder holding
+ * host-build.ini, woa-drivers\ (from the WinPE release), and the generated
+ * files of the staged install. Two modes:
+ *   disk  an SD card or NVMe drive attached to this PC: cleaned, fresh GPT.
+ *   vhd   an expandable VHD the size of the board's eMMC, with the first
+ *         64 MiB left free for the firmware partition; the app then writes
+ *         its partitions to the eMMC over Maskrom (src/woa/host-image.ts).
+ */
+export const HOST_BUILD = String.raw`@echo off
+setlocal enabledelayedexpansion
+set HERE=%~dp0
+set HERE=%HERE:~0,-1%
+set STAGE=%HERE%
+set DRIVERS=%HERE%\woa-drivers
+set LOG=%HERE%\host-build.log
+set INI=%HERE%\host-build.ini
+echo WoA RK3576 Imager host build, %DATE% %TIME% > "%LOG%"
+for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%INI%") do set "W_%%a=%%b"
+for %%k in (mode target source source_kind index build) do (
+  if not defined W_%%k (
+    echo host-build.ini has no %%k.
+    goto :faillog
+  )
+)
+for %%L in (S W) do (
+  if exist %%L:\ (
+    echo Drive letter %%L: is in use on this PC. Free it and try again.
+    goto :faillog
+  )
+)
+
+rem --- the image: install.wim inside the ISO, mounted read-only ----------------
+set ISOL=
+if /i "%W_source_kind%"=="iso" (
+  echo Mounting the ISO.
+  for /f %%d in ('powershell -NoProfile -Command "(Mount-DiskImage -ImagePath '%W_source%' -PassThru | Get-Volume).DriveLetter"') do set ISOL=%%d
+  if not defined ISOL (
+    echo The ISO could not be mounted.
+    goto :faillog
+  )
+  set WIM=!ISOL!:\%W_inner%
+) else (
+  set WIM=%W_source%
+)
+dism /English /Get-ImageInfo /ImageFile:"%WIM%" /Index:%W_index% > "%HERE%\img.txt" 2>&1 || goto :faillog
+type "%HERE%\img.txt" >> "%LOG%"
+set BUILD=
+for /f "tokens=5 delims=. " %%v in ('type "%HERE%\img.txt" ^| find /i "Version :"') do if not defined BUILD set BUILD=%%v
+set /a BNUM=%BUILD% 2>nul
+if %BNUM% GTR 25999 (
+  echo This image is build %BNUM%. Windows 11 24H2 and later cannot run on RK3576.
+  goto :faillog
+)
+
+rem --- the target ---------------------------------------------------------------
+if /i "%W_mode%"=="vhd" (
+  echo Making a virtual disk the size of the eMMC.
+  if exist "%W_vhd_path%" del /f /q "%W_vhd_path%"
+  > "%HERE%\dp.txt" (
+    echo create vdisk file="%W_vhd_path%" maximum=%W_vhd_mb% type=expandable
+    echo select vdisk file="%W_vhd_path%"
+    echo attach vdisk
+    echo convert gpt
+    echo create partition efi size=260 offset=65536
+    echo format quick fs=fat32 label=System
+    echo assign letter=S
+    echo create partition msr size=16
+    echo create partition primary
+    echo format quick fs=ntfs label=Windows
+    echo assign letter=W
+  )
+) else (
+  set SIZE=
+  for /f "tokens=2 delims==" %%a in ('wmic diskdrive where "Index=%W_disk_number%" get Size /value ^| find "="') do for %%b in (%%a) do set SIZE=%%b
+  set SZA=!SIZE!x
+  set SZB=%W_disk_bytes%x
+  if not "!SIZE:~0,2!!SZA:~11,1!!SZA:~12,1!"=="%W_disk_bytes:~0,2%!SZB:~11,1!!SZB:~12,1!" (
+    echo Disk %W_disk_number% is !SIZE! bytes, not the %W_disk_bytes% bytes chosen. Stopping.
+    goto :faillog
+  )
+  echo Partitioning disk %W_disk_number%.
+  > "%HERE%\dp.txt" (
+    echo select disk %W_disk_number%
+    echo clean
+    echo convert gpt
+    echo create partition efi size=260
+    echo format quick fs=fat32 label=System
+    echo assign letter=S
+    echo create partition msr size=16
+    echo create partition primary
+    echo format quick fs=ntfs label=Windows
+    echo assign letter=W
+  )
+)
+type "%HERE%\dp.txt" >> "%LOG%"
+diskpart /s "%HERE%\dp.txt" >> "%LOG%" 2>&1 || goto :faillog
+if not exist S:\ goto :faillog
+if not exist W:\ goto :faillog
+
+if /i "%W_target%"=="nvme" (set APPLY_OPTS=/Verify) else (set APPLY_OPTS=/Compact /Verify)
+${CONFIGURE}
+mkdir W:\Windows\Logs 2>nul
+copy /y "%LOG%" W:\Windows\Logs\woa-host-build.log >nul
+call :release
+echo WOA-HOST-BUILD-OK
+echo WOA-HOST-BUILD-OK >> "%LOG%"
+exit /b 0
+
+:release
+if /i "%W_mode%"=="vhd" (
+  > "%HERE%\dq.txt" (
+    echo select vdisk file="%W_vhd_path%"
+    echo detach vdisk
+  )
+) else (
+  > "%HERE%\dq.txt" (
+    echo select volume S
+    echo remove letter=S
+    echo select volume W
+    echo remove letter=W
+  )
+)
+diskpart /s "%HERE%\dq.txt" >> "%LOG%" 2>&1
+if defined ISOL powershell -NoProfile -Command "Dismount-DiskImage -ImagePath '%W_source%'" >> "%LOG%" 2>&1
+exit /b 0
+
+:faillog
+call :release
+echo WOA-HOST-BUILD-FAILED
+echo WOA-HOST-BUILD-FAILED >> "%LOG%"
+exit /b 1
 `;
 
 export const crlf = (s: string): Uint8Array => new TextEncoder().encode(s.replace(/\r?\n/g, '\r\n'));

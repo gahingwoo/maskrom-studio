@@ -182,6 +182,83 @@ host systems without native tools: a GPT writer, a FAT32 single-file patch,
 an exFAT writer (checked with exfatprogs' fsck in the tests), a UDF reader
 for the ISO, and the WIM header and XML reader.
 
+## Both paths, three targets
+
+The user asked for both paths, so the first approach is the default and the
+second is offered where it can be done properly.
+
+| Target | Layout | Staged (default) | Built on the PC |
+|---|---|---|---|
+| eMMC, over Maskrom | firmware partition kept, Windows from 64 MiB | any host | Windows host: DISM into a VHD, then Maskrom |
+| eMMC, on the board | as above | Linux on the board | no |
+| SD card in the PC's reader | fresh GPT, Windows from 1 MiB | Linux, Windows hosts | Windows host: DISM onto the card |
+| NVMe in a USB enclosure | fresh GPT, Windows from 1 MiB | Linux, Windows hosts | Windows host: DISM onto the drive |
+
+**Staged onto an SD card or NVMe drive.** The same layout as on the eMMC
+without the firmware partition, written to the drive on the PC through the
+elevated writer (etcher-sdk's block device, then read back in full). The
+card or drive goes into the board, the firmware boots its WinPE (SD and
+USB come before the eMMC; NVMe may need the boot manager), and WinPE
+installs onto that same disk, found by its GUID, as on the eMMC. For an SD
+target the SD controller driver (dwcmshc) is made boot-start as well as
+sdstor. macOS is not offered for these two: its writer streams one image
+from the start of the disk and has no way to write regions.
+
+**Built on a Windows PC.** `host-build.cmd` (stage-scripts.ts) is the
+install script's own configure block, run by the PC's DISM, the way Windows
+on Raspberry's tools service ARM64 images from x64 Windows: diskpart
+(the chosen disk, or an expandable VHD the size of the board's eMMC with
+the first 64 MiB left free), `dism /Apply-Image`, `/Add-Driver`, bcdboot,
+test signing, the registry changes, certificates, answer file and OpenSSH.
+The ISO is mounted with Mount-DiskImage. For the eMMC, src/woa/vhd.ts
+reads the VHD and src/woa/host-image.ts sends only its blocks that hold
+data, with a new partition table that keeps the firmware entry. The script
+runs elevated (UAC); its console goes to a file the app follows.
+
+**Why the PC build is Windows only.** What has to come out of it is a
+Windows that can open its boot disk on the first start, and the boot disk
+(eMMC or SD) sits behind a third-party test-signed driver. For such a
+driver `dism /Add-Driver` offline does all of this:
+
+- copies the package into `Windows\System32\DriverStore\FileRepository\
+  <inf>_arm64_<hash>\` and the INF into `Windows\INF\oemN.inf`;
+- registers it in the DRIVERS hive (`DriverDatabase\DriverPackages`,
+  `DriverInfFiles`, `DeviceIds\<hardware ID>`, with ranks, signer and
+  catalog data that PnP reads at boot to install the device);
+- because the INF's StartType is 0, installs the service (`SYSTEM\
+  ControlSet00x\Services\dwcsdhc`: Type 1, Start 0, ErrorControl, Group,
+  ImagePath) and copies the .sys into `System32\drivers`, so winload loads it
+  and PnP binds the boot device on the first start. Windows 8 and later
+  have no CriticalDeviceDatabase; that binding comes from the
+  DriverDatabase entries.
+
+wimlib applies the image on Linux (through NTFS-3G), and hivex can write
+the SYSTEM hive, but the DRIVERS hive records are undocumented and
+version-specific, and a mistake there ends in INACCESSIBLE_BOOT_DEVICE
+with nothing to debug from. A BCD would also have to be made without
+bcdboot. So on Linux and macOS the app offers the staged install for every
+target instead, which runs the same DISM on the board. The one case that
+could work without driver injection is NVMe (stornvme is inbox), which
+would still need a BCD; that is left for later.
+
+**Booting Windows from an SD card.** The firmware boots the SD slot before
+the eMMC (woa-rk3576 INSTALL.md), so a card with an ESP is found. On the
+TaishanPi 3M the BootROM reads only the eMMC; the SPL there tries the SD
+card first for the firmware FIT (edk2-rk3576 docs/HARDWARE.md, "the SPL
+tries SD first") and with no card boots the eMMC's. A Windows card has no
+FIT at sector 16384 (that is inside its ESP), so the SPL should fall back
+to the eMMC firmware, as U-Boot's SPL goes down its boot list; this is the
+documented behaviour with the card out, not yet seen with a Windows card
+in. A board whose firmware itself lives on the SD card cannot have Windows
+there too. On the CM5-IO an SD card in the slot was the cause of WinPE
+freezes (fixed in firmware at ExitBootServices, n=1), and Windows running
+from an SD card has not been tried on either board.
+
+**NVMe.** Windows' inbox stornvme drives it; the firmware must boot NVMe
+(Fedora does on the CM5-IO and ROCK 4D) and describe PCIe in ACPI (done
+and verified under Windows on the CM5-IO). The ROCK 4D's ACPI is in
+progress in edk2-rk3576; the app says so and still prepares the drive.
+
 ## How the installed Windows comes out
 
 Everything deploy-windows.cmd does stays: the RK3576 drivers from the WinPE
@@ -251,10 +328,10 @@ shown in Chinese through patterns, unknown ones as they are.
 
 ## Not in the first version
 
-- The ROCK 4D (no eMMC; Windows would go on NVMe). The layout code takes a
-  board and a disk; an NVMe target needs a deploy script that installs
-  onto a disk other than the staging one, which makes it simpler, not
-  harder.
+- Windows on the ROCK 4D itself: the drive can be prepared, its ACPI is
+  not ready.
+- Building on the PC from Linux or macOS (see above), and writing an SD
+  card or NVMe drive from macOS.
 - A USB stick that already holds the Windows image (the fallback stick is
   WinPE only, as today; the exFAT writer could add the image partition).
 - Downloading Windows from Microsoft (UUP). Legal and automatable in

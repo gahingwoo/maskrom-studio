@@ -3,14 +3,14 @@
 
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, net, session, shell, type WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import * as drivelist from 'drivelist';
-import { classifyDrives, type DriveInfo } from '../shared/targets';
+import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
 import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
-import { helperLaunch, runHelper, sudoPromptElevate } from './elevate';
+import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './elevate';
 import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
 import { ensureLoader } from './loader-cache';
 import { handleProtocol, ORIGIN, registerScheme } from './protocol';
@@ -22,7 +22,14 @@ import { boardHere, NO_MTD_HELP } from './board-here';
 import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './windows-image';
 import { firmwareRelease, FIRMWARE_REPO, latestRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type WinpeRelease } from '../woa/releases';
 import type { BoardId } from '../woa/boards';
-import type { BoardJob } from '../helper/board-write';
+import { fileSource, type BoardJob } from '../helper/board-write';
+import { hostBuildFiles } from '../woa/host-build';
+import { MIN_DISK_BYTES } from '../woa/stage-layout';
+import { woaBoard } from '../woa/boards';
+import type { HostBuildRequest, HostBuildResult } from '../shared/ipc';
+
+/** The eMMC size the Windows host build makes its virtual disk for (the boards' eMMC as seen). */
+const EMMC_BYTES: Partial<Record<BoardId, number>> = { tspi3m: 62008590336, cm5io: 31272730624 };
 import { OPENSSH, type SetupOptions } from '../woa/setup-files';
 import { unzip } from '../woa/zip';
 import { inflateRawSync } from 'node:zlib';
@@ -315,6 +322,91 @@ ipcMain.handle('woa:prepare-extras', (e, o: { ssh: boolean; drivers: string | nu
   }
 }, { error: 'Another job is running.' }));
 
+// --- Windows built on this PC (Windows hosts only) -------------------------------
+
+ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (signal): Promise<HostBuildResult> => {
+  if (process.platform !== 'win32') return { ok: false, reason: 'host.windowsOnly' };
+  const wc = e.sender;
+  const img = windowsImages.get(req.windowsToken);
+  if (!img) return { ok: false, reason: 'Choose the Windows image again. Nothing was written.' };
+  const ed = img.editions.find((x) => x.index === req.index);
+  if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
+  const dir = join(app.getPath('userData'), 'host-build');
+  try {
+    let diskNumber: number | undefined;
+    let diskBytes: number | undefined;
+    if (req.target !== 'emmc') {
+      const drives = await withDiskFacts(await drivelist.list() as unknown as DriveInfo[]);
+      if (!req.device || !isOfferedTarget(req.device, drives, { minSize: MIN_DISK_BYTES, platform: process.platform, internal: false })) {
+        return { ok: false, reason: `${req.device ?? 'The drive'} is not a drive the imager writes to (system disk, read-only, too small, or gone). Nothing was written.` };
+      }
+      const m = /PhysicalDrive(\d+)$/i.exec(req.device);
+      if (!m) return { ok: false, reason: `${req.device} is not a physical drive.` };
+      diskNumber = Number(m[1]);
+      diskBytes = drives.find((d) => d.device === req.device)!.size ?? undefined;
+    }
+    const pe = await winpeFile(wc, signal);
+    const extras = [...(req.setup.ssh ? await opensshFiles(wc, signal) : []), ...(req.drivers ? driverFiles(req.drivers) : [])];
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    const vhdPath = join(dir, 'woa-emmc.vhd');
+    const board = woaBoard(req.boardId);
+    if (req.target === 'emmc' && !board?.windows) return { ok: false, reason: 'This board has no eMMC for Windows.' };
+    const winpeSrc = fileSource(pe.path);
+    let files;
+    try {
+      files = hostBuildFiles({
+        target: req.target, mode: req.target === 'emmc' ? 'vhd' : 'disk',
+        ...(req.target === 'emmc' ? { vhdPath, vhdBytes: EMMC_BYTES[req.boardId] } : { diskNumber, diskBytes }),
+        source: img.container === 'iso' ? { path: img.path, kind: 'iso', inner: `sources\\${img.imageName}` } : { path: img.path, kind: 'wim', inner: '' },
+        index: ed.index, edition: ed.name, build: ed.build ?? 0, winpe: winpeSrc, setup: req.setup, extras, appVersion: app.getVersion(),
+      });
+    } finally {
+      winpeSrc.close();
+    }
+    for (const f of files) {
+      const p = join(dir, ...f.path.split('/'));
+      mkdirSync(dirname(p), { recursive: true });
+      writeFileSync(p, f.data);
+    }
+    // The script runs elevated (UAC); its console goes to a file this process follows.
+    const consoleFile = join(dir, 'console.txt');
+    writeFileSync(consoleFile, '');
+    let seen = 0;
+    const timer = setInterval(() => {
+      try {
+        const text = readFileSync(consoleFile, 'utf8');
+        const lines = text.split(/\r?\n/).filter((l) => l.trim());
+        if (lines.length > seen) { seen = lines.length; sendProgress(wc, { stage: 'write', bytes: seen, total: 0, note: lines[lines.length - 1] }); }
+      } catch { /* not yet */ }
+    }, 1000);
+    try {
+      const sudo = await loadSudoPrompt();
+      await new Promise<void>((resolve, reject) => {
+        sudo.exec(`cmd.exe /c ""${join(dir, 'host-build.cmd')}" > "${consoleFile}" 2>&1"`, { name: 'WoA RK3576 Imager' },
+          (err: Error | undefined) => (err ? reject(err) : resolve()));
+      }).catch(() => { /* the log says what happened */ });
+    } finally {
+      clearInterval(timer);
+    }
+    const log = (() => { try { return readFileSync(join(dir, 'host-build.log'), 'utf8'); } catch { return ''; } })();
+    // The answer file held the password: gone before anything else happens.
+    rmSync(join(dir, 'unattend.xml'), { force: true });
+    if (!/WOA-HOST-BUILD-OK/.test(log)) {
+      return { ok: false, reason: 'host.failed', detail: log.split(/\r?\n/).slice(-30).join('\n') };
+    }
+    if (req.target === 'emmc') {
+      const s = serve(vhdPath, 'woa-emmc.vhd');
+      return { ok: true, vhd: s };
+    }
+    rmSync(dir, { recursive: true, force: true });
+    return { ok: true };
+  } catch (err) {
+    if (signal.aborted) return { ok: false, reason: 'Cancelled.' };
+    return { ok: false, reason: String((err as Error).message ?? err) };
+  }
+}, { ok: false, reason: 'Another job is running.' }));
+
 // --- this board ------------------------------------------------------------------
 
 ipcMain.handle('woa:board-here', async (): Promise<BoardHereInfo> => {
@@ -340,12 +432,26 @@ function runElevated(wc: WebContents, signal: AbortSignal, args: (socket: string
 }
 
 ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (signal): Promise<JobResult> => {
-  if (process.platform !== 'linux') return { ok: false, reason: 'Writing the board this runs on works on Linux only.' };
+  if (process.platform !== 'linux' && req.kind !== 'stage-disk') return { ok: false, reason: 'Writing the board this runs on works on Linux only.' };
+  if (process.platform === 'darwin') return { ok: false, reason: 'host.macDisk' };
   const wc = e.sender;
   let bj: BoardJob;
   let total = 0;
   try {
-    if (req.kind === 'stage') {
+    if (req.kind === 'stage-disk') {
+      const img = windowsImages.get(req.windowsToken);
+      if (!img) return { ok: false, reason: 'Choose the Windows image again. Nothing was written.' };
+      const ed = img.editions.find((x) => x.index === req.index);
+      if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
+      const pe = await winpeFile(wc, signal);
+      if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
+      const extras = [...(req.setup.ssh ? await opensshFiles(wc, signal) : []), ...(req.drivers ? driverFiles(req.drivers) : [])];
+      bj = { kind: 'stage-disk', target: req.target, device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
+        setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
+        image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
+          index: ed.index, edition: ed.name, build: ed.build ?? 0 } };
+      total = img.imageSize + pe.size;
+    } else if (req.kind === 'stage') {
       const img = windowsImages.get(req.windowsToken);
       if (!img) return { ok: false, reason: 'Choose the Windows image again. Nothing was written.' };
       const ed = img.editions.find((x) => x.index === req.index);

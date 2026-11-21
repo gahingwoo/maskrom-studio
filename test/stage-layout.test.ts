@@ -118,6 +118,17 @@ describe('staged install layout', () => {
     expect(() => planStage({ board, diskBytes: 62008590336, head: noFw, winpe, image, rand, appVersion: 't' })).toThrow(/whole image/);
   });
 
+  it('stages onto an SD card or NVMe drive with a fresh table and no firmware', () => {
+    if (!tools) return;
+    const dir = mkdtempSync(join(tmpdir(), 'stage-sd-'));
+    const plan = planStage({ board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't' });
+    const t = parsePrimaryGpt(plan.regions[plan.regions.length - 1].source.read(0, 34 * 512));
+    expect(t.partitions.map((p) => p.name)).toEqual(['WOA-STAGE-BOOT', 'WOA-STAGE-DATA']);
+    expect(plan.ini).toMatch(/target=nvme\r\nfw_offset=none\r\nfw_size=none\r\nwindows_offset_kb=1024\r\n/);
+    expect(() => planStage({ board: woaBoard('tspi3m')!, target: 'sd', diskBytes: 16e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't' })).toThrow(/at least/);
+    execFileSync('rm', ['-rf', dir]);
+  }, 60000);
+
   it('refuses the ROCK 4D', () => {
     expect(() => planStage({ board: woaBoard('rock4d')!, diskBytes: 62008590336, head, winpe: bytesSource(new Uint8Array(1)), image, rand, appVersion: 't' })).toThrow(/NVMe/);
   });

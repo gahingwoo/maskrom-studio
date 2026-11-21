@@ -14,6 +14,8 @@ import { woaBoard, firmwareTargets } from './boards';
 import { firmwareRegions } from './firmware-plan';
 import { writeRegions, type RegionResult, type RegionStage } from './maskrom-regions';
 import { planStage, StageError } from './stage-layout';
+import { planHostImage } from './host-image';
+import { readVhd } from './vhd';
 import { extentSource, type Extent } from './udf';
 import type { ByteSource } from './pieces';
 import type { SetupOptions } from './setup-files';
@@ -26,7 +28,9 @@ export type WoaJob =
         sha256: string | null; index: number; edition: string; build: number };
       appVersion: string; spotCheck: boolean; resetAfter: boolean;
       setup: SetupOptions; extras: Array<{ path: string; data: Uint8Array }> }
-  | { kind: 'firmware'; boardId: string; targetId: string; image: FileRef; spotCheck: boolean; resetAfter: boolean };
+  | { kind: 'firmware'; boardId: string; targetId: string; image: FileRef; spotCheck: boolean; resetAfter: boolean }
+  /** A finished Windows built on a Windows PC into a VHD (host-build.ts), for the eMMC. */
+  | { kind: 'vhd'; boardId: string; vhd: FileRef; spotCheck: boolean; resetAfter: boolean };
 
 export type WoaWorkerRequest =
   | { type: 'woa-start'; moduleUrl: string; wasmUrl: string; loaderUrl: string; job: WoaJob; reconnectTimeout?: number }
@@ -103,6 +107,30 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
                 kind: 'stage', capacity: p.capacity, windowsBytes: plan.windowsBytes, totalBytes: plan.totalBytes,
                 removed: plan.removed.map((x) => ({ name: x.name || '(no name)', bytes: (x.lastLba - x.firstLba + 1) * 512 })),
                 diskGuid: plan.diskGuid, certificates: plan.certificates,
+              },
+            };
+          } catch (e) {
+            if (e instanceof StageError) return { stop: e.message };
+            throw e;
+          }
+        },
+        confirm,
+      }, hooks);
+    } else if (job.kind === 'vhd') {
+      const vhd = readVhd(xhrSource(job.vhd.url, job.vhd.size));
+      result = await writeRegions(runner, {
+        loader, readHead: true, spotCheck: job.spotCheck, resetAfter: job.resetAfter,
+        ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
+        async plan(p) {
+          if (p.capacity === null) return { stop: 'The loader did not report the eMMC size, which the install layout needs. Nothing was written.' };
+          if (!p.head) return { stop: 'The partition table could not be read from the eMMC. Nothing was written.' };
+          try {
+            const plan = planHostImage({ board, capacity: p.capacity, head: p.head, vhd });
+            return {
+              regions: plan.regions,
+              summary: {
+                kind: 'stage', capacity: p.capacity, windowsBytes: plan.windowsBytes, totalBytes: plan.totalBytes,
+                removed: plan.removed.map((x) => ({ name: x.name || '(no name)', bytes: (x.lastLba - x.firstLba + 1) * 512 })),
               },
             };
           } catch (e) {

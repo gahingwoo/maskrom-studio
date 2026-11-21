@@ -22,4 +22,8 @@ changelog is in the git history before this fork).
   between Windows' own setup and none at all (a local administrator from
   the name and password given, straight to the desktop).
 - English and Simplified Chinese, following the system language.
+- Windows onto an SD card or an NVMe drive attached to the PC as well as
+  the eMMC, staged for the board to install; and on a Windows PC, built
+  finished with DISM (for the eMMC into a virtual disk written over
+  Maskrom).
 - Not yet run on hardware.
