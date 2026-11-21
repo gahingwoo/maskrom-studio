@@ -6,6 +6,7 @@ import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { certBlob, certsCmd, isSelfSigned, pkcs7Certificates, trustedCerts } from '../src/woa/certs';
 import { accountProblem, encodePassword, setupComplete, sshKeyProblem, unattendXml, type Account } from '../src/woa/setup-files';
 import { unzip } from '../src/woa/zip';
+import { CONFIGURE } from '../src/woa/stage-scripts';
 
 const fx = (n: string) => new Uint8Array(readFileSync(join(__dirname, 'fixtures', n)));
 
@@ -66,6 +67,17 @@ describe('SetupComplete.cmd and SSH', () => {
     expect(s).toContain('Panther\\unattend.xml');
     expect(s).not.toMatch(/Add-WindowsCapability/);
     expect(setupComplete({ skipSetup: null, ssh: false, sshKey: '' })).not.toContain('sshd');
+  });
+  it('syncs the clock at first start and a minute after every start', () => {
+    for (const ssh of [true, false]) {
+      const s = setupComplete({ skipSetup: null, ssh, sshKey: '' });
+      expect(s).toContain('/sc onstart /delay 0001:00 /ru SYSTEM');
+      expect(s).toContain('w32tm.exe /resync /force');
+    }
+  });
+  it('reads the RTC as UTC and starts the Windows Time service on its own', () => {
+    expect(CONFIGURE).toContain('TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1');
+    expect(CONFIGURE).toContain('Services\\W32Time /v Start /t REG_DWORD /d 2');
   });
   it('checks a public key', () => {
     expect(sshKeyProblem('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq user@host')).toBeNull();

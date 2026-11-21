@@ -177,6 +177,12 @@ export function setupComplete(o: SetupOptions): string {
     );
   }
   l.push(
+    'rem The clock: the RTC is not to be trusted, so sync over the network a minute',
+    'rem after every start. Test-signed drivers are refused while the clock is behind.',
+    'schtasks.exe /create /f /tn "WoA RK3576 time sync" /sc onstart /delay 0001:00 /ru SYSTEM /tr "%WINDIR%\\System32\\w32tm.exe /resync /force" >> "%LOG%" 2>&1',
+    'w32tm.exe /resync /force >> "%LOG%" 2>&1',
+  );
+  l.push(
     'rem The answer file holds the password (encoded, not encrypted): remove every copy.',
     'del /f /q "%WINDIR%\\Panther\\unattend.xml" 2>nul',
     'del /f /q "%WINDIR%\\Panther\\Unattend\\unattend.xml" 2>nul',

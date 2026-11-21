@@ -88,6 +88,10 @@ reg add HKLM\WOASYS\ControlSet00!CS!\Control\Power /v HibernateEnabled /t REG_DW
 reg add HKLM\WOASYS\ControlSet00!CS!\Control\Power /v HibernateEnabledDefault /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
 reg add "HKLM\WOASYS\ControlSet00!CS!\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
 reg add "HKLM\WOASYS\ControlSet00!CS!\Control\Session Manager" /v PowerSimulateHiberBugcheck /t REG_DWORD /d 0x40 /f >> "%LOG%" 2>&1
+rem The boards' RTC keeps UTC (and on the TaishanPi 3M holds no valid time at
+rem all): read it as UTC, and let the Windows Time service start on its own.
+reg add "HKLM\WOASYS\ControlSet00!CS!\Control\TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1 /f >> "%LOG%" 2>&1
+reg add HKLM\WOASYS\ControlSet00!CS!\Services\W32Time /v Start /t REG_DWORD /d 2 /f >> "%LOG%" 2>&1
 reg unload HKLM\WOASYS >> "%LOG%" 2>&1
 
 echo Letting OOBE finish without a network.

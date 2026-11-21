@@ -31,9 +31,10 @@ Status: first version, not yet run on hardware. See
   disk), so the board starts straight into Windows.
 - **Windows comes out configured.** The RK3576 drivers with their test
   certificate trusted, any extra driver folder you add (display, touch),
-  OpenSSH server on port 22 (on by default), and either Windows' own
-  first-start setup or none at all: give a user name and password and
-  the board starts straight to the desktop.
+  OpenSSH server on port 22 (on by default), the clock read as UTC and
+  synced over the network after every start (the boards' RTC cannot be
+  trusted), and either Windows' own first-start setup or none at all: give
+  a user name and password and the board starts straight to the desktop.
 - **UEFI firmware.** The latest edk2-rk3576 release, written as the web
   flasher [flash.gahingwoo.com](https://flash.gahingwoo.com/) writes it
   ("whole image" or "keep the partitions"), over Maskrom.

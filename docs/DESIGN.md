@@ -263,8 +263,13 @@ progress in edk2-rk3576; the app says so and still prepares the drive.
 
 Everything deploy-windows.cmd does stays: the RK3576 drivers from the WinPE
 release, test signing, dwcsdhc and sdstor boot-start, sdbus off,
-hibernation and Fast Startup off, BypassNRO. Added, all chosen on the
-"Windows setup" page:
+hibernation and Fast Startup off, BypassNRO. Always added: the clock.
+The boards' RTC keeps UTC, and the TaishanPi 3M's holds no valid time at
+all, so `RealTimeIsUniversal` is set to 1 and the Windows Time service to
+start automatically, and SetupComplete.cmd syncs once and registers a task
+that runs `w32tm /resync /force` a minute after every start. With the clock
+behind, pnputil refuses test-signed drivers signed "in the future".
+Added, all chosen on the "Windows setup" page:
 
 - **Driver certificates.** The WinPE workflow signs each run's drivers with
   a new self-signed test certificate, and Plug and Play installs a driver
