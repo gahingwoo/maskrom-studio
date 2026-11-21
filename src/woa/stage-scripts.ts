@@ -12,6 +12,9 @@
 //           when Windows is in place the staging partitions are deleted and
 //           the Windows partition is extended over them. The DISM, driver,
 //           bcdboot and registry steps are deploy-windows.cmd's, unchanged.
+//           Added: extra driver packages, the drivers' test certificates
+//           (woa-certs.cmd, certs.ts), SetupComplete.cmd, the answer file
+//           when setup is skipped, and OpenSSH (setup-files.ts).
 //
 // WinPE has find.exe but no findstr.exe, and set /a is 32-bit, as the
 // comments in deploy-windows.cmd record; nothing here uses either for disk
@@ -218,6 +221,10 @@ dism /English /Apply-Image /ImageFile:"%WIM%" /Index:%W_index% /ApplyDir:W:\ /Co
 
 echo Adding the RK3576 drivers.
 dism /English /Image:W:\ /Add-Driver /Driver:"%DRIVERS%" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+if exist "%STAGE%\extra-drivers" (
+  echo Adding the extra drivers.
+  dism /English /Image:W:\ /Add-Driver /Driver:"%STAGE%\extra-drivers" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+)
 
 echo Writing the boot files.
 bcdboot W:\Windows /s S: /f UEFI >> "%LOG%" 2>&1 || goto :faillog
@@ -242,7 +249,30 @@ reg unload HKLM\WOASYS >> "%LOG%" 2>&1
 echo Letting OOBE finish without a network.
 reg load HKLM\WOAOFF W:\Windows\System32\config\SOFTWARE >> "%LOG%" 2>&1 || goto :faillog
 reg add HKLM\WOAOFF\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f >> "%LOG%" 2>&1
+rem The drivers' test certificates in Root and TrustedPublisher, so Plug and
+rem Play installs them without asking (woa-rk3576 docs/INSTALL.md).
+if exist "%STAGE%\woa-certs.cmd" (
+  echo Trusting the drivers' test certificates.
+  call "%STAGE%\woa-certs.cmd" >> "%LOG%" 2>&1
+)
 reg unload HKLM\WOAOFF >> "%LOG%" 2>&1
+
+rem --- 4b. first start: SetupComplete.cmd, the answer file, OpenSSH -----------
+mkdir W:\Windows\Setup\Scripts 2>nul
+copy /y "%STAGE%\SetupComplete.cmd" W:\Windows\Setup\Scripts\SetupComplete.cmd >nul || goto :faillog
+if exist "%STAGE%\unattend.xml" (
+  echo Setting up the account, so Windows skips its setup screens.
+  mkdir W:\Windows\Panther 2>nul
+  copy /y "%STAGE%\unattend.xml" W:\Windows\Panther\unattend.xml >nul || goto :faillog
+  rem It holds the password (encoded): zero the staging copy.
+  fsutil file setzerodata offset=0 length=1048576 "%STAGE%\unattend.xml" >nul 2>&1
+  echo answer file in place, staging copy zeroed >> "%LOG%"
+)
+if exist "%STAGE%\openssh\sshd.exe" (
+  echo Putting OpenSSH into Program Files.
+  xcopy "%STAGE%\openssh" "W:\Program Files\OpenSSH\" /e /i /q /y >> "%LOG%" 2>&1 || goto :faillog
+  if exist "%STAGE%\ssh-key\administrators_authorized_keys" copy /y "%STAGE%\ssh-key\administrators_authorized_keys" "W:\Program Files\OpenSSH\administrators_authorized_keys" >nul
+)
 
 rem --- 5. remove the staging partitions, give their space to Windows ---------
 echo Removing the staging partitions and extending the Windows partition.

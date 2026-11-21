@@ -3,6 +3,7 @@ import type { HiddenDrive, Target } from './targets';
 import type { UpdateCheck, UpdateResult } from './update';
 import type { BoardId } from '../woa/boards';
 import type { Extent } from '../woa/udf';
+import type { SetupOptions } from '../woa/setup-files';
 
 export type JobProgress = {
   stage: 'download' | 'check' | 'decompress' | 'write' | 'verify';
@@ -49,6 +50,8 @@ export interface WindowsChoice {
   editions: EditionInfo[];
 }
 
+export interface DriverFolder { token: string; name: string; files: number; bytes: number; infs: number }
+
 export interface BoardHereInfo {
   rk3576: boolean;
   boardId: BoardId | null;
@@ -62,7 +65,7 @@ export interface BoardHereInfo {
 }
 
 export type BoardJobRequest =
-  | { kind: 'stage'; boardId: BoardId; device: string; windowsToken: string; index: number }
+  | { kind: 'stage'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
   | { kind: 'firmware'; boardId: BoardId; device: string; targetId: string }
   | { kind: 'spinor'; boardId: BoardId; device: string };
 
@@ -82,6 +85,10 @@ export interface ImagerApi {
   hashWindows(token: string): Promise<{ sha256: string } | { error: string }>;
   /** Serve the chosen Windows file to the Maskrom worker. */
   serveWindows(token: string): Promise<Served | { error: string }>;
+  /** Choose a folder of extra driver packages (wddm-mali-g52, gt9271, ...). Errors are translation keys or messages. */
+  pickDrivers(): Promise<DriverFolder | { error: string } | null>;
+  /** The files that go onto the staging volume besides the image: OpenSSH (pinned release) and the chosen drivers. */
+  prepareExtras(o: { ssh: boolean; drivers: string | null }): Promise<{ files: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
   /** Is this app running on an RK3576 board (Linux)? */
   boardHere(): Promise<BoardHereInfo>;
   /** Write this board's own eMMC or SPI NOR (elevated helper). */

@@ -16,6 +16,7 @@ import { writeRegions, type RegionResult, type RegionStage } from './maskrom-reg
 import { planStage, StageError } from './stage-layout';
 import { extentSource, type Extent } from './udf';
 import type { ByteSource } from './pieces';
+import type { SetupOptions } from './setup-files';
 
 export interface FileRef { url: string; size: number }
 
@@ -23,7 +24,8 @@ export type WoaJob =
   | { kind: 'stage'; boardId: string; winpe: FileRef;
       image: FileRef & { extents: Extent[] | null; name: 'install.wim' | 'install.esd'; imageSize: number;
         sha256: string | null; index: number; edition: string; build: number };
-      appVersion: string; spotCheck: boolean; resetAfter: boolean }
+      appVersion: string; spotCheck: boolean; resetAfter: boolean;
+      setup: SetupOptions; extras: Array<{ path: string; data: Uint8Array }> }
   | { kind: 'firmware'; boardId: string; targetId: string; image: FileRef; spotCheck: boolean; resetAfter: boolean };
 
 export type WoaWorkerRequest =
@@ -92,6 +94,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
           try {
             const plan = planStage({
               board, diskBytes: p.capacity, head: p.head, winpe, rand: random, appVersion: job.appVersion,
+              setup: job.setup, extras: job.extras,
               image: { source: imageSrc, name: job.image.name, sha256: job.image.sha256, index: job.image.index, edition: job.image.edition, build: job.image.build },
             });
             return {
@@ -99,7 +102,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
               summary: {
                 kind: 'stage', capacity: p.capacity, windowsBytes: plan.windowsBytes, totalBytes: plan.totalBytes,
                 removed: plan.removed.map((x) => ({ name: x.name || '(no name)', bytes: (x.lastLba - x.firstLba + 1) * 512 })),
-                diskGuid: plan.diskGuid,
+                diskGuid: plan.diskGuid, certificates: plan.certificates,
               },
             };
           } catch (e) {

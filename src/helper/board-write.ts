@@ -19,12 +19,14 @@ import { firmwareRegions } from '../woa/firmware-plan';
 import { planStage, StageError, type Region } from '../woa/stage-layout';
 import { extentSource, type Extent } from '../woa/udf';
 import type { ByteSource } from '../woa/pieces';
+import type { SetupOptions } from '../woa/setup-files';
 import type { HelperMessage } from './write-helper';
 
 export type BoardJob =
   | { kind: 'stage'; device: string; boardId: string; winpe: string; appVersion: string;
       image: { path: string; extents: Extent[] | null; name: 'install.wim' | 'install.esd'; size: number;
-        sha256: string | null; index: number; edition: string; build: number } }
+        sha256: string | null; index: number; edition: string; build: number };
+      setup: SetupOptions; extras: Array<{ path: string; base64: string }> }
   | { kind: 'firmware'; device: string; boardId: string; targetId: string; image: string }
   | { kind: 'spinor'; device: string; boardId: string; image: string };
 
@@ -160,6 +162,7 @@ export async function runBoardJob(job: BoardJob, send: (m: HelperMessage) => voi
           board, diskBytes: capacity, head: new Uint8Array(head), winpe,
           image: { source, name: job.image.name, sha256: job.image.sha256, index: job.image.index, edition: job.image.edition, build: job.image.build },
           rand: (n) => new Uint8Array(randomBytes(n)), appVersion: job.appVersion,
+          setup: job.setup, extras: job.extras.map((e) => ({ path: e.path, data: new Uint8Array(Buffer.from(e.base64, 'base64')) })),
         }).regions;
       } catch (e) {
         if (e instanceof StageError) return fail(e.message);

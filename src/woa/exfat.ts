@@ -18,9 +18,14 @@ import { concatSource, type ByteSource, type Piece } from './pieces';
 const SECTOR = 512;
 
 export interface ExfatFile {
+  /** A path with / between directories: "openssh/sshd.exe". */
   name: string;
   source: ByteSource;
 }
+
+interface DirNode { name: string; dirs: DirNode[]; files: number[]; first: number; clusters: number; path: string }
+
+const setBytes = (name: string) => 32 * (2 + Math.ceil(name.length / 15));
 
 export interface ExfatPlan {
   /** Pieces from the first sector of the volume to the end of the last file. */
@@ -100,7 +105,7 @@ function timestamp(d: Date): number {
     | d.getUTCHours() << 11 | d.getUTCMinutes() << 5 | (d.getUTCSeconds() >> 1)) >>> 0;
 }
 
-function fileEntrySet(name: string, firstCluster: number, size: number, when: Date): Uint8Array {
+function fileEntrySet(name: string, firstCluster: number, size: number, when: Date, dir = false): Uint8Array {
   if (!/^[\x20-\x7e]+$/.test(name) || /[\\/:*?"<>|]/.test(name) || name.length > 255) throw new Error(`bad file name ${name}`);
   const nameEntries = Math.ceil(name.length / 15);
   const set = new Uint8Array(32 * (2 + nameEntries));
@@ -108,7 +113,7 @@ function fileEntrySet(name: string, firstCluster: number, size: number, when: Da
   const ts = timestamp(when);
   set[0] = 0x85;
   set[1] = 1 + nameEntries;
-  dv.setUint16(4, 0x20, true); // archive
+  dv.setUint16(4, dir ? 0x10 : 0x20, true); // directory or archive
   dv.setUint32(8, ts, true);
   dv.setUint32(12, ts, true);
   dv.setUint32(16, ts, true);
@@ -153,7 +158,28 @@ export function buildExfat(o: ExfatOptions): ExfatPlan {
     if (f.source.size === 0) throw new Error(`${f.name} is empty`);
     return clustersFor(f.source.size);
   });
-  const dataClusters = fileClusters.reduce((a, b) => a + b, 0);
+  // The directory tree; each directory's entries decide its size.
+  const root: DirNode = { name: '', dirs: [], files: [], first: 0, clusters: 0, path: '' };
+  o.files.forEach((f, i) => {
+    const parts = f.name.split('/').filter(Boolean);
+    let d = root;
+    for (const part of parts.slice(0, -1)) {
+      let c = d.dirs.find((x) => x.name.toLowerCase() === part.toLowerCase());
+      if (!c) { c = { name: part, dirs: [], files: [], first: 0, clusters: 0, path: `${d.path}${part}/` }; d.dirs.push(c); }
+      d = c;
+    }
+    d.files.push(i);
+  });
+  const leaf = (i: number) => o.files[i].name.split('/').filter(Boolean).pop()!;
+  const allDirs: DirNode[] = [];
+  const walk = (d: DirNode) => { allDirs.push(d); d.dirs.forEach(walk); };
+  walk(root);
+  for (const d of allDirs) {
+    const bytes = (d === root ? 96 : 0) + d.dirs.reduce((a, x) => a + setBytes(x.name), 0) + d.files.reduce((a, i) => a + setBytes(leaf(i)), 0);
+    d.clusters = clustersFor(Math.max(bytes, 32));
+  }
+  const dirClusters = allDirs.reduce((a, d) => a + d.clusters, 0);
+  const dataClusters = fileClusters.reduce((a, b) => a + b, 0) + dirClusters;
   const slackClusters = Math.ceil((o.slack ?? 16 << 20) / clusterBytes);
 
   // Sizes depend on the cluster count and the other way round; two rounds settle it.
@@ -164,9 +190,10 @@ export function buildExfat(o: ExfatOptions): ExfatPlan {
   let heapOffset = 0;
   for (let round = 0; round < 3; round++) {
     bitmapClusters = clustersFor(Math.ceil(clusterCount / 8));
-    fatLength = Math.ceil(((clusterCount + 2) * 4) / SECTOR);
+    // Room for the clusters the 1 MiB rounding of the volume adds (at most 32).
+    fatLength = Math.ceil(((clusterCount + 2 + 64) * 4) / SECTOR);
     heapOffset = Math.ceil((fatOffset + fatLength) / 2048) * 2048;
-    clusterCount = bitmapClusters + clustersFor(up.length) + 1 + dataClusters + slackClusters;
+    clusterCount = bitmapClusters + clustersFor(up.length) + dataClusters + slackClusters;
   }
   const volumeSectors = Math.ceil((heapOffset + clusterCount * spc) / 2048) * 2048;
   clusterCount = Math.floor((volumeSectors - heapOffset) / spc);
@@ -180,7 +207,8 @@ export function buildExfat(o: ExfatOptions): ExfatPlan {
   const alloc = (n: number) => { const first = next; next += n; return first; };
   const bitmapFirst = alloc(bitmapClusters);
   const upFirst = alloc(clustersFor(up.length));
-  const rootFirst = alloc(1);
+  for (const d of allDirs) d.first = alloc(d.clusters);
+  const rootFirst = root.first;
   const fileFirst = fileClusters.map((n) => alloc(n));
   const used = next - 2;
   if (used > clusterCount) throw new Error('files do not fit the exFAT volume');
@@ -195,35 +223,44 @@ export function buildExfat(o: ExfatOptions): ExfatPlan {
   };
   chain(bitmapFirst, bitmapClusters);
   chain(upFirst, clustersFor(up.length));
-  chain(rootFirst, 1);
+  for (const d of allDirs) chain(d.first, d.clusters);
   fileFirst.forEach((f, i) => chain(f, fileClusters[i]));
 
   const bitmap = new Uint8Array(bitmapClusters * clusterBytes);
   for (let i = 0; i < used; i++) bitmap[i >> 3] |= 1 << (i & 7);
 
-  const root = new Uint8Array(clusterBytes);
-  const rdv = new DataView(root.buffer);
-  let at = 0;
-  const label = o.label.slice(0, 11);
-  root[at] = 0x83;
-  root[at + 1] = label.length;
-  for (let j = 0; j < label.length; j++) rdv.setUint16(at + 2 + j * 2, label.charCodeAt(j), true);
-  at += 32;
-  root[at] = 0x81;
-  rdv.setUint32(at + 20, bitmapFirst, true);
-  rdv.setBigUint64(at + 24, BigInt(Math.ceil(clusterCount / 8)), true);
-  at += 32;
-  root[at] = 0x82;
-  rdv.setUint32(at + 4, tableChecksum(up), true);
-  rdv.setUint32(at + 20, upFirst, true);
-  rdv.setBigUint64(at + 24, BigInt(up.length), true);
-  at += 32;
-  for (const [i, f] of o.files.entries()) {
-    const set = fileEntrySet(f.name, fileFirst[i], f.source.size, when);
-    if (at + set.length > root.length) throw new Error('too many files for one directory cluster');
-    root.set(set, at);
-    at += set.length;
-  }
+  const dirBytes = (d: DirNode): Uint8Array => {
+    const buf = new Uint8Array(d.clusters * clusterBytes);
+    const dv = new DataView(buf.buffer);
+    let at = 0;
+    if (d === root) {
+      const label = o.label.slice(0, 11);
+      buf[at] = 0x83;
+      buf[at + 1] = label.length;
+      for (let j = 0; j < label.length; j++) dv.setUint16(at + 2 + j * 2, label.charCodeAt(j), true);
+      at += 32;
+      buf[at] = 0x81;
+      dv.setUint32(at + 20, bitmapFirst, true);
+      dv.setBigUint64(at + 24, BigInt(Math.ceil(clusterCount / 8)), true);
+      at += 32;
+      buf[at] = 0x82;
+      dv.setUint32(at + 4, tableChecksum(up), true);
+      dv.setUint32(at + 20, upFirst, true);
+      dv.setBigUint64(at + 24, BigInt(up.length), true);
+      at += 32;
+    }
+    for (const c of d.dirs) {
+      const set = fileEntrySet(c.name, c.first, c.clusters * clusterBytes, when, true);
+      buf.set(set, at);
+      at += set.length;
+    }
+    for (const i of d.files) {
+      const set = fileEntrySet(leaf(i), fileFirst[i], o.files[i].source.size, when);
+      buf.set(set, at);
+      at += set.length;
+    }
+    return buf;
+  };
 
   const boot = new Uint8Array(12 * SECTOR);
   const bdv = new DataView(boot.buffer);
@@ -261,7 +298,7 @@ export function buildExfat(o: ExfatOptions): ExfatPlan {
     { kind: 'zero', length: heap - (fatOffset + fatLength) * SECTOR },
     { kind: 'bytes', data: bitmap },
     { kind: 'bytes', data: upPadded },
-    { kind: 'bytes', data: root },
+    ...allDirs.map((d) => ({ kind: 'bytes' as const, data: dirBytes(d) })),
   ];
   const files: ExfatPlan['files'] = [];
   for (const [i, f] of o.files.entries()) {

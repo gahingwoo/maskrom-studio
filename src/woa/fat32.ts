@@ -134,6 +134,23 @@ export class FatVolume {
     return { cluster: hit.cluster, size: hit.size, isDir: (hit.attr & 0x10) !== 0, entryOffset: hit.entryOffset };
   }
 
+  /** Every file under a directory, as paths ("woa-drivers/dwcsdhc/dwcsdhc.cat"). */
+  listFiles(dir: string): string[] {
+    const d = this.find(dir);
+    if (!d || !d.isDir) return [];
+    const out: string[] = [];
+    const walk = (cluster: number, prefix: string, depth: number) => {
+      if (depth > 16) return;
+      for (const e of this.list(cluster)) {
+        if (e.short === '.' || e.short === '..') continue;
+        if (e.attr & 0x10) walk(e.cluster, `${prefix}${e.long}/`, depth + 1);
+        else out.push(`${prefix}${e.long}`);
+      }
+    };
+    walk(d.cluster, `${dir.replace(/\/$/, '')}/`, 0);
+    return out;
+  }
+
   readFile(path: string): Uint8Array {
     const f = this.find(path);
     if (!f || f.isDir) throw new Error(`${path} is not a file on the volume`);

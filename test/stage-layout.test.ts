@@ -35,6 +35,7 @@ function fakeWinpe(dir: string): string {
   put('EFI/Boot/bootaa64.efi', Buffer.alloc(1804232, 1));
   put('sources/boot.wim', Buffer.alloc(3 << 20, 2));
   put('woa-drivers/dwcsdhc/dwcsdhc.inf', '[Version]\r\n');
+  put('woa-drivers/dwcsdhc/dwcsdhc.cat', readFileSync(join(__dirname, 'fixtures', 'woa-rk3576-0.1.1-dwcsdhc.cat')));
   put('woa-debug/collect.cmd', Buffer.alloc(14566, 'r'));
   const img = join(dir, 'winpe.img');
   execFileSync('truncate', ['-s', String(66 << 20), img]);
@@ -53,7 +54,14 @@ describe('staged install layout', () => {
     const dir = mkdtempSync(join(tmpdir(), 'stage-'));
     const winpe = process.env.WOA_WINPE_IMG && existsSync(process.env.WOA_WINPE_IMG) ? process.env.WOA_WINPE_IMG : fakeWinpe(dir);
     const diskBytes = 62008590336;
-    const plan = planStage({ board, diskBytes, head, winpe: fileSource(winpe), image, rand, appVersion: 'test' });
+    const plan = planStage({
+      board, diskBytes, head, winpe: fileSource(winpe), image, rand, appVersion: 'test',
+      setup: { skipSetup: { user: 'woa', password: 'secret', computerName: '', locale: '', keyboard: '', timeZone: '', autoLogonAlways: false }, ssh: true, sshKey: '' },
+      extras: [{ path: 'openssh/sshd.exe', data: new Uint8Array(1000).fill(3) }, { path: 'openssh/install-sshd.ps1', data: new TextEncoder().encode('# x') }],
+    });
+    expect(plan.certificates).toContain('FE74B735711614F79FDC6A0F58348419522857F3');
+    expect(plan.ini).toMatch(/skip_setup=1\r\nssh=1\r\n/);
+    expect(plan.ini).not.toContain('secret');
     expect(plan.regions[plan.regions.length - 1].lba).toBe(0);
     expect(plan.windowsBytes).toBeGreaterThan(55e9);
     expect(plan.removed.map((p) => p.name)).toEqual(['data']);

@@ -25,6 +25,8 @@ import { buildExfat } from './exfat';
 import { bytesSource, concatSource, patchedSource, sliceSource, type ByteSource } from './pieces';
 import { crlf, INSTALL, LAUNCHER } from './stage-scripts';
 import type { WoaBoard } from './boards';
+import { certsCmd, trustedCerts } from './certs';
+import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
 
 const ALIGN = 2048; // 1 MiB
 /** Windows 11 23H2 applied with /Compact takes about 10 GB; leave room for updates and a page file. */
@@ -60,6 +62,13 @@ export interface StageInput {
   rand: (n: number) => Uint8Array;
   appVersion: string;
   now?: Date;
+  /** First start and SSH; defaults to Windows' own setup and no SSH. */
+  setup?: SetupOptions;
+  /**
+   * More files for the staging volume: "openssh/..." (the release files, when
+   * SSH is on) and "extra-drivers/..." (driver packages the user added).
+   */
+  extras?: Array<{ path: string; data: Uint8Array }>;
 }
 
 export interface StagePlan {
@@ -75,6 +84,8 @@ export interface StagePlan {
   /** What is on the eMMC now besides the firmware: it is removed. */
   removed: GptPartition[];
   ini: string;
+  /** Thumbprints of the certificates the installed Windows will trust. */
+  certificates: string[];
 }
 
 export class StageError extends Error {}
@@ -137,10 +148,32 @@ export function planStage(o: StageInput): StagePlan {
 
   // The staging data volume. Its size does not depend on where it goes, and
   // the script's numbers do not change its cluster count, so two passes settle it.
+  // The drivers' test certificates: WinPE's driver catalogs and those of the extra drivers.
+  const setup = o.setup ?? { skipSetup: null, ssh: false, sshKey: '' };
+  const extras = (o.extras ?? []).filter((e) => e.data.length > 0);
+  for (const e of extras) {
+    if (!/^(openssh|extra-drivers)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
+      throw new StageError(`${e.path} cannot go on the staging volume.`);
+    }
+  }
+  if (setup.ssh && !extras.some((e) => e.path === 'openssh/sshd.exe')) throw new StageError('SSH is on, but the OpenSSH files are missing.');
+  const catalogs = [
+    ...fat.listFiles('woa-drivers').filter((p) => /\.cat$/i.test(p)).map((p) => fat.readFile(p)),
+    ...extras.filter((e) => /^extra-drivers\/.*\.cat$/i.test(e.path)).map((e) => e.data),
+  ];
+  const certs = trustedCerts(catalogs);
+  const generated = [
+    ...(certs.length ? [{ name: 'woa-certs.cmd', source: bytesSource(crlf(certsCmd(certs))) }] : []),
+    { name: 'SetupComplete.cmd', source: bytesSource(crlf(setupComplete(setup))) },
+    ...(setup.skipSetup ? [{ name: 'unattend.xml', source: bytesSource(crlf(unattendXml(setup.skipSetup))) }] : []),
+    ...(setup.ssh && setup.sshKey.trim() ? [{ name: 'ssh-key/administrators_authorized_keys', source: bytesSource(crlf(`${setup.sshKey.trim()}\n`)) }] : []),
+  ];
   const files = (ini: string) => [
     { name: o.image.name, source: o.image.source },
     { name: 'woa-stage.ini', source: bytesSource(new TextEncoder().encode(ini)) },
     { name: 'woa-stage.cmd', source: bytesSource(crlf(INSTALL)) },
+    ...generated,
+    ...extras.filter((e) => setup.ssh || !e.path.startsWith('openssh/')).map((e) => ({ name: e.path, source: bytesSource(e.data) })),
   ];
   const iniFor = (bootFirst: number, dataFirst: number) => stageIni({
     tool: `WoA RK3576 Imager ${o.appVersion}`,
@@ -157,6 +190,9 @@ export function planStage(o: StageInput): StagePlan {
     index: o.image.index,
     edition: o.image.edition.replace(/[^\x20-\x7e]/g, '?'),
     build: o.image.build,
+    skip_setup: setup.skipSetup ? 1 : 0,
+    ssh: setup.ssh ? 1 : 0,
+    certificates: certs.map((c) => c.thumbprint).join(' ') || 'none',
   });
   const when = o.now ?? new Date();
   const first = buildExfat({ files: files(iniFor(0, 0)), label: 'WOASTAGE', partitionOffset: 0, serial, when });
@@ -203,7 +239,7 @@ export function planStage(o: StageInput): StagePlan {
     if (r.lba !== 0 && r.lba < WINDOWS_FIRST_LBA) throw new StageError(`${r.label} would overwrite the firmware`);
   }
   return {
-    regions, diskGuid, bootFirst, dataFirst, windowsBytes, removed, ini,
+    regions, diskGuid, bootFirst, dataFirst, windowsBytes, removed, ini, certificates: certs.map((c) => c.thumbprint),
     totalBytes: regions.reduce((s, r) => s + r.source.size, 0),
   };
 }

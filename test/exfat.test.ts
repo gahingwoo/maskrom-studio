@@ -26,6 +26,10 @@ describe('exFAT builder', () => {
     { name: 'woa-stage.ini', source: bytesSource(new TextEncoder().encode('[stage]\r\nindex=6\r\n')) },
     { name: 'install.wim', source: bytesSource(pattern(5 * 1024 * 1024 + 123, 7)) },
     { name: 'a-name-that-is-longer-than-fifteen-characters.cmd', source: bytesSource(pattern(40000, 3)) },
+    { name: 'openssh/sshd.exe', source: bytesSource(pattern(70000, 4)) },
+    { name: 'openssh/install-sshd.ps1', source: bytesSource(pattern(2000, 5)) },
+    { name: 'extra-drivers/mali/sub/driver.inf', source: bytesSource(pattern(300, 6)) },
+    ...Array.from({ length: 60 }, (_, i) => ({ name: `extra-drivers/many/file-number-${i}-with-a-long-name.bin`, source: bytesSource(pattern(10 + i, i)) })),
   ];
   const plan = buildExfat({ files, label: 'WOASTAGE', partitionOffset: 2048, serial: 0x12345678 });
   const image = new Uint8Array(plan.volumeSectors * 512);

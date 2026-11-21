@@ -32,3 +32,6 @@ html, body, #root { height: 100%; }
 /* PatternFly leaves focus to the browser's outline (inset on a search box);
    give it PatternFly's focus colour instead of the system accent. */
 :focus-visible { outline-color: var(--pf-t--global--focus-ring--color--default); }
+
+/* The Windows setup form: fields at a readable width. */
+.setup-form { max-width: 44rem; }

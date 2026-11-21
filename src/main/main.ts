@@ -23,6 +23,10 @@ import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './wind
 import { firmwareRelease, FIRMWARE_REPO, latestRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type WinpeRelease } from '../woa/releases';
 import type { BoardId } from '../woa/boards';
 import type { BoardJob } from '../helper/board-write';
+import { OPENSSH, type SetupOptions } from '../woa/setup-files';
+import { unzip } from '../woa/zip';
+import { inflateRawSync } from 'node:zlib';
+import { readdirSync } from 'node:fs';
 
 registerScheme();
 
@@ -252,6 +256,65 @@ ipcMain.handle('woa:serve-windows', (_e, token: string) => {
   return serve(img.path, img.fileName);
 });
 
+// --- what goes with the image: OpenSSH, extra drivers -------------------------------
+
+/** The OpenSSH release files, from the pinned Win32-OpenSSH zip (downloaded once, checked). */
+async function opensshFiles(wc: WebContents, signal: AbortSignal): Promise<Array<{ path: string; data: Uint8Array }>> {
+  const zip = await fetchImage({ ...OPENSSH, sample: false }, cacheDir(), (p) => sendProgress(wc, p), signal);
+  return unzip(new Uint8Array(readFileSync(zip)), (d) => new Uint8Array(inflateRawSync(d)))
+    .filter((e) => e.path.startsWith(OPENSSH.root) && e.data.length > 0)
+    .map((e) => ({ path: `openssh/${e.path.slice(OPENSSH.root.length)}`, data: e.data }));
+}
+
+const MAX_DRIVER_BYTES = 512 << 20;
+const driverFolders = new Map<string, { dir: string; name: string; files: string[]; bytes: number }>();
+
+function readDriverFolder(dir: string): { token: string; name: string; files: number; bytes: number; infs: number } | { error: string } {
+  const files: string[] = [];
+  let bytes = 0;
+  const walk = (d: string, depth: number) => {
+    if (depth > 8) return;
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) walk(p, depth + 1);
+      else if (e.isFile()) { files.push(p); bytes += statSync(p).size; }
+    }
+  };
+  try { walk(dir, 0); } catch (err) { return { error: String((err as Error).message ?? err) }; }
+  const infs = files.filter((f) => /\.inf$/i.test(f)).length;
+  if (!infs) return { error: 'driver.noinf' };
+  if (bytes > MAX_DRIVER_BYTES || files.length > 5000) return { error: 'driver.toobig' };
+  const token = randomBytes(16).toString('hex');
+  const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'drivers';
+  driverFolders.set(token, { dir, name, files, bytes });
+  return { token, name, files: files.length, bytes, infs };
+}
+
+function driverFiles(token: string): Array<{ path: string; data: Uint8Array }> {
+  const f = driverFolders.get(token);
+  if (!f) throw new Error('Choose the driver folder again.');
+  const safe = f.name.replace(/[^A-Za-z0-9._-]/g, '_') || 'drivers';
+  return f.files.map((p) => ({
+    path: `extra-drivers/${safe}/${p.slice(f.dir.length).split(/[\\/]/).filter(Boolean).map((x) => x.replace(/[\\:*?"<>|]/g, '_')).join('/')}`,
+    data: new Uint8Array(readFileSync(p)),
+  }));
+}
+
+ipcMain.handle('woa:pick-drivers', async () => {
+  const r = await dialog.showOpenDialog(win!, { title: 'Choose a folder with driver packages (.inf, .cat, .sys)', properties: ['openDirectory'] });
+  if (r.canceled || r.filePaths.length === 0) return null;
+  return readDriverFolder(r.filePaths[0]);
+});
+
+ipcMain.handle('woa:prepare-extras', (e, o: { ssh: boolean; drivers: string | null }) => exclusive(async (signal) => {
+  try {
+    const files = [...(o.ssh ? await opensshFiles(e.sender, signal) : []), ...(o.drivers ? driverFiles(o.drivers) : [])];
+    return { files };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
 // --- this board ------------------------------------------------------------------
 
 ipcMain.handle('woa:board-here', async (): Promise<BoardHereInfo> => {
@@ -289,7 +352,9 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
+      const extras = [...(req.setup.ssh ? await opensshFiles(wc, signal) : []), ...(req.drivers ? driverFiles(req.drivers) : [])];
       bj = { kind: 'stage', device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
+        setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
           index: ed.index, edition: ed.name, build: ed.build ?? 0 } };
       total = img.imageSize + pe.size;
