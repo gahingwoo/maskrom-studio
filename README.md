@@ -15,6 +15,11 @@ ROCK 4D (firmware only; it has no eMMC).
 Status: first version, not yet run on hardware. See
 [docs/hardware-test.md](docs/hardware-test.md).
 
+<p>
+  <img src="docs/imgs/what-to-write.png" alt="The What to write step: Windows 11, the UEFI firmware as a whole image or keeping the partitions, or a WinPE USB stick, and where Windows goes" width="49%">
+  <img src="docs/imgs/review.png" alt="The Review step: board, Windows build, WinPE release, first start, SSH, drivers, what is erased and written, and how it is checked" width="49%">
+</p>
+
 ## What it does
 
 - **Windows 11 on the eMMC.** You give it a Windows 11 23H2 ARM64 ISO (or

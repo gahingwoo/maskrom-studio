@@ -8,6 +8,11 @@
 
 现状：第一个版本，还没有在实际开发板上跑过。测试步骤见 [docs/hardware-test.md](docs/hardware-test.md)（英文）。
 
+<p>
+  <img src="docs/imgs/what-to-write-zh-CN.png" alt="写入内容这一步：Windows 11、UEFI 固件（完整映像或保留分区）、WinPE 启动 U 盘，以及 Windows 装到哪里" width="49%">
+  <img src="docs/imgs/windows-setup-zh-CN.png" alt="Windows 设置这一步：首次启动走设置向导还是跳过，用户名、密码和计算机名" width="49%">
+</p>
+
 ## 能做什么
 
 - **把 Windows 11 装到 eMMC。** 你提供一个 Windows 11 23H2 ARM64 的 ISO（或其中的 install.wim / install.esd）。开发板进入 MaskROM 模式后，应用把 [woa-rk3576](https://github.com/gahingwoo/woa-rk3576) 的 WinPE 和你的 Windows 映像写进 eMMC 上固件之后的空闲空间。开发板随后从 eMMC 启动这个 WinPE，用 DISM 把 Windows 装到 eMMC 上，加入 RK3576 驱动，删掉暂存空间，再重启进入 Windows。原理和取舍见 [docs/DESIGN.md](docs/DESIGN.md)（英文）。
