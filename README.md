@@ -96,8 +96,8 @@ exfatprogs' fsck.exfat when they are installed (CI installs them).
 A fork of [Roxora Imager](https://github.com/roxora-os/imager), keeping its
 history; the `upstream` remote points there. The board list and firmware
 sectors are [edk2-webflash](https://github.com/gahingwoo/edk2-webflash)'s,
-copied unchanged. Which parts are shared and which are new:
-[CLAUDE.md](CLAUDE.md).
+copied unchanged. How it is put together and why:
+[docs/DESIGN.md](docs/DESIGN.md).
 
 ## License
 

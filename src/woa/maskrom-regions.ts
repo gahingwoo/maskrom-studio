@@ -52,7 +52,7 @@ export interface RegionJob {
   spotCheck: boolean;
   resetAfter: boolean;
   reconnectTimeout?: number;
-  /** Wait after db before the next command, as on real RK3576 boards (CLAUDE.md). */
+  /** Wait after db before the next command, as on real RK3576 boards. */
   afterLoaderMs?: number;
 }
 
