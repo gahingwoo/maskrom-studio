@@ -5,7 +5,7 @@
 // eMMC whose partition table is not the edk2-rk3576 layout, where writing
 // only the firmware part would leave a board that does not start.
 
-import { prepare } from '../web/webflash/flash';
+import { checkSettingsSlot, prepare } from '../web/webflash/flash';
 import type { WebflashTarget } from '../web/webflash/boards';
 import type { WoaBoard } from './boards';
 import { findFirmwarePartition, parsePrimaryGpt, type GptPartition } from './gpt';
@@ -24,15 +24,28 @@ export interface FirmwareSummary {
 }
 
 /** edk2-webflash's prepare() over a ByteSource: it only needs size and slice(). */
-function blobLike(src: ByteSource): { size: number; slice(a: number, b: number): { size: number; src: ByteSource } } {
-  return { size: src.size, slice: (a, b) => ({ size: b - a, src: sliceSource(src, a, b - a) }) };
+function blobLike(src: ByteSource): { size: number; slice(a: number, b: number): { size: number; src: ByteSource; arrayBuffer(): Promise<ArrayBuffer> } } {
+  return {
+    size: src.size,
+    slice: (a, b) => {
+      const end = Math.min(b, src.size), start = Math.min(a, end);
+      return {
+        size: end - start,
+        src: sliceSource(src, start, end - start),
+        arrayBuffer: async () => { const u = src.read(start, end - start); return u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer; },
+      };
+    },
+  };
 }
 
-export function firmwareRegions(board: WoaBoard, target: WebflashTarget, image: ByteSource,
-  probe: { capacity: number | null; head: Uint8Array | null }): { regions: Region[]; summary: FirmwareSummary } | { stop: string } {
+export async function firmwareRegions(board: WoaBoard, target: WebflashTarget, image: ByteSource,
+  probe: { capacity: number | null; head: Uint8Array | null }): Promise<{ regions: Region[]; summary: FirmwareSummary } | { stop: string }> {
   let part: { size: number; src?: ByteSource };
   try {
     part = prepare(board.webflash, target, blobLike(image));
+    // As edk2-webflash's runFlash() does: a write that keeps the saved UEFI
+    // settings must stop exactly where the image's nvdata slot starts.
+    if (target.keepsSettings) await checkSettingsSlot(blobLike(image), target, target.keepsSettings);
   } catch (e) {
     return { stop: String((e as Error).message) };
   }

@@ -277,7 +277,7 @@ export async function runBoardJob(job: BoardJob, send: (m: HelperMessage) => voi
       if (!target) return fail(`Unknown firmware choice ${job.targetId}.`);
       const img = fileSource(job.image);
       open.push(img);
-      const r = firmwareRegions(board, target, img, { capacity, head: new Uint8Array(head) });
+      const r = await firmwareRegions(board, target, img, { capacity, head: new Uint8Array(head) });
       if ('stop' in r) return fail(r.stop);
       regions = r.regions;
     }

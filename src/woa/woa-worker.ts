@@ -148,7 +148,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
         loader, readHead: board.firmwareStorage === 'emmc', spotCheck: job.spotCheck, resetAfter: job.resetAfter,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
         plan: async (p) => {
-          const r = firmwareRegions(board, target, image, p);
+          const r = await firmwareRegions(board, target, image, p);
           return 'stop' in r ? r : { regions: r.regions, summary: { kind: 'firmware', ...r.summary } };
         },
         confirm,

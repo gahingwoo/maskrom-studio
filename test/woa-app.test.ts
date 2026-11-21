@@ -18,7 +18,7 @@ describe('boards (edk2-webflash data)', () => {
   it('keeps edk2-webflash\'s firmware sectors', () => {
     const t = woaBoard('tspi3m')!;
     expect(firmwareTargets(t).map((x) => [x.id, x.lba, x.slice ?? null])).toEqual([
-      ['uefi', 0, null], ['uefi-keep', 16384, [16384 * 512, (16384 + 27264) * 512]],
+      ['uefi', 0, null], ['uefi-keep', 64, [64 * 512, 43648 * 512]],
     ]);
     expect(firmwareTargets(woaBoard('cm5io')!).find((x) => x.id === 'uefi-keep')!.lba).toBe(64);
     expect(firmwareTargets(woaBoard('rock4d')!).map((x) => x.id)).toEqual(['uefi']);
@@ -32,31 +32,66 @@ describe('boards (edk2-webflash data)', () => {
   });
 });
 
+// A 32 MiB eMMC image with a minimal FIT at sector 16384 whose nvdata image
+// starts at sector `nvLba`, laid out as edk2-rk3576 builds it.
+function emmcImage(nvLba = 43648): Uint8Array {
+  const enc = new TextEncoder();
+  const build = (nvOffset: number) => {
+    const words: number[] = [];
+    const node = (name: string) => {
+      words.push(1);
+      const b = enc.encode(name + '\0'); const pad = new Uint8Array((b.length + 3) & ~3); pad.set(b);
+      for (let i = 0; i < pad.length; i += 4) words.push(new DataView(pad.buffer).getUint32(i));
+    };
+    node(''); node('images'); node('nvdata'); words.push(3, 4, 0, nvOffset, 2, 2, 2, 9);
+    const strings = enc.encode('data-offset\0');
+    const offStrings = 40 + words.length * 4, total = offStrings + strings.length;
+    const buf = new Uint8Array(total), v = new DataView(buf.buffer);
+    v.setUint32(0, 0xd00dfeed); v.setUint32(4, total); v.setUint32(8, 40); v.setUint32(12, offStrings); v.setUint32(16, 40);
+    v.setUint32(20, 17); v.setUint32(24, 16); v.setUint32(32, strings.length); v.setUint32(36, words.length * 4);
+    words.forEach((w, i) => v.setUint32(40 + i * 4, w));
+    buf.set(strings, offStrings);
+    return buf;
+  };
+  const img = new Uint8Array(32 << 20).fill(1);
+  const hdr = (build(0).length + 3) & ~3;
+  img.set(build(nvLba * 512 - 16384 * 512 - hdr), 16384 * 512);
+  return img;
+}
+
 describe('firmware writes', () => {
-  const image = bytesSource(new Uint8Array(32 << 20).fill(1));
-  it('cuts "keep the partitions" as edk2-webflash does', () => {
+  const image = bytesSource(emmcImage());
+  it('cuts "keep the partitions" as edk2-webflash does', async () => {
     const b = woaBoard('tspi3m')!;
     const keep = firmwareTargets(b).find((t) => t.id === 'uefi-keep')!;
-    const r = firmwareRegions(b, keep, image, { capacity: 62008590336, head });
+    const r = await firmwareRegions(b, keep, image, { capacity: 62008590336, head });
     if ('stop' in r) throw new Error(r.stop);
-    expect(r.regions[0].lba).toBe(16384);
-    expect(r.regions[0].source.size).toBe(27264 * 512);
+    expect(r.regions[0].lba).toBe(64);
+    expect(r.regions[0].source.size).toBe((43648 - 64) * 512);
   });
-  it('refuses "keep the partitions" on an eMMC without the edk2-rk3576 layout', () => {
+  it('refuses "keep the partitions" when the image\'s settings slot is not where the write stops', async () => {
+    for (const id of ['tspi3m', 'cm5io'] as const) {
+      const b = woaBoard(id)!;
+      const keep = firmwareTargets(b).find((t) => t.id === 'uefi-keep')!;
+      expect(await firmwareRegions(b, keep, bytesSource(emmcImage(43650)), { capacity: 62008590336, head })).toMatchObject({ stop: expect.stringMatching(/cannot keep the settings/) });
+      expect(await firmwareRegions(b, keep, bytesSource(new Uint8Array(32 << 20)), { capacity: 62008590336, head })).toMatchObject({ stop: expect.stringMatching(/no FIT/) });
+    }
+  });
+  it('refuses "keep the partitions" on an eMMC without the edk2-rk3576 layout', async () => {
     const b = woaBoard('cm5io')!;
     const keep = firmwareTargets(b).find((t) => t.id === 'uefi-keep')!;
-    expect(firmwareRegions(b, keep, image, { capacity: 31272730624, head: new Uint8Array(34 * 512) })).toMatchObject({ stop: expect.stringMatching(/whole image/) });
+    expect(await firmwareRegions(b, keep, image, { capacity: 31272730624, head: new Uint8Array(34 * 512) })).toMatchObject({ stop: expect.stringMatching(/whole image/) });
   });
-  it('says which partitions the whole image drops', () => {
+  it('says which partitions the whole image drops', async () => {
     const b = woaBoard('tspi3m')!;
     const whole = firmwareTargets(b).find((t) => t.id === 'uefi')!;
-    const r = firmwareRegions(b, whole, image, { capacity: 62008590336, head });
+    const r = await firmwareRegions(b, whole, image, { capacity: 62008590336, head });
     if ('stop' in r) throw new Error(r.stop);
     expect(r.summary.dropped.map((d) => d.name)).toEqual(['data']);
   });
-  it('refuses an image larger than the ROCK 4D SPI NOR', () => {
+  it('refuses an image larger than the ROCK 4D SPI NOR', async () => {
     const b = woaBoard('rock4d')!;
-    expect(firmwareRegions(b, firmwareTargets(b)[0], bytesSource(new Uint8Array(17 << 20)), { capacity: null, head: null })).toHaveProperty('stop');
+    expect(await firmwareRegions(b, firmwareTargets(b)[0], bytesSource(new Uint8Array(17 << 20)), { capacity: null, head: null })).toHaveProperty('stop');
   });
 });
 

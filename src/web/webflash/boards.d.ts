@@ -6,6 +6,8 @@ export interface WebflashTarget {
   file?: string;
   lba: number;
   slice?: [number, number];
+  /** Set on a write that stops before the FIT's nvdata slot, so the saved UEFI settings stay. */
+  keepsSettings?: { fitLba: number; nvdataLba: number };
   note?: string;
   erases: string;
   done: string;
