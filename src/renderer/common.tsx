@@ -14,6 +14,8 @@ import { formatBytes } from '../shared/format';
 import type { ImagerApi } from '../shared/ipc';
 import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
 import type { Theme } from './theme';
+import { useI18n } from './i18n';
+import { LANG_NAMES, LANGS, type T } from '../shared/i18n';
 
 declare global {
   interface Window { imager: ImagerApi }
@@ -26,6 +28,8 @@ export const api = window.imager;
  * nav running the full height and its footer pinned to the bottom.
  */
 export function Shell({ children, onSettings }: { children: React.ReactNode; onSettings: () => void }) {
+  const { t, lang, setLang } = useI18n();
+  const other = lang === 'en' ? 'zh-CN' : 'en';
   const masthead = (
     <Masthead display={{ default: 'inline' }}>
       <MastheadMain>
@@ -41,7 +45,10 @@ export function Shell({ children, onSettings }: { children: React.ReactNode; onS
           <ToolbarContent>
             <ToolbarGroup align={{ default: 'alignEnd' }}>
               <ToolbarItem>
-                <Button variant="plain" icon={<CogIcon />} onClick={onSettings}>Settings</Button>
+                <Button variant="plain" className="lang-switch" lang={other} onClick={() => setLang(other)}>{LANG_NAMES[other]}</Button>
+              </ToolbarItem>
+              <ToolbarItem>
+                <Button variant="plain" icon={<CogIcon />} onClick={onSettings}>{t('settings')}</Button>
               </ToolbarItem>
             </ToolbarGroup>
           </ToolbarContent>
@@ -69,11 +76,11 @@ export function StepPage({ title, lead, notices, children }: {
 }
 
 export function DriversNote() {
+  const { t } = useI18n();
   if (api.platform === 'win32') {
     return (
       <Content component="p">
-        Windows needs the WinUSB driver for the board in Maskrom mode. Install it once with Zadig: choose the
-        device with ID 2207 in Zadig's list, select WinUSB and click Install Driver.{' '}
+        {t('drivers.windows')}{' '}
         <Button variant="link" isInline component="a" href="https://zadig.akeo.ie/" target="_blank">zadig.akeo.ie</Button>
       </Content>
     );
@@ -81,15 +88,12 @@ export function DriversNote() {
   if (api.platform === 'linux') {
     return (
       <>
-        <Content component="p">
-          The .deb and .rpm packages install a udev rule that lets you use the board without root. With the
-          AppImage, add the rule once:
-        </Content>
+        <Content component="p">{t('drivers.linux')}</Content>
         <CopyBlock text={'echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"\' | sudo tee /etc/udev/rules.d/70-woa-rk3576-imager.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger'} />
       </>
     );
   }
-  return <Content component="p">macOS needs no driver.</Content>;
+  return <Content component="p">{t('drivers.mac')}</Content>;
 }
 
 /** Copy text: through the main process in the desktop app (the page has no clipboard permission), else the browser's clipboard. */
@@ -103,6 +107,7 @@ export function copyText(text: string): void {
  * "Copied" for a moment: feedback that does not depend on a tooltip.
  */
 export function CopyBlock({ text }: { text: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return undefined;
@@ -112,7 +117,7 @@ export function CopyBlock({ text }: { text: string }) {
   const actions = (
     <CodeBlockAction>
       <Button variant="link" className="copy-button" aria-live="polite" onClick={() => { copyText(text); setCopied(true); }}>
-        {copied ? 'Copied' : 'Copy'}
+        {copied ? t('copied') : t('copy')}
       </Button>
     </CodeBlockAction>
   );
@@ -120,21 +125,21 @@ export function CopyBlock({ text }: { text: string }) {
 }
 
 /** What pressing Update will do, by how this copy was installed. Shown before anything is downloaded. */
-function updatePlan(o: UpdateOffer): string {
+function updatePlan(o: UpdateOffer, t: T): string {
   const file = o.asset ? `${o.asset.name} (${formatBytes(o.asset.size)})` : '';
-  const checked = 'checks it against the SHA-256 GitHub lists for it';
   switch (o.kind) {
-    case 'brew': return 'This copy was installed with Homebrew. WoA RK3576 Imager runs Homebrew for you: "brew update", then "brew upgrade --cask woa-rk3576-imager". You then restart the app.';
-    case 'dmg': return `WoA RK3576 Imager downloads ${file} to your Downloads folder, ${checked}, and puts the new app in place of this one. You then restart the app.`;
-    case 'windows': return `WoA RK3576 Imager downloads the installer ${file}, ${checked}, then closes and starts the installer.`;
-    case 'appimage': return `WoA RK3576 Imager downloads ${file}, ${checked}, and puts it in place of the AppImage you are running. You then restart the app.`;
-    case 'deb': case 'rpm': return `WoA RK3576 Imager downloads ${file}, ${checked}, and installs it with the system's package manager, which asks for your password. You then restart the app.`;
+    case 'brew': return t('update.plan.brew');
+    case 'dmg': return t('update.plan.dmg', { file });
+    case 'windows': return t('update.plan.windows', { file });
+    case 'appimage': return t('update.plan.appimage', { file });
+    case 'deb': case 'rpm': return t('update.plan.pkg', { file });
     default: return '';
   }
 }
 
 /* The update itself: nothing is downloaded before the button in here is pressed. */
 export function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onClose: () => void }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ bytes: number; total: number } | null>(null);
   const [stage, setStage] = useState('download');
@@ -164,47 +169,36 @@ export function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onC
   const notes = <Button variant="link" isInline component="a" href={offer.url} target="_blank">Release notes</Button>;
   // Once the app itself is being replaced there is no stopping half way.
   const canCancel = stage === 'download' || stage === 'brew-update';
-  const working: Record<string, string> = {
-    'brew-update': 'Homebrew is looking for the new version',
-    'brew-upgrade': 'Homebrew is installing the new version. Do not quit WoA RK3576 Imager.',
-    install: 'Putting the new app in place. Do not quit WoA RK3576 Imager.',
-  };
   return (
     <Modal isOpen onClose={close} variant="small" aria-labelledby="update-title">
-      <ModalHeader title={`Update to WoA RK3576 Imager ${offer.version}${offer.beta ? ' (beta)' : ''}`} labelId="update-title" />
+      <ModalHeader title={t('update.title', { version: `${offer.version}${offer.beta ? ' (beta)' : ''}` })} labelId="update-title" />
       <ModalBody>
         <Stack hasGutter>
           {brew && !canInstall && (
             <>
-              <Content component="p">This copy was installed with Homebrew. Update it in Terminal with:</Content>
+              <Content component="p">{t('update.brewManual')}</Content>
               <CopyBlock text="brew upgrade --cask woa-rk3576-imager" />
             </>
           )}
           {apt && (
             <>
-              <Content component="p">
-                This copy was installed from a package repository, and the system's software updates keep it up to date.
-                WoA RK3576 Imager {offer.version} comes with them once the repository has it. To update now, in a terminal:
-              </Content>
+              <Content component="p">{t('update.apt', { version: offer.version })}</Content>
               <CopyBlock text={APT_COMMAND} />
             </>
           )}
           {!brew && !apt && !canInstall && (
-            <Content component="p">
-              The app cannot update this copy itself{offer.kind === 'none' ? '' : ': the release has no package for this computer'}.
-              Get the new version from the release page.
-            </Content>
+            <Content component="p">{t('update.cannot')}</Content>
           )}
-          {canInstall && !busy && !result && <Content component="p">{updatePlan(offer)}</Content>}
+          {canInstall && !busy && !result && <Content component="p">{updatePlan(offer, t)}</Content>}
           {busy && stage === 'download' && progress && (
-            <Progress title={`Downloading ${offer.asset?.name ?? ''}`} measureLocation={ProgressMeasureLocation.top}
+            <Progress title={t('update.downloading', { name: offer.asset?.name ?? '' })} measureLocation={ProgressMeasureLocation.top}
               value={progress.total ? Math.min(100, Math.floor(progress.bytes * 100 / progress.total)) : 0}
-              label={`${formatBytes(progress.bytes)} of ${formatBytes(progress.total)}`} />
+              label={t('run.of', { done: formatBytes(progress.bytes), total: formatBytes(progress.total) })} />
           )}
           {busy && stage !== 'download' && (
             <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }} flexWrap={{ default: 'nowrap' }}>
               <FlexItem flex={{ default: 'flexNone' }}><Spinner size="md" aria-label="Working" /></FlexItem>
-              <FlexItem>{working[stage] ?? 'Installing'}</FlexItem>
+              <FlexItem>{t('update.working')}</FlexItem>
             </Flex>
           )}
           {result && (
@@ -212,7 +206,7 @@ export function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onC
           )}
           {result && !result.ok && result.command && <CopyBlock text={result.command} />}
           {log && (
-            <ExpandableSection toggleText="Output" className="log">
+            <ExpandableSection toggleText={t('update.output')} className="log">
               <CodeBlock><CodeBlockCode>{log}</CodeBlockCode></CodeBlock>
             </ExpandableSection>
           )}
@@ -220,23 +214,21 @@ export function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onC
         </Stack>
       </ModalBody>
       <ModalFooter>
-        {canInstall && !busy && !result && <Button variant="primary" onClick={start}>{brew ? 'Update with Homebrew' : 'Download and install'}</Button>}
-        {busy && canCancel && <Button variant="secondary" onClick={() => api.cancelUpdate?.()}>Cancel</Button>}
-        {result?.ok && result.restart && <Button variant="primary" onClick={() => api.restartApp?.()}>Restart now</Button>}
-        {result && !result.ok && canInstall && <Button variant="secondary" onClick={start}>Try again</Button>}
-        {!busy && <Button variant="link" onClick={close}>{result?.ok && result.restart ? 'Later' : result || !canInstall ? 'Close' : 'Cancel'}</Button>}
+        {canInstall && !busy && !result && <Button variant="primary" onClick={start}>{t('update.install')}</Button>}
+        {busy && canCancel && <Button variant="secondary" onClick={() => api.cancelUpdate?.()}>{t('cancel')}</Button>}
+        {result?.ok && result.restart && <Button variant="primary" onClick={() => api.restartApp?.()}>{t('update.restart')}</Button>}
+        {result && !result.ok && canInstall && <Button variant="secondary" onClick={start}>{t('update.retry')}</Button>}
+        {!busy && <Button variant="link" onClick={close}>{result?.ok && result.restart ? t('update.later') : result || !canInstall ? t('close') : t('cancel')}</Button>}
       </ModalFooter>
     </Modal>
   );
 }
 
 /** The answer to "Check now", in a sentence. */
-function checkWords(c: UpdateCheck): string {
+function checkWords(c: UpdateCheck, t: T): string {
   if (c.state === 'error') return c.message;
-  if (c.state === 'newer') return `WoA RK3576 Imager ${c.offer.version}${c.offer.beta ? ' (beta)' : ''} is available.`;
-  const beta = c.newerBeta ? ` A newer beta, ${c.newerBeta}, is out; turn on beta versions to be offered it.` : '';
-  return (c.beta ? `You have ${c.version}, a beta version. There is no newer normal release yet.`
-    : `You have the newest version (${c.version}).`) + beta;
+  if (c.state === 'newer') return t('update.newer', { version: `${c.offer.version}${c.offer.beta ? ' (beta)' : ''}` });
+  return c.beta ? t('update.betaCurrent', { version: c.version }) : t('update.current', { version: c.version });
 }
 
 type AppSettings = { updateCheck: boolean; betaUpdates?: boolean; resetAfterMaskrom: boolean };
@@ -249,6 +241,7 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
   onUpdate: () => void;
   writing: boolean;
 }) {
+  const { t, lang, setLang } = useI18n();
   const [s, setS] = useState<AppSettings | null>(null);
   const [check, setCheck] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
@@ -266,47 +259,54 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
   };
   return (
     <Modal isOpen={open} onClose={onClose} variant="small" aria-labelledby="settings-title">
-      <ModalHeader title="Settings" labelId="settings-title" />
+      <ModalHeader title={t('settings')} labelId="settings-title" />
       <ModalBody>
         {s && (
           <Form onSubmit={(e) => e.preventDefault()}>
-              <FormGroup label="Updates" fieldId="updates" role="group">
+              <FormGroup label={t('settings.updates')} fieldId="updates" role="group">
                 <Stack hasGutter id="updates">
-                  <Switch id="set-update" label="Check for a new version once a day" isChecked={s.updateCheck}
+                  <Switch id="set-update" label={t('settings.updateCheck')} isChecked={s.updateCheck}
                     onChange={(_e, v) => { set({ updateCheck: v }); }} />
-                  <Switch id="set-beta" label="Also offer beta versions (pre-releases)" isChecked={s.betaUpdates === true}
+                  <Switch id="set-beta" label={t('settings.beta')} isChecked={s.betaUpdates === true}
                     onChange={(_e, v) => { set({ betaUpdates: v }).then(checkNow); }} />
                   <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
                     <FlexItem flex={{ default: 'flexNone' }}>
-                      <Button variant="secondary" onClick={checkNow} isLoading={checking} isDisabled={checking}>Check now</Button>
+                      <Button variant="secondary" onClick={checkNow} isLoading={checking} isDisabled={checking}>{t('settings.checkNow')}</Button>
                     </FlexItem>
-                    {check && <FlexItem className="update-result" aria-live="polite">{checkWords(check)}</FlexItem>}
+                    {check && <FlexItem className="update-result" aria-live="polite">{checkWords(check, t)}</FlexItem>}
                     {check?.state === 'newer' && (
-                      <FlexItem><Button variant="link" isInline isDisabled={writing} onClick={onUpdate}>Update</Button></FlexItem>
+                      <FlexItem><Button variant="link" isInline isDisabled={writing} onClick={onUpdate}>{t('settings.update')}</Button></FlexItem>
                     )}
                   </Flex>
                 </Stack>
               </FormGroup>
-            <Switch id="set-reset" label="Restart the board after a Maskrom write" isChecked={s.resetAfterMaskrom}
+            <Switch id="set-reset" label={t('settings.reset')} isChecked={s.resetAfterMaskrom}
               onChange={(_e, v) => { set({ resetAfterMaskrom: v }); }} />
-            <FormGroup label="Appearance" fieldId="appearance" role="group">
-              <ToggleGroup aria-label="Appearance" id="appearance">
-                {(['system', 'light', 'dark'] as Theme[]).map((t) => (
-                  <ToggleGroupItem key={t} text={t[0].toUpperCase() + t.slice(1)} isSelected={theme === t} onChange={() => setTheme(t)} />
+            <FormGroup label={t('settings.appearance')} fieldId="appearance" role="group">
+              <ToggleGroup aria-label={t('settings.appearance')} id="appearance">
+                {(['system', 'light', 'dark'] as Theme[]).map((th) => (
+                  <ToggleGroupItem key={th} text={t(`settings.theme.${th}`)} isSelected={theme === th} onChange={() => setTheme(th)} />
+                ))}
+              </ToggleGroup>
+            </FormGroup>
+            <FormGroup label={t('settings.language')} fieldId="language" role="group">
+              <ToggleGroup aria-label={t('settings.language')} id="language">
+                {LANGS.map((l) => (
+                  <ToggleGroupItem key={l} text={LANG_NAMES[l]} isSelected={lang === l} onChange={() => setLang(l)} />
                 ))}
               </ToggleGroup>
             </FormGroup>
             <DescriptionList isCompact isHorizontal>
-              <DescriptionListGroup><DescriptionListTerm>Version</DescriptionListTerm><DescriptionListDescription>{api.version}</DescriptionListDescription></DescriptionListGroup>
-              <DescriptionListGroup><DescriptionListTerm>License</DescriptionListTerm><DescriptionListDescription>GPL-2.0</DescriptionListDescription></DescriptionListGroup>
-              <DescriptionListGroup><DescriptionListTerm>Source</DescriptionListTerm><DescriptionListDescription>
+              <DescriptionListGroup><DescriptionListTerm>{t('settings.version')}</DescriptionListTerm><DescriptionListDescription>{api.version}</DescriptionListDescription></DescriptionListGroup>
+              <DescriptionListGroup><DescriptionListTerm>{t('settings.license')}</DescriptionListTerm><DescriptionListDescription>GPL-2.0</DescriptionListDescription></DescriptionListGroup>
+              <DescriptionListGroup><DescriptionListTerm>{t('settings.source')}</DescriptionListTerm><DescriptionListDescription>
                 <Button variant="link" isInline component="a" href="https://github.com/gahingwoo/woa-rk3576-imager" target="_blank">github.com/gahingwoo/woa-rk3576-imager</Button>
               </DescriptionListDescription></DescriptionListGroup>
             </DescriptionList>
           </Form>
         )}
       </ModalBody>
-      <ModalFooter><Button variant="primary" onClick={onClose}>Close</Button></ModalFooter>
+      <ModalFooter><Button variant="primary" onClick={onClose}>{t('close')}</Button></ModalFooter>
     </Modal>
   );
 }

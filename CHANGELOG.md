@@ -17,4 +17,9 @@ changelog is in the git history before this fork).
 - On an RK3576 board under Linux, the app writes that board's own eMMC or
   SPI NOR, refusing a disk that is mounted, and reads everything back.
 - The WinPE image on a USB drive, for the procedure without this app.
+- Windows comes out configured: the drivers' test certificates trusted,
+  extra driver folders, OpenSSH server (on by default), and a choice
+  between Windows' own setup and none at all (a local administrator from
+  the name and password given, straight to the desktop).
+- English and Simplified Chinese, following the system language.
 - Not yet run on hardware.

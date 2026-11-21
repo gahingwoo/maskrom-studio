@@ -182,6 +182,73 @@ host systems without native tools: a GPT writer, a FAT32 single-file patch,
 an exFAT writer (checked with exfatprogs' fsck in the tests), a UDF reader
 for the ISO, and the WIM header and XML reader.
 
+## How the installed Windows comes out
+
+Everything deploy-windows.cmd does stays: the RK3576 drivers from the WinPE
+release, test signing, dwcsdhc and sdstor boot-start, sdbus off,
+hibernation and Fast Startup off, BypassNRO. Added, all chosen on the
+"Windows setup" page:
+
+- **Driver certificates.** The WinPE workflow signs each run's drivers with
+  a new self-signed test certificate, and Plug and Play installs a driver
+  without asking only when its publisher is trusted. The app takes the
+  self-signed certificates out of every driver catalog it stages
+  (`src/woa/certs.ts`, a small PKCS #7 reader; the thumbprint is checked
+  against openssl's in the tests) and `woa-certs.cmd` writes them into the
+  offline SOFTWARE hive under `Microsoft\SystemCertificates\ROOT` and
+  `TrustedPublisher` (`Certificates\<SHA-1>`, value `Blob`: the certificate
+  as serialized property 32), which is where `certutil -addstore` puts
+  them. Whether Windows reads a blob with only that one property has not
+  been seen on a board yet.
+- **More drivers.** A folder the user picks (wddm-mali-g52, gt9271, ...) is
+  staged under `extra-drivers\` and added with the same
+  `dism /Add-Driver /Recurse /ForceUnsigned`; its certificates are trusted
+  as above. gt9271 is in WinPE releases after 0.1.1.
+- **First start.** "Windows setup (OOBE)" leaves Windows' own setup, which
+  BypassNRO lets finish offline. "Skip setup" writes
+  `\Windows\Panther\unattend.xml` (the implicit answer file location)
+  with an oobeSystem pass: every OOBE page hidden (HideEULAPage,
+  HideLocalAccountScreen, HideOnlineAccountScreens,
+  HideWirelessSetupInOOBE, HideOEMRegistrationScreen, ProtectYourPC 3;
+  the deprecated SkipMachineOOBE and SkipUserOOBE are not used), one local
+  account in Administrators, AutoLogon once (or always, if chosen), and
+  optional computer name (specialize pass), languages and time zone. Each
+  component carries `processorArchitecture="arm64"`. Not validated against
+  Microsoft's schema (no Windows SIM here): the tests check it is
+  well-formed and has the elements above.
+- **The password.** Never logged and not in `woa-stage.ini`. In the answer
+  file it is encoded as Windows SIM encodes it (PlainText false, base64 of
+  UTF-16LE password + "Password"): an encoding, not encryption. So
+  SetupComplete.cmd deletes the answer file when setup is done, and the
+  install script zeroes the staging copy (`fsutil file setzerodata`, best
+  effort) before the staging volume is deleted. With "sign in by itself on
+  every start" Windows keeps the password in the registry, as it does for
+  any automatic sign-in; with it off, only the first start signs in by
+  itself and Windows removes the stored password after that sign-in.
+- **SSH.** On by default. The Win32-OpenSSH 9.5.0.0p1-Beta ARM64 zip
+  (pinned URL, size and SHA-256 in `src/woa/setup-files.ts`) is downloaded
+  once, unpacked on the PC, staged, and copied by the install script
+  straight into `\Program Files\OpenSSH` of the new Windows, so the files
+  inherit that folder's permissions. On the first start SetupComplete.cmd
+  (as SYSTEM) runs the release's `install-sshd.ps1`, sets sshd to start
+  automatically, opens TCP 22 on all firewall profiles and starts it. The
+  shell stays sshd's default, cmd.exe. A pasted public key goes to
+  `C:\ProgramData\ssh\administrators_authorized_keys` with inheritance
+  removed and only SYSTEM and Administrators granted (by SID). This
+  follows what worked by hand on the TaishanPi 3M; `Add-WindowsCapability
+  OpenSSH.Server` hung for over 20 minutes there and is not used.
+
+## Languages
+
+The page is in English and Simplified Chinese, following the system
+language until the user picks one (masthead and Settings; kept in
+localStorage). `src/shared/i18n.ts` is a small dependency-free helper
+meant to be shared with Roxora Imager, which had none; the texts are in
+`src/renderer/messages.ts`, both languages side by side, and a test fails
+when a key the page uses is missing in either. Messages that come from the
+shared code (src/woa, src/main) are English sentences; known ones are
+shown in Chinese through patterns, unknown ones as they are.
+
 ## Not in the first version
 
 - The ROCK 4D (no eMMC; Windows would go on NVMe). The layout code takes a

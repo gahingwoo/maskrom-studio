@@ -28,53 +28,67 @@ const base = {
 delete base.ELECTRON_RUN_AS_NODE;
 const errors = [];
 
-async function session(tag, w, h, theme, env, steps) {
+async function session(tag, w, h, theme, env, steps, lang = 'en') {
   const app = await electron.launch({ args: ['.'], env });
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(`${tag}-${theme}: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${tag}-${theme} console: ${m.text()}`); });
   await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [w, h]);
-  await page.evaluate((t) => { localStorage.setItem('theme', t); }, theme);
+  await page.evaluate(([t, l]) => { localStorage.setItem('theme', t); localStorage.setItem('lang', l); }, [theme, lang]);
   await page.reload();
-  await page.waitForSelector('h2:has-text("Board")');
+  await page.waitForSelector('h2');
   await page.waitForTimeout(800);
   const shot = async (name) => {
     await page.mouse.move(1, 1);
     await page.waitForTimeout(400);
     const b64 = await app.evaluate(async ({ BrowserWindow }) =>
       (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
-    writeFileSync(`${out}/${name}-${tag}-${theme}.png`, Buffer.from(b64, 'base64'));
+    writeFileSync(`${out}/${name}-${tag}-${theme}${lang === 'en' ? '' : `-${lang}`}.png`, Buffer.from(b64, 'base64'));
   };
   await steps(page, shot);
   await app.close();
 }
 
-const next = (page) => page.click('.pf-v6-c-wizard__footer button:has-text("Next")');
+const next = (page) => page.click('.pf-v6-c-wizard__footer button.pf-m-primary');
+
+const flow = async (page, shot) => {
+  await shot('1-board');
+  await page.click('label[for="board-tspi3m"]');
+  await next(page);
+  await page.waitForSelector('#task-windows');
+  await page.click('label[for="task-windows"]');
+  await shot('2-task');
+  await next(page);
+  await page.waitForSelector('.drop');
+  await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /Choose a file|选择文件/.test(b.textContent))?.click(); });
+  await page.waitForSelector('text=Windows 11 Pro');
+  await shot('3-windows');
+  await next(page);
+  await page.waitForSelector('#first-skip');
+  await page.click('label[for="first-skip"]');
+  await page.fill('#acc-user', 'woa');
+  await page.fill('#acc-password', 'example');
+  await page.fill('#acc-password2', 'example');
+  await shot('4-setup');
+  await next(page);
+  await page.waitForSelector('.pf-v6-c-description-list');
+  await shot('5-review');
+};
 
 for (const [w, h, tag] of [[1100, 780, 'd'], [720, 640, 'm']]) {
   for (const theme of ['light', 'dark']) {
-    await session(tag, w, h, theme, base, async (page, shot) => {
-      await shot('1-board');
-      await page.click('label[for="board-tspi3m"]');
-      await next(page);
-      await page.waitForSelector('h2:has-text("What to write")');
-      await page.click('label[for="task-windows"]');
-      await shot('2-task');
-      await next(page);
-      await page.waitForSelector('h2:has-text("Windows image")');
-      await page.click('button:has-text("Choose a file")');
-      await page.waitForSelector('text=Windows 11 Pro');
-      await shot('3-windows');
-      await next(page);
-      await page.waitForSelector('h2:has-text("Review")');
-      await shot('4-review');
-    });
+    await session(tag, w, h, theme, base, flow);
     await session(`${tag}-here`, w, h, theme, { ...base, WOA_IMAGER_FAKE_ROOT: root }, async (page, shot) => {
-      await page.waitForSelector('text=This computer is the board');
-      await shot('5-this-board');
+      await page.waitForSelector('#via-here');
+      await shot('6-this-board');
     });
   }
 }
+await session('d', 1100, 780, 'light', base, flow, 'zh-CN');
+await session('d-here', 1100, 780, 'light', { ...base, WOA_IMAGER_FAKE_ROOT: root }, async (page, shot) => {
+  await page.waitForSelector('#via-here');
+  await shot('6-this-board');
+}, 'zh-CN');
 if (errors.length) {
   console.error(errors.join('\n'));
   process.exit(1);

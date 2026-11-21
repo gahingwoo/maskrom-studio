@@ -84,6 +84,25 @@ Things that would show a wrong assumption, worth a note each:
   "Offset in Bytes".
 - `delete volume override` or `extend` fails at the end.
 
+## 2b. The options of the Windows setup page
+
+Repeat test 2 (or run it once with these on):
+
+- Skip setup with a user name and password: the board should start
+  straight to the desktop, signed in. Afterwards
+  `C:\Windows\Panther\unattend.xml` must be gone and
+  `C:\Windows\Logs\woa-setupcomplete.log` should end with "done".
+- SSH on, with your public key: `ssh <user>@<board>` from the PC with the
+  key, and with the password. `sc query sshd` RUNNING, `netsh advfirewall
+  firewall show rule name="OpenSSH Server (sshd)"`. The key file's ACL:
+  `icacls C:\ProgramData\ssh\administrators_authorized_keys` lists only
+  SYSTEM and Administrators.
+- Certificates: `certutil -store Root` and `certutil -store
+  TrustedPublisher` list "woa-rk3576 test signing"; Device Manager shows
+  no driver waiting for approval.
+- An extra driver folder (for example gt9271 from a newer WinPE run, or
+  wddm-mali-g52): the device has the driver after the first start.
+
 ## 3. On the board itself
 
 Boot Armbian (vendor or edge) or Fedora from an SD card on the TaishanPi 3M,

@@ -1,5 +1,7 @@
 # WoA RK3576 Imager
 
+[简体中文](README.zh-CN.md)
+
 <img src="resources/icons/woa-rk3576-imager.svg" alt="WoA RK3576 Imager icon: a storage chip with an arrow writing into it" width="96" height="96">
 
 A desktop app that puts Windows 11 23H2 on the eMMC of a Rockchip RK3576
@@ -22,6 +24,11 @@ Status: first version, not yet run on hardware. See
   The board then boots that WinPE from the eMMC, installs Windows onto the
   eMMC with DISM, adds the RK3576 drivers, deletes the staging space and
   restarts into Windows. How and why: [docs/DESIGN.md](docs/DESIGN.md).
+- **Windows comes out configured.** The RK3576 drivers with their test
+  certificate trusted, any extra driver folder you add (display, touch),
+  OpenSSH server on port 22 (on by default), and either Windows' own
+  first-start setup or none at all: give a user name and password and
+  the board starts straight to the desktop.
 - **UEFI firmware.** The latest edk2-rk3576 release, written as the web
   flasher [flash.gahingwoo.com](https://flash.gahingwoo.com/) writes it
   ("whole image" or "keep the partitions"), over Maskrom.
@@ -31,6 +38,9 @@ Status: first version, not yet run on hardware. See
 - **The WinPE stick.** woa-rk3576's WinPE image on a USB drive, for the
   procedure in woa-rk3576's
   [INSTALL.md](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/INSTALL.md).
+
+The app is in English and Simplified Chinese; it follows the system
+language, and the switch at the top keeps your choice.
 
 Windows 11 24H2 and later cannot run on RK3576 (ARMv8.0); images newer than
 build 25999 are refused before anything is written. The app does not
