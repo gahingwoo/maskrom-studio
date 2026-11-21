@@ -80,9 +80,35 @@ export interface HostBuildRequest {
 
 export type HostBuildResult = { ok: true; vhd?: Served } | { ok: false; reason: string; detail?: string };
 
+/** The Armbian image the user chose, copied out and checked (src/main/armbian-image.ts). */
+export interface ArmbianChoice {
+  token: string;
+  fileName: string;
+  /** BOARD_NAME and VERSION from /etc/armbian-release. */
+  boardName: string;
+  version: string;
+  kernels: string[];
+  /** The root file system's size: the smallest partition it fits. */
+  rootfsBytes: number;
+  /** The root file system rounded up to whole GiB. */
+  defaultBytes: number;
+}
+
+/** How Armbian is set up next to Windows. The account comes from the Windows setup page. */
+export interface ArmbianRequest {
+  token: string;
+  partitionBytes: number;
+  defaultOs: 'armbian' | 'windows';
+  /** The Linux user name; used only when the Windows page has an account (skip setup). */
+  user: string;
+  locale: string;
+  /** IANA time zone, or empty. */
+  timeZone: string;
+}
+
 export type BoardJobRequest =
   | { kind: 'stage-disk'; target: 'sd' | 'nvme'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
-  | { kind: 'stage'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
+  | { kind: 'stage'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null; armbian?: ArmbianRequest }
   | { kind: 'firmware'; boardId: BoardId; device: string; targetId: string }
   | { kind: 'spinor'; boardId: BoardId; device: string };
 
@@ -106,6 +132,12 @@ export interface ImagerApi {
   pickDrivers(): Promise<DriverFolder | { error: string } | null>;
   /** The files that go onto the staging volume besides the image: OpenSSH (pinned release) and the chosen drivers. */
   prepareExtras(o: { ssh: boolean; drivers: string | null }): Promise<{ files: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
+  /** Can Armbian be prepared here (e2fsprogs found; never on Windows)? */
+  armbianTools(): Promise<{ ok: boolean; reason: string | null }>;
+  /** Choose an Armbian image (.img, .img.xz) for the board: its root partition is copied out and checked. */
+  pickArmbian(board: BoardId): Promise<ArmbianChoice | { error: string } | null>;
+  /** Make the changes to the copied root file system, and serve it to the Maskrom worker with the files for the EFI partition. */
+  prepareArmbian(req: ArmbianRequest, setup: SetupOptions, board: BoardId): Promise<{ served: Served; esp: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
   /** Is this app running on an RK3576 board (Linux)? */
   boardHere(): Promise<BoardHereInfo>;
   /** Windows host only: build a finished Windows with DISM on a drive here, or in a VHD for the eMMC. */

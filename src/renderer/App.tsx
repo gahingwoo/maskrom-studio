@@ -11,7 +11,8 @@ import {
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import { formatBytes } from '../shared/format';
-import type { BoardHereInfo, DriverFolder, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { ArmbianChoice, ArmbianRequest, BoardHereInfo, DriverFolder, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import { ARMBIAN_BOARDS, GIB, linuxUserFrom, linuxUserProblem, localeFrom, timeZoneProblem } from '../woa/armbian';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
 import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WoaBoard } from '../woa/boards';
@@ -30,6 +31,8 @@ type Method = 'stage' | 'host';
 const WIN_HOST = api.platform === 'win32';
 
 const GB = (n: number) => `${(n / 1e9).toFixed(1)} GB`;
+/** The eMMC sizes seen on the boards, for the page's estimates; the layout is checked against the real one. */
+const EMMC_BYTES: Partial<Record<BoardId, number>> = { tspi3m: 62008590336, cm5io: 31272730624 };
 const LOADER = 'rk3576_spl_loader.bin';
 
 interface Stage { id: string; label: string; percent: number | null; note?: string }
@@ -40,7 +43,7 @@ interface Run {
   confirm: StageSummary | FirmwareSummary | null;
   result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[] } | null;
 }
-interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }> }
+interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }>; linuxBytes?: number }
 interface FirmwareSummary { kind: 'firmware'; board: string; target: string; lba: number; bytes: number; capacity: number | null; dropped: Array<{ name: string; bytes: number }>; erases: string }
 
 const EMPTY_ACCOUNT: Account = { user: '', password: '', computerName: '', locale: '', keyboard: '', timeZone: '', autoLogonAlways: false };
@@ -105,6 +108,16 @@ export function App() {
   const [sshKey, setSshKey] = useState('');
   const [drivers, setDrivers] = useState<DriverFolder | null>(null);
   const [driversError, setDriversError] = useState<string | null>(null);
+  const [armbianTools, setArmbianTools] = useState<{ ok: boolean; reason: string | null } | null>(null);
+  const [withArmbian, setWithArmbian] = useState(false);
+  const [armbian, setArmbian] = useState<ArmbianChoice | null>(null);
+  const [armbianError, setArmbianError] = useState<string | null>(null);
+  const [armbianCopy, setArmbianCopy] = useState<JobProgress | null>(null);
+  const [armbianGiB, setArmbianGiB] = useState('');
+  const [defaultOs, setDefaultOs] = useState<'windows' | 'armbian'>('windows');
+  const [linuxUser, setLinuxUser] = useState('');
+  const [linuxLocale, setLinuxLocale] = useState('');
+  const [linuxTz, setLinuxTz] = useState(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''; } catch { return ''; } });
   const [drives, setDrives] = useState<Target[] | null>(null);
   const [stick, setStick] = useState<string | null>(null);
   const [dest, setDest] = useState<Dest>('emmc');
@@ -120,6 +133,7 @@ export function App() {
   const servedTokens = useRef<string[]>([]);
 
   useEffect(() => { api.releases().then(setReleases); }, []);
+  useEffect(() => { api.armbianTools().then(setArmbianTools); }, []);
   useEffect(() => {
     api.boardHere().then((h) => {
       setHere(h);
@@ -164,6 +178,41 @@ export function App() {
   const passwordMismatch = skip && account.password !== password2;
   const keyErr = ssh ? sshKeyProblem(sshKey) : null;
   const setupOk = !accountErr && !passwordMismatch && !keyErr;
+
+  // Armbian next to Windows: the staged install onto the eMMC only.
+  const armbianBoard = board ? ARMBIAN_BOARDS[board.id] : undefined;
+  const armbianOffered = !!armbianBoard && task === 'windows' && dest === 'emmc' && method === 'stage';
+  const armbianWanted = armbianOffered && withArmbian;
+  const emmcBytes = board ? EMMC_BYTES[board.id] ?? 0 : 0;
+  const minGiB = armbian ? Math.ceil(armbian.rootfsBytes / GIB) : 1;
+  const maxGiB = Math.max(minGiB, Math.floor(emmcBytes / 2 / GIB));
+  const giB = Number(armbianGiB || (armbian ? armbian.defaultBytes / GIB : 0));
+  const sizeErr = !!armbian && (!Number.isInteger(giB) || giB < minGiB || giB > maxGiB);
+  const userForLinux = linuxUser || (account.user ? linuxUserFrom(account.user) : '');
+  const localeForLinux = linuxLocale || localeFrom(account.locale || (typeof navigator !== 'undefined' ? navigator.language : ''));
+  const linuxErr = skip ? (linuxUserProblem(userForLinux) ?? timeZoneProblem(linuxTz.trim())) : null;
+  const armbianOk = !armbianWanted || (!!armbian && !sizeErr && !linuxErr);
+  const windowsEstimate = emmcBytes - (64 << 20) - giB * GIB - (276 << 20);
+  const armbianReq = (): ArmbianRequest => ({
+    token: armbian!.token, partitionBytes: giB * GIB, defaultOs, user: userForLinux, locale: localeForLinux, timeZone: linuxTz.trim(),
+  });
+
+  const chooseArmbian = async () => {
+    if (!board) return;
+    setArmbianError(null);
+    setArmbianCopy({ stage: 'decompress', bytes: 0, total: 0 });
+    const off = api.onProgress((p) => setArmbianCopy(p));
+    try {
+      const r = await api.pickArmbian(board.id);
+      if (!r) return;
+      if ('error' in r) { setArmbianError(errorText(r.error)); setArmbian(null); return; }
+      setArmbian(r);
+      setArmbianGiB(String(r.defaultBytes / GIB));
+    } finally {
+      off();
+      setArmbianCopy(null);
+    }
+  };
 
   const refreshDrives = (min = 600e6) => { setDrives(null); api.listDrives(min).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
   const onPc = task === 'windows' && dest !== 'emmc';
@@ -219,6 +268,7 @@ export function App() {
   };
 
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
+  const ARMBIAN_NEXT = armbianWanted ? [t('next.armbian.1'), t('next.armbian.2')] : [];
 
   const startMaskrom = async (jobFor: (served: Record<string, Served>, extras: Array<{ path: string; data: Uint8Array }>) => WoaJob,
     prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: { ssh: boolean; drivers: string | null } | null) => {
@@ -263,7 +313,7 @@ export function App() {
         w.terminate();
         worker.current = null;
         finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc') : t('result.firmware'),
-          job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined));
+          job.kind === 'stage' ? [...STAGE_NEXT, ...ARMBIAN_NEXT] : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined));
         if (m.result.ok) update((r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, percent: 100 })) }));
       }
     };
@@ -313,12 +363,13 @@ export function App() {
         stages: [{ id: 'write', label: task === 'windows' ? t('run.here.windows') : t('run.here.firmware', { storage: storageWord(board, task) }), percent: 0 }] });
       const device = board.firmwareStorage === 'spinor' && task !== 'windows' ? here!.mtd[0]?.device : here!.emmc?.device;
       const r = await withProgress('write', () => api.writeBoard(
-        task === 'windows' ? { kind: 'stage', boardId: board.id, device: device!, windowsToken: windows!.token, index: index!, setup, drivers: drivers?.token ?? null }
+        task === 'windows' ? { kind: 'stage', boardId: board.id, device: device!, windowsToken: windows!.token, index: index!, setup, drivers: drivers?.token ?? null,
+          ...(armbianWanted ? { armbian: armbianReq() } : {}) }
           : board.firmwareStorage === 'spinor' ? { kind: 'spinor', boardId: board.id, device: device! }
             : { kind: 'firmware', boardId: board.id, device: device!, targetId: task },
       ));
       finish(resultOf(r, task === 'windows' ? t('result.stagedHere') : t('result.firmwareHere'),
-        task === 'windows' ? [t('next.here.1'), ...STAGE_NEXT.slice(1)] : [t('next.fw.restart')]));
+        task === 'windows' ? [t('next.here.1'), ...STAGE_NEXT.slice(1), ...ARMBIAN_NEXT] : [t('next.fw.restart')]));
       return;
     }
     if (task === 'windows') {
@@ -326,6 +377,7 @@ export function App() {
       setRun({ title: t('run.staging'), log: [], confirm: null, result: null, stages: [
         { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tag ?? '' }), percent: null },
         { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
+        ...(armbianWanted ? [{ id: 'armbian', label: t('run.armbian', { file: armbian!.fileName }), percent: null }] : []),
         ...(ssh || drivers ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
         { id: 'board', label: t('run.board'), percent: null },
         { id: 'write', label: t('run.write'), percent: 0 },
@@ -333,14 +385,24 @@ export function App() {
       ] });
       const hash = await withProgress('image', () => api.hashWindows(windows!.token));
       if ('error' in hash) { finish({ ok: false, title: errorText(hash.error) }); return; }
+      // Armbian's files for the EFI partition come back with its prepared root file system.
+      let esp: Array<{ path: string; data: Uint8Array }> = [];
+      const partitionBytes = giB * GIB;
       await startMaskrom((s, extras) => ({
-        kind: 'stage', boardId: board.id, appVersion: api.version, spotCheck: true, resetAfter: true, setup, extras,
+        kind: 'stage', boardId: board.id, appVersion: api.version, spotCheck: true, resetAfter: true, setup, extras: [...extras, ...esp],
         winpe: { url: s.winpe.url, size: s.winpe.size },
         image: { url: s.image.url, size: s.image.size, extents: windows!.extents, name: windows!.imageName, imageSize: windows!.imageSize,
           sha256: hash.sha256, index: ed.index, edition: ed.name, build: ed.build ?? 0 },
+        ...(s.armbian ? { armbian: { url: s.armbian.url, size: s.armbian.size, partitionBytes } } : {}),
       }), [
         { id: 'winpe', get: () => api.prepareWinpe() },
         { id: 'image', get: () => api.serveWindows(windows!.token) },
+        ...(armbianWanted ? [{ id: 'armbian', get: async (): Promise<Served | { error: string }> => {
+          const r = await api.prepareArmbian(armbianReq(), setup, board.id);
+          if ('error' in r) return r;
+          esp = r.esp;
+          return r.served;
+        } }] : []),
       ], { ssh, drivers: drivers?.token ?? null });
       return;
     }
@@ -364,6 +426,8 @@ export function App() {
   const closeRun = () => {
     for (const tok of servedTokens.current) api.releaseServed(tok);
     servedTokens.current = [];
+    // A prepared Armbian copy is written once; the next write copies the image again.
+    if (armbianWanted) setArmbian(null);
     setRun(null);
   };
 
@@ -382,6 +446,7 @@ export function App() {
               description={b.windows ? t(b.id === 'tspi3m' ? 'board.desc.windows.pads' : 'board.desc.windows.button') : t('board.desc.spi')}
               onChange={() => {
                 setBoardId(b.id);
+                if (b.id !== boardId) setArmbian(null);
                 if (b.id !== here?.boardId) setVia('maskrom');
                 if (task === 'windows' && !b.windows) setTask(null);
                 if (task === 'uefi-keep' && b.firmwareStorage !== 'emmc') setTask(null);
@@ -437,6 +502,13 @@ export function App() {
             <Radio id="method-host" name="method" label={t('method.host')} isChecked={method === 'host'} onChange={() => setMethod('host')}
               isDisabled={!WIN_HOST || onBoard} description={WIN_HOST ? t('method.host.desc') : t('method.host.notHere')} />
           </FormGroup>
+          {armbianBoard && dest === 'emmc' && method === 'stage' && (
+            <FormGroup fieldId="with-armbian" label={t('step.armbian')} role="group">
+              <Checkbox id="with-armbian" label={t('task.armbian')} isChecked={withArmbian} isDisabled={!armbianTools?.ok}
+                description={armbianTools && !armbianTools.ok && armbianTools.reason ? t(armbianTools.reason) : t('task.armbian.desc')}
+                onChange={(_e, v) => setWithArmbian(v)} />
+            </FormGroup>
+          )}
           {board.id === 'rock4d' && <Alert isInline variant="warning" title={t('rock4d.acpi.title')}>{t('rock4d.acpi.text')}</Alert>}
           {onPc && api.platform === 'darwin' && <Alert isInline variant="warning" title={t('host.macDisk')} />}
         </Form>
@@ -547,6 +619,63 @@ export function App() {
     </StepPage>
   );
 
+  const copyPct = armbianCopy && armbianCopy.total > 0 ? Math.min(100, Math.floor((armbianCopy.bytes * 100) / armbianCopy.total)) : null;
+  const armbianStep = board && (
+    <StepPage title={t('step.armbian')} lead={t('armbian.lead')}>
+      <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
+        <FlexItem><Button variant="secondary" onClick={chooseArmbian} isDisabled={!!armbianCopy}>{t('armbian.choose')}</Button></FlexItem>
+        {armbian && (
+          <FlexItem>
+            {t('armbian.chosen', { file: armbian.fileName, version: armbian.version, board: armbian.boardName, kernels: armbian.kernels.join(', '), size: formatBytes(armbian.rootfsBytes) })}
+          </FlexItem>
+        )}
+      </Flex>
+      {copyPct !== null && (
+        <Progress title={t('armbian.copying')} value={copyPct} measureLocation={ProgressMeasureLocation.top}
+          label={t('run.of', { done: formatBytes(armbianCopy!.bytes), total: formatBytes(armbianCopy!.total) })} />
+      )}
+      {armbianError && <Alert isInline variant="danger" title={armbianError} />}
+      {board.id === 'tspi3m' && !armbian && <Content component="p" className="muted">{t('armbian.download')}</Content>}
+      {armbian && (
+        <Form onSubmit={(e) => e.preventDefault()} className="setup-form">
+          <FormGroup label={t('armbian.size')} fieldId="armbian-size">
+            <TextInput id="armbian-size" type="number" value={armbianGiB} onChange={(_e, v) => setArmbianGiB(v)} validated={sizeErr ? 'error' : 'default'} />
+            <FormHelperText><HelperText><HelperTextItem variant={sizeErr ? 'error' : 'default'}>
+              {sizeErr ? t('armbian.size.bad', { min: minGiB, max: maxGiB }) : t('armbian.size.help', { min: minGiB, win: (windowsEstimate / 1e9).toFixed(1) })}
+            </HelperTextItem></HelperText></FormHelperText>
+          </FormGroup>
+          <FormGroup role="radiogroup" fieldId="armbian-default" label={t('armbian.default')} isStack>
+            <Radio id="os-windows" name="os" label={t('armbian.default.windows')} isChecked={defaultOs === 'windows'} onChange={() => setDefaultOs('windows')} description={t('armbian.default.windows.desc')} />
+            <Radio id="os-armbian" name="os" label={t('armbian.default.armbian')} isChecked={defaultOs === 'armbian'} onChange={() => setDefaultOs('armbian')} description={t('armbian.default.armbian.desc')} />
+          </FormGroup>
+          <FormGroup label={t('armbian.account')} fieldId="armbian-account" role="group">
+            <Content component="p">{skip ? t('armbian.account.from') : t('armbian.account.ask')}</Content>
+          </FormGroup>
+          {skip && (
+            <>
+              <FormGroup label={t('armbian.user')} fieldId="armbian-user" isRequired>
+                <TextInput id="armbian-user" value={userForLinux} autoComplete="off" spellCheck={false} onChange={(_e, v) => setLinuxUser(v)} />
+              </FormGroup>
+              <FormGroup label={t('armbian.locale')} fieldId="armbian-locale">
+                <TextInput id="armbian-locale" value={localeForLinux} autoComplete="off" spellCheck={false} onChange={(_e, v) => setLinuxLocale(v)} />
+              </FormGroup>
+              <FormGroup label={t('armbian.tz')} fieldId="armbian-tz">
+                <TextInput id="armbian-tz" value={linuxTz} autoComplete="off" spellCheck={false} onChange={(_e, v) => setLinuxTz(v)} />
+              </FormGroup>
+              {linuxErr && <HelperText><HelperTextItem variant="error">{t(linuxErr)}</HelperTextItem></HelperText>}
+            </>
+          )}
+          {sshKey.trim() && ssh && <Content component="p" className="muted">{t('armbian.ssh')}</Content>}
+        </Form>
+      )}
+      <Alert isInline variant="info" title={t('armbian.notes.title')}>
+        <p>{board.id === 'tspi3m' ? t('armbian.notes.tspi3m') : t('armbian.notes.cm5io')}</p>
+        <p>{t('armbian.notes.gop')}</p>
+        <p>{t('armbian.boot')}</p>
+      </Alert>
+    </StepPage>
+  );
+
   const maskromCard = board && !onBoard && task !== 'stick' && !onPc && (
     <Card>
       <CardTitle>{t('maskrom.title')}</CardTitle>
@@ -563,6 +692,10 @@ export function App() {
   let reviewRows: Array<[string, React.ReactNode]> = [];
   let why: string | null = null;
   let goLabel = t('go.connect');
+  const armbianRow: Array<[string, string]> = !armbianWanted ? [] : [
+    [t('review.armbian'), armbian ? t('review.armbian.value', { file: armbian.fileName, size: `${giB} GiB`, os: t(`armbian.default.${defaultOs}`) }) : t('review.notChosen')],
+    [t('armbian.account'), skip ? t('review.armbian.account', { user: userForLinux }) : t('review.armbian.ask')],
+  ];
   if (board && task) {
     reviewRows.push([t('review.board'), onBoard ? t('review.board.here', { board: board.name }) : t('review.board.maskrom', { board: board.name })]);
     if (task === 'windows') {
@@ -582,8 +715,12 @@ export function App() {
           [t('review.checked'), dest === 'emmc' ? t('review.checked.host.emmc') : t('review.checked.host.disk')],
         ] as Array<[string, string]>),
       ]);
+      // Armbian goes right after where Windows goes.
+      reviewRows.splice(reviewRows.findIndex((r) => r[0] === t('review.target')) + 1, 0, ...armbianRow);
       if (!edition) why = t('why.windows');
       else if (!setupOk) why = t('why.setup');
+      else if (armbianWanted && !armbian) why = t('why.armbian');
+      else if (!armbianOk) why = t('why.armbian.settings');
       if (!releases?.winpe) why = t('why.winpe');
       if (onBoard && here?.emmcRefusal) why = msg(here.emmcRefusal);
       if (dest !== 'emmc' && !disk) why = t('review.disk.choose');
@@ -651,6 +788,7 @@ export function App() {
         [t('confirm.kept'), t('confirm.kept.value')],
         [t('confirm.removed'), c.removed.length ? c.removed.map((p) => `${p.name} (${GB(p.bytes)})`).join(', ') : t('confirm.removed.none')],
         [t('confirm.windowsGets'), t('confirm.windowsGets.value', { size: GB(c.windowsBytes) })],
+        ...(c.linuxBytes ? [[t('confirm.armbianGets'), t('confirm.armbianGets.value', { size: GB(c.linuxBytes) })] as [string, string]] : []),
         [t('confirm.sent'), formatBytes(c.totalBytes)],
       ]} />
     </Stack>
@@ -733,7 +871,9 @@ export function App() {
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
             <WizardStep name={t('step.windows')} id="windows" isHidden={!windowsNeeded} footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>
             <WizardStep name={t('step.setup')} id="setup" isHidden={!windowsNeeded} isDisabled={!edition} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>
-            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk))}
+            <WizardStep name={t('step.armbian')} id="armbian" isHidden={!armbianWanted} isDisabled={!edition || !setupOk}
+              footer={{ isNextDisabled: !armbianOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{armbianStep}</WizardStep>
+            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk || !armbianOk))}
               footer={<ReviewFooter label={goLabel} disabled={!!why} why={why} onGo={() => setAsk(true)} />}>
               {reviewStep}
             </WizardStep>

@@ -9,7 +9,10 @@ import { dirname, join } from 'node:path';
 import * as drivelist from 'drivelist';
 import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
-import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { ArmbianChoice, ArmbianRequest, BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import { applyEdits, clearWork, extractRootfs, findE2fsprogs, inspectRootfs, newUuid, NO_E2FSPROGS, type ArmbianImage } from './armbian-image';
+import { ARMBIAN_BOARDS, ArmbianError, defaultPartitionBytes, espFiles, GRUB_EFI, linuxUserProblem, timeZoneProblem } from '../woa/armbian';
+import { createHash } from 'node:crypto';
 import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './elevate';
 import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
 import { ensureLoader } from './loader-cache';
@@ -207,7 +210,10 @@ ipcMain.handle('woa:prepare-winpe', (e) => exclusive(async (signal) => {
 
 ipcMain.handle('woa:release', (_e, token: string) => {
   servedPaths.delete(token);
-  forgetFile(token, false);
+  // A prepared Armbian root file system is used once: its copy goes.
+  const armbian = armbianServed.has(token);
+  armbianServed.delete(token);
+  forgetFile(token, armbian);
 });
 
 // --- the Windows image --------------------------------------------------------
@@ -317,6 +323,98 @@ ipcMain.handle('woa:prepare-extras', (e, o: { ssh: boolean; drivers: string | nu
   try {
     const files = [...(o.ssh ? await opensshFiles(e.sender, signal) : []), ...(o.drivers ? driverFiles(o.drivers) : [])];
     return { files };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
+// --- Armbian next to Windows -------------------------------------------------------
+// The user's image is never changed: its root partition is copied into the
+// app's folder (one copy at a time), checked there, edited when the write
+// starts, written, and removed (src/main/armbian-image.ts).
+
+const armbianDir = () => join(app.getPath('userData'), 'armbian');
+const armbianChoices = new Map<string, { boardId: BoardId; fileName: string; img: ArmbianImage; used: boolean }>();
+const armbianServed = new Set<string>();
+const TEST_PICK_ARMBIAN = !app.isPackaged ? process.env.WOA_IMAGER_TEST_ARMBIAN : undefined;
+
+function dropArmbian(token: string): void {
+  const c = armbianChoices.get(token);
+  armbianChoices.delete(token);
+  if (c) rmSync(c.img.rootfs, { force: true });
+}
+
+ipcMain.handle('woa:armbian-tools', () => {
+  if (process.platform === 'win32') return { ok: false, reason: 'armbian.windowshost' };
+  return findE2fsprogs() ? { ok: true, reason: null } : { ok: false, reason: NO_E2FSPROGS };
+});
+
+ipcMain.handle('woa:pick-armbian', (e, boardId: BoardId) => exclusive(async (signal): Promise<ArmbianChoice | { error: string } | null> => {
+  const tools = findE2fsprogs();
+  if (!tools) return { error: process.platform === 'win32' ? 'armbian.windowshost' : NO_E2FSPROGS };
+  if (!ARMBIAN_BOARDS[boardId]) return { error: 'Armbian next to Windows is not offered for this board.' };
+  let path = TEST_PICK_ARMBIAN;
+  if (!path) {
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Choose the Armbian image for this board',
+      properties: ['openFile'],
+      filters: [{ name: 'Armbian images', extensions: ['img', 'xz', 'gz'] }, { name: 'All files', extensions: ['*'] }],
+    });
+    if (r.canceled || r.filePaths.length === 0) return null;
+    path = r.filePaths[0];
+  }
+  for (const t of [...armbianChoices.keys()]) dropArmbian(t);
+  mkdirSync(armbianDir(), { recursive: true });
+  const out = join(armbianDir(), `rootfs-${randomBytes(6).toString('hex')}.ext4`);
+  try {
+    await extractRootfs(path, out, (p) => sendProgress(e.sender, p), signal);
+    const img = inspectRootfs(tools, out, boardId);
+    const token = randomBytes(16).toString('hex');
+    const fileName = path.split(/[\\/]/).pop() ?? path;
+    armbianChoices.set(token, { boardId, fileName, img, used: false });
+    return {
+      token, fileName, boardName: img.release.BOARD_NAME ?? img.release.BOARD, version: img.release.VERSION ?? '',
+      kernels: img.facts.kernels, rootfsBytes: img.rootfsBytes, defaultBytes: defaultPartitionBytes(img.rootfsBytes),
+    };
+  } catch (err) {
+    rmSync(out, { force: true });
+    if (signal.aborted) return { error: 'Cancelled.' };
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
+/** Make the changes to the chosen copy (once), and the files for the EFI partition. */
+function prepareArmbianFiles(req: ArmbianRequest, setup: SetupOptions, boardId: BoardId):
+  { path: string; size: number; esp: Array<{ path: string; data: Uint8Array }> } {
+  const tools = findE2fsprogs();
+  if (!tools) throw new ArmbianError(NO_E2FSPROGS);
+  const c = armbianChoices.get(req.token);
+  if (!c) throw new ArmbianError('Choose the Armbian image again. Nothing was written.');
+  if (c.boardId !== boardId) throw new ArmbianError('The Armbian image was chosen for another board. Choose it again.');
+  if (c.used) throw new ArmbianError('This copy of Armbian was prepared for an earlier write. Choose the Armbian image again.');
+  if (!Number.isSafeInteger(req.partitionBytes) || req.partitionBytes < c.img.rootfsBytes) throw new ArmbianError('The Armbian partition is smaller than its root file system.');
+  const account = setup.skipSetup ? {
+    user: req.user, realName: setup.skipSetup.user, password: setup.skipSetup.password, locale: req.locale, timeZone: req.timeZone,
+  } : null;
+  if (account) {
+    const bad = linuxUserProblem(account.user) ?? timeZoneProblem(account.timeZone);
+    if (bad) throw new ArmbianError(bad);
+  }
+  const grub = new Uint8Array(readFileSync(join(resourcesDir, 'armbian', GRUB_EFI.file)));
+  if (createHash('sha256').update(grub).digest('hex') !== GRUB_EFI.sha256) throw new ArmbianError(`${GRUB_EFI.file} in the app is not the one it was built with. Reinstall the app.`);
+  c.used = true;
+  const boot = { boardId, uuid: newUuid(), defaultOs: req.defaultOs, timeout: 5 };
+  applyEdits(tools, c.img, { ...boot, account, sshKey: setup.sshKey }, join(armbianDir(), 'tmp'));
+  return { path: c.img.rootfs, size: statSync(c.img.rootfs).size, esp: espFiles(grub, { ...boot, appVersion: app.getVersion() }) };
+}
+
+ipcMain.handle('woa:prepare-armbian', (_e, req: ArmbianRequest, setup: SetupOptions, boardId: BoardId) => exclusive(async () => {
+  try {
+    const p = prepareArmbianFiles(req, setup, boardId);
+    const s = serve(p.path, 'armbian-rootfs.ext4');
+    armbianServed.add(s.token);
+    armbianChoices.delete(req.token);
+    return { served: s, esp: p.esp };
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
   }
@@ -437,6 +535,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
   const wc = e.sender;
   let bj: BoardJob;
   let total = 0;
+  let armbianCopy: string | null = null;
   try {
     if (req.kind === 'stage-disk') {
       const img = windowsImages.get(req.windowsToken);
@@ -459,11 +558,19 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
       const extras = [...(req.setup.ssh ? await opensshFiles(wc, signal) : []), ...(req.drivers ? driverFiles(req.drivers) : [])];
-      bj = { kind: 'stage', device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
+      let armbian: { path: string; partitionBytes: number } | undefined;
+      if (req.armbian) {
+        const p = prepareArmbianFiles(req.armbian, req.setup, req.boardId);
+        armbianCopy = p.path;
+        armbian = { path: p.path, partitionBytes: req.armbian.partitionBytes };
+        extras.push(...p.esp);
+        total += p.size;
+      }
+      bj = { kind: 'stage', device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(), ...(armbian ? { armbian } : {}),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
           index: ed.index, edition: ed.name, build: ed.build ?? 0 } };
-      total = img.imageSize + pe.size;
+      total += img.imageSize + pe.size;
     } else {
       const path = await firmwareFile(wc, req.boardId, signal);
       bj = req.kind === 'firmware'
@@ -472,6 +579,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       total = firmware!.images[req.boardId]!.size;
     }
   } catch (err) {
+    if (armbianCopy) rmSync(armbianCopy, { force: true });
     if (signal.aborted) return { ok: false, reason: 'Cancelled. Nothing was written.' };
     return { ok: false, reason: String((err as Error).message ?? err) };
   }
@@ -482,6 +590,8 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
     return await runElevated(wc, signal, (socket, token) => ['--socket', socket, '--token', token, '--job', jobFile], () => total);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    // The prepared root file system holds the first-start presets: it goes once written.
+    if (armbianCopy) rmSync(armbianCopy, { force: true });
   }
 }, { ok: false, reason: 'Another write is running.' }));
 
@@ -566,8 +676,12 @@ ipcMain.on('app:info', (e) => {
 });
 ipcMain.on('theme', (_e, t: 'light' | 'dark') => { nativeTheme.themeSource = t; });
 
+app.on('will-quit', () => { try { clearWork(armbianDir()); } catch { /* best effort */ } });
+
 app.whenReady().then(() => {
   afterUpdateCleanup();
+  // Copies of Armbian root file systems left by an earlier run (several GB each).
+  try { clearWork(armbianDir()); } catch { /* best effort */ }
   handleProtocol(join(appDir, 'build', 'renderer'), resourcesDir, loaderDir());
   const testVid = !app.isPackaged ? Number(process.env.WOA_IMAGER_USB_TEST_VID ?? NaN) : NaN;
   const vendorIds = Number.isInteger(testVid) ? [ROCKCHIP_VID, testVid] : [ROCKCHIP_VID];
