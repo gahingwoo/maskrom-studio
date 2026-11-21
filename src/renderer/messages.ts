@@ -21,6 +21,8 @@ export const MESSAGES: Dict = {
   'settings.theme.light': d('Light', '浅色'),
   'settings.theme.dark': d('Dark', '深色'),
   'settings.language': d('Language', '语言'),
+  'lang.dialog': d('Display language', '显示语言'),
+  'lang.select': d('Select', '选择'),
   'settings.version': d('Version', '版本'),
   'settings.license': d('License', '许可证'),
   'settings.source': d('Source', '源代码'),

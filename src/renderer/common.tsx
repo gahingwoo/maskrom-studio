@@ -5,11 +5,12 @@ import { useEffect, useState } from 'react';
 import {
   Alert, Button, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form,
-  FormGroup, Masthead, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
+  FormGroup, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
   ModalHeader, Page, Progress, ProgressMeasureLocation, Spinner, Stack, StackItem, Switch, Title, ToggleGroup,
   ToggleGroupItem, Toolbar, ToolbarContent, ToolbarGroup, ToolbarItem,
 } from '@patternfly/react-core';
 import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon';
+import { GlobeIcon } from '@patternfly/react-icons/dist/esm/icons/globe-icon';
 import { formatBytes } from '../shared/format';
 import type { ImagerApi } from '../shared/ipc';
 import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
@@ -28,8 +29,8 @@ export const api = window.imager;
  * nav running the full height and its footer pinned to the bottom.
  */
 export function Shell({ children, onSettings }: { children: React.ReactNode; onSettings: () => void }) {
-  const { t, lang, setLang } = useI18n();
-  const other = lang === 'en' ? 'zh-CN' : 'en';
+  const { t, lang } = useI18n();
+  const [langOpen, setLangOpen] = useState(false);
   const masthead = (
     <Masthead display={{ default: 'inline' }}>
       <MastheadMain>
@@ -45,7 +46,10 @@ export function Shell({ children, onSettings }: { children: React.ReactNode; onS
           <ToolbarContent>
             <ToolbarGroup align={{ default: 'alignEnd' }}>
               <ToolbarItem>
-                <Button variant="plain" className="lang-switch" lang={other} onClick={() => setLang(other)}>{LANG_NAMES[other]}</Button>
+                <Button variant="plain" icon={<GlobeIcon />} aria-label={t('lang.dialog')} title={t('lang.dialog')}
+                  onClick={() => setLangOpen(true)}>
+                  <span lang={lang}>{LANG_NAMES[lang]}</span>
+                </Button>
               </ToolbarItem>
               <ToolbarItem>
                 <Button variant="plain" icon={<CogIcon />} onClick={onSettings}>{t('settings')}</Button>
@@ -56,7 +60,44 @@ export function Shell({ children, onSettings }: { children: React.ReactNode; onS
       </MastheadContent>
     </Masthead>
   );
-  return <Page masthead={masthead} isContentFilled>{children}</Page>;
+  return (
+    <Page masthead={masthead} isContentFilled>
+      {children}
+      {langOpen && <LangModal onClose={() => setLangOpen(false)} />}
+    </Page>
+  );
+}
+
+/*
+ * The language dialog, as Cockpit's "Display language" (shell-modals.jsx):
+ * a small modal with a plain menu of the languages, each in its own
+ * language, the current one selected, and Select / Cancel.
+ */
+function LangModal({ onClose }: { onClose: () => void }) {
+  const { t, lang, setLang } = useI18n();
+  const [picked, setPicked] = useState(lang);
+  const apply = () => { if (picked !== lang) setLang(picked); onClose(); };
+  return (
+    <Modal isOpen variant="small" onClose={onClose} aria-labelledby="lang-dialog-title" id="lang-dialog">
+      <ModalHeader title={t('lang.dialog')} labelId="lang-dialog-title" />
+      <ModalBody>
+        <Menu isPlain isScrollable activeItemId={picked} selected={picked}
+          onSelect={(_e, id) => setPicked(id as typeof lang)}>
+          <MenuContent>
+            <MenuList>
+              {LANGS.map((l) => (
+                <MenuItem key={l} itemId={l} isSelected={picked === l} lang={l}>{LANG_NAMES[l]}</MenuItem>
+              ))}
+            </MenuList>
+          </MenuContent>
+        </Menu>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="primary" onClick={apply}>{t('lang.select')}</Button>
+        <Button variant="link" onClick={onClose}>{t('cancel')}</Button>
+      </ModalFooter>
+    </Modal>
+  );
 }
 
 /** One wizard step's content: title, optional lead, notices, then the step itself. */
