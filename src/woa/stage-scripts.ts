@@ -14,7 +14,10 @@
 //           bcdboot and registry steps are deploy-windows.cmd's, unchanged.
 //           Added: extra driver packages, the drivers' test certificates
 //           (woa-certs.cmd, certs.ts), SetupComplete.cmd, the answer file
-//           when setup is skipped, and OpenSSH (setup-files.ts).
+//           when setup is skipped, and OpenSSH (setup-files.ts). With
+//           Armbian next to Windows (armbian.ts) the Armbian partition at
+//           the end of the eMMC is kept, and GRUB is copied onto the new
+//           EFI partition.
 //
 // WinPE has find.exe but no findstr.exe, and set /a is 32-bit, as the
 // comments in deploy-windows.cmd record; nothing here uses either for disk
@@ -74,6 +77,11 @@ bcdedit /store S:\EFI\Microsoft\Boot\BCD /set {default} testsigning on >> "%LOG%
 if not exist S:\EFI\Boot\bootaa64.efi (
   mkdir S:\EFI\Boot 2>nul
   copy /y S:\EFI\Microsoft\Boot\bootmgfw.efi S:\EFI\Boot\bootaa64.efi >> "%LOG%" 2>&1
+)
+rem Armbian next to Windows: its GRUB, grub.cfg and the startup.nsh that adds its boot option.
+if exist "%STAGE%\armbian-esp\EFI\armbian\grubaa64.efi" (
+  echo Putting Armbian's boot loader on the EFI partition.
+  xcopy "%STAGE%\armbian-esp" S:\ /e /i /q /y >> "%LOG%" 2>&1 || goto :faillog
 )
 
 echo Making the eMMC's disk driver boot-start, and keeping sdbus off the eMMC.
@@ -268,6 +276,7 @@ for /l %%i in (%NPART%,-1,1) do (
   if "!OFF!"=="%W_fw_offset%" set KEEP=1
   if "!OFF!"=="%W_boot_offset%" set KEEP=1
   if "!OFF!"=="%W_data_offset%" set KEEP=1
+  if "!OFF!"=="%W_linux_offset%" set KEEP=1
   if not defined OFF set KEEP=1
   if not defined KEEP (
     >> X:\woa-stage\dp.txt echo select partition %%i
@@ -322,6 +331,12 @@ echo.
 echo Done. The board restarts into Windows in 15 seconds. The first start
 echo takes a few minutes and restarts once. The log is in
 echo C:\Windows\Logs\woa-stage.log.
+if "%W_armbian%"=="1" (
+  echo.
+  echo Armbian is on the eMMC too. To add its boot option, once: press F1 in
+  echo the firmware's countdown to start the UEFI Shell; its startup.nsh adds
+  echo "Armbian" and starts it.
+)
 ping -n 16 127.0.0.1 >nul
 wpeutil reboot
 goto :end

@@ -27,7 +27,9 @@ export type WoaJob =
       image: FileRef & { extents: Extent[] | null; name: 'install.wim' | 'install.esd'; imageSize: number;
         sha256: string | null; index: number; edition: string; build: number };
       appVersion: string; spotCheck: boolean; resetAfter: boolean;
-      setup: SetupOptions; extras: Array<{ path: string; data: Uint8Array }> }
+      setup: SetupOptions; extras: Array<{ path: string; data: Uint8Array }>;
+      /** Armbian next to Windows: the prepared root file system; its EFI files are in extras. */
+      armbian?: FileRef & { partitionBytes: number } }
   | { kind: 'firmware'; boardId: string; targetId: string; image: FileRef; spotCheck: boolean; resetAfter: boolean }
   /** A finished Windows built on a Windows PC into a VHD (host-build.ts), for the eMMC. */
   | { kind: 'vhd'; boardId: string; vhd: FileRef; spotCheck: boolean; resetAfter: boolean };
@@ -99,6 +101,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
             const plan = planStage({
               board, diskBytes: p.capacity, head: p.head, winpe, rand: random, appVersion: job.appVersion,
               setup: job.setup, extras: job.extras,
+              ...(job.armbian ? { linux: { source: xhrSource(job.armbian.url, job.armbian.size), partitionBytes: job.armbian.partitionBytes } } : {}),
               image: { source: imageSrc, name: job.image.name, sha256: job.image.sha256, index: job.image.index, edition: job.image.edition, build: job.image.build },
             });
             return {
@@ -107,6 +110,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
                 kind: 'stage', capacity: p.capacity, windowsBytes: plan.windowsBytes, totalBytes: plan.totalBytes,
                 removed: plan.removed.map((x) => ({ name: x.name || '(no name)', bytes: (x.lastLba - x.firstLba + 1) * 512 })),
                 diskGuid: plan.diskGuid, certificates: plan.certificates,
+                windowsFinalBytes: plan.windowsFinalBytes, linuxBytes: plan.linux?.bytes ?? 0,
               },
             };
           } catch (e) {

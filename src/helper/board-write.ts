@@ -28,7 +28,9 @@ export type BoardJob =
   | { kind: 'stage'; device: string; boardId: string; winpe: string; appVersion: string;
       image: { path: string; extents: Extent[] | null; name: 'install.wim' | 'install.esd'; size: number;
         sha256: string | null; index: number; edition: string; build: number };
-      setup: SetupOptions; extras: Array<{ path: string; base64: string }> }
+      setup: SetupOptions; extras: Array<{ path: string; base64: string }>;
+      /** Armbian next to Windows: the prepared root file system (src/main/armbian-image.ts). */
+      armbian?: { path: string; partitionBytes: number } }
   | { kind: 'firmware'; device: string; boardId: string; targetId: string; image: string }
   | { kind: 'spinor'; device: string; boardId: string; image: string }
   /** The staged layout on an SD card or NVMe drive attached to this computer (not the board). */
@@ -261,9 +263,12 @@ export async function runBoardJob(job: BoardJob, send: (m: HelperMessage) => voi
       const file = fileSource(job.image.path);
       open.push(winpe, file);
       const source = job.image.extents ? extentSource(file, { path: job.image.name, size: job.image.size, extents: job.image.extents }) : file;
+      const rootfs = job.armbian ? fileSource(job.armbian.path) : null;
+      if (rootfs) open.push(rootfs);
       try {
         regions = planStage({
           board, diskBytes: capacity, head: new Uint8Array(head), winpe,
+          ...(rootfs && job.armbian ? { linux: { source: rootfs, partitionBytes: job.armbian.partitionBytes } } : {}),
           image: { source, name: job.image.name, sha256: job.image.sha256, index: job.image.index, edition: job.image.edition, build: job.image.build },
           rand: (n) => new Uint8Array(randomBytes(n)), appVersion: job.appVersion,
           setup: job.setup, extras: job.extras.map((e) => ({ path: e.path, data: new Uint8Array(Buffer.from(e.base64, 'base64')) })),

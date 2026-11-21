@@ -9,6 +9,8 @@
 //                     its collect.cmd replaced by the launcher
 //   dataFirst..       WOA-STAGE-DATA: exFAT with the Windows image and the
 //                     install script
+//   linuxFirst..      Armbian, when asked for: its root file system, which
+//                     the install keeps (src/woa/armbian.ts)
 //   end-33..end-1     backup GPT
 //
 // The firmware boots \EFI\Boot\bootaa64.efi from the first FAT volume on
@@ -27,6 +29,7 @@ import { crlf, INSTALL, LAUNCHER } from './stage-scripts';
 import type { WoaBoard } from './boards';
 import { certsCmd, trustedCerts } from './certs';
 import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
+import { TYPE_LINUX_FS } from './armbian';
 
 const ALIGN = 2048; // 1 MiB
 /** Windows 11 23H2 applied with /Compact takes about 10 GB; leave room for updates and a page file. */
@@ -80,6 +83,12 @@ export interface StageInput {
    * SSH is on) and "extra-drivers/..." (driver packages the user added).
    */
   extras?: Array<{ path: string; data: Uint8Array }>;
+  /**
+   * Armbian next to Windows (eMMC only): its prepared root file system, put
+   * at the start of a partition of `partitionBytes` at the end of the disk.
+   * The files for the EFI partition go in `extras` under "armbian-esp/".
+   */
+  linux?: { source: ByteSource; partitionBytes: number };
 }
 
 export interface StagePlan {
@@ -90,6 +99,10 @@ export interface StagePlan {
   dataFirst: number;
   /** Bytes the Windows partitions get before the staging space is added back. */
   windowsBytes: number;
+  /** Bytes Windows has once the staging space is added back. */
+  windowsFinalBytes: number;
+  /** The Armbian partition, when there is one. */
+  linux: { firstLba: number; bytes: number; guid: string } | null;
   /** Bytes sent to the board. */
   totalBytes: number;
   /** What is on the eMMC now besides the firmware: it is removed. */
@@ -173,13 +186,25 @@ export function planStage(o: StageInput): StagePlan {
   // the script's numbers do not change its cluster count, so two passes settle it.
   // The drivers' test certificates: WinPE's driver catalogs and those of the extra drivers.
   const setup = o.setup ?? { skipSetup: null, ssh: false, sshKey: '' };
-  const extras = (o.extras ?? []).filter((e) => e.data.length > 0);
+  const extras = (o.extras ?? []).filter((e) => e.data.length > 0 && !e.path.startsWith('armbian-esp/'));
   for (const e of extras) {
     if (!/^(openssh|extra-drivers)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
       throw new StageError(`${e.path} cannot go on the staging volume.`);
     }
   }
   if (setup.ssh && !extras.some((e) => e.path === 'openssh/sshd.exe')) throw new StageError('SSH is on, but the OpenSSH files are missing.');
+  for (const e of o.extras ?? []) {
+    if (!e.path.startsWith('armbian-esp/')) continue;
+    if (!/^armbian-esp\/[A-Za-z0-9._/-]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) throw new StageError(`${e.path} cannot go on the staging volume.`);
+    if (!o.linux) throw new StageError('There are files for Armbian but no Armbian partition.');
+    extras.push(e);
+  }
+  if (o.linux) {
+    if (target !== 'emmc') throw new StageError('Armbian next to Windows goes on the eMMC only.');
+    if (!extras.some((e) => e.path === 'armbian-esp/EFI/armbian/grubaa64.efi')) throw new StageError('Armbian\'s boot loader is missing.');
+    if (o.linux.source.size % SECTOR || o.linux.source.size === 0) throw new StageError('The Armbian root file system is not a whole number of sectors.');
+    if (o.linux.partitionBytes < o.linux.source.size) throw new StageError('The Armbian partition is smaller than its root file system.');
+  }
   const catalogs = [
     ...fat.listFiles('woa-drivers').filter((p) => /\.cat$/i.test(p)).map((p) => fat.readFile(p)),
     ...extras.filter((e) => /^extra-drivers\/.*\.cat$/i.test(e.path)).map((e) => e.data),
@@ -198,6 +223,10 @@ export function planStage(o: StageInput): StagePlan {
     ...generated,
     ...extras.filter((e) => setup.ssh || !e.path.startsWith('openssh/')).map((e) => ({ name: e.path, source: bytesSource(e.data) })),
   ];
+  // Armbian's partition: at the very end, so Windows grows over the staging space up to it.
+  const linuxSectors = o.linux ? alignUp(Math.ceil(o.linux.partitionBytes / SECTOR)) : 0;
+  const linuxFirst = o.linux ? alignDown(lastUsable + 1 - linuxSectors) : lastUsable + 1;
+  const linuxGuid = o.linux ? randomGuid(o.rand) : '';
   const iniFor = (bootFirst: number, dataFirst: number) => stageIni({
     tool: `WoA RK3576 Imager ${o.appVersion}`,
     board: o.board.id,
@@ -217,13 +246,18 @@ export function planStage(o: StageInput): StagePlan {
     skip_setup: setup.skipSetup ? 1 : 0,
     ssh: setup.ssh ? 1 : 0,
     certificates: certs.map((c) => c.thumbprint).join(' ') || 'none',
+    armbian: o.linux ? 1 : 0,
+    linux_offset: o.linux ? linuxFirst * SECTOR : 'none',
   });
   const when = o.now ?? new Date();
   const first = buildExfat({ files: files(iniFor(0, 0)), label: 'WOASTAGE', partitionOffset: 0, serial, when });
   const dataSectors = first.volumeSectors;
-  const dataFirst = alignDown(lastUsable + 1 - dataSectors);
+  const dataFirst = alignDown(linuxFirst - dataSectors);
   const bootFirst = dataFirst - bootSectors;
   const windowsBytes = (bootFirst - windowsFirst) * SECTOR;
+  if (o.linux && linuxSectors > diskSectors / 2) {
+    throw new StageError(`An Armbian partition of ${(o.linux.partitionBytes / 1e9).toFixed(1)} GB would take more than half of the eMMC. Choose a smaller one.`);
+  }
   if (windowsBytes < MIN_WINDOWS_BYTES) {
     throw new StageError(`The Windows image and WinPE take ${Math.round(((dataSectors + bootSectors) * SECTOR) / 1e9)} GB of the eMMC while they are staged, which leaves ${(windowsBytes / 1e9).toFixed(1)} GB to install into; at least ${MIN_WINDOWS_BYTES / 1e9} GB are needed. Use an image with only the edition you want (wimlib-imagex export, or DISM /Export-Image).`);
   }
@@ -248,6 +282,7 @@ export function planStage(o: StageInput): StagePlan {
     parts: [
       { type: TYPE_BASIC_DATA, guid: bootGuid, firstLba: bootFirst, lastLba: bootFirst + bootSectors - 1, name: 'WOA-STAGE-BOOT' },
       { type: TYPE_BASIC_DATA, guid: dataGuid, firstLba: dataFirst, lastLba: dataFirst + dataSectors - 1, name: 'WOA-STAGE-DATA' },
+      ...(o.linux ? [{ type: TYPE_LINUX_FS, guid: linuxGuid, firstLba: linuxFirst, lastLba: linuxFirst + linuxSectors - 1, name: 'Armbian' }] : []),
     ],
   });
 
@@ -256,6 +291,7 @@ export function planStage(o: StageInput): StagePlan {
     regions.push({ lba: bootFirst + a / SECTOR, source: sliceSource(pe, a, b - a), label: 'WinPE' });
   }
   regions.push({ lba: dataFirst, source: concatSource(data.pieces), label: 'Windows image' });
+  if (o.linux) regions.push({ lba: linuxFirst, source: o.linux.source, label: 'Armbian root file system' });
   regions.push({ lba: gpt.backupStart, source: bytesSource(gpt.backup), label: 'backup partition table' });
   regions.push({ lba: 0, source: bytesSource(gpt.primary), label: 'partition table' });
   for (const r of regions) {
@@ -264,6 +300,8 @@ export function planStage(o: StageInput): StagePlan {
   }
   return {
     regions, diskGuid, bootFirst, dataFirst, windowsBytes, removed, ini, certificates: certs.map((c) => c.thumbprint),
+    windowsFinalBytes: (linuxFirst - windowsFirst - alignUp((260 + 16) * 2048)) * SECTOR,
+    linux: o.linux ? { firstLba: linuxFirst, bytes: linuxSectors * SECTOR, guid: linuxGuid } : null,
     totalBytes: regions.reduce((s, r) => s + r.source.size, 0),
   };
 }

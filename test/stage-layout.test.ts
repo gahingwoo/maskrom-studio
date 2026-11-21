@@ -129,6 +129,94 @@ describe('staged install layout', () => {
     execFileSync('rm', ['-rf', dir]);
   }, 60000);
 
+  it.skipIf(!tools)('puts Armbian in its own partition at the end of the eMMC, after the staging space, and keeps the firmware', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'stage-armbian-'));
+    try {
+      const diskBytes = 62008590336;
+      // A stand-in root file system: 64 MiB with a recognisable first and last sector.
+      const rootfs = new Uint8Array(64 << 20).fill(0x33);
+      rootfs.fill(0xa1, 0, 512);
+      rootfs.fill(0xa2, rootfs.length - 512);
+      const esp = [
+        { path: 'armbian-esp/EFI/armbian/grubaa64.efi', data: new Uint8Array(4096).fill(7) },
+        { path: 'armbian-esp/EFI/armbian/grub.cfg', data: new TextEncoder().encode('search --fs-uuid x\n') },
+        { path: 'armbian-esp/startup.nsh', data: new TextEncoder().encode('bcfg boot add 0 x\r\n') },
+      ];
+      const partitionBytes = 6 * 1024 ** 3;
+      const plan = planStage({
+        board, diskBytes, head, winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 'test', extras: esp,
+        linux: { source: bytesSource(rootfs), partitionBytes },
+      });
+      const diskSectors = Math.floor(diskBytes / 512);
+      expect(plan.linux).not.toBeNull();
+      expect(plan.linux!.bytes).toBe(partitionBytes);
+      expect(plan.linux!.firstLba % 2048).toBe(0);
+      expect(plan.linux!.firstLba + partitionBytes / 512).toBeLessThanOrEqual(diskSectors - 34);
+      expect(plan.ini).toContain(`\r\narmbian=1\r\nlinux_offset=${plan.linux!.firstLba * 512}\r\n`);
+      // Windows ends up with everything between the firmware and Armbian, less the ESP and MSR.
+      expect(plan.windowsFinalBytes).toBe((plan.linux!.firstLba - 131072 - 276 * 2048) * 512);
+      // Nothing is written into sectors 1..131071 (the table at 0..33 is the only thing below 131072).
+      for (const r of plan.regions) {
+        if (r.lba === 0) expect(r.source.size).toBe(34 * 512);
+        else expect(r.lba).toBeGreaterThanOrEqual(131072);
+      }
+      const arm = plan.regions.find((r) => r.label === 'Armbian root file system')!;
+      expect(arm.lba).toBe(plan.linux!.firstLba);
+      expect(plan.regions[plan.regions.length - 1].lba).toBe(0);
+
+      const disk = join(dir, 'emmc.img');
+      execFileSync('truncate', ['-s', String(diskBytes), disk]);
+      const fd = openSync(disk, 'r+');
+      for (const r of plan.regions) {
+        for (let off = 0; off < r.source.size; off += 8 << 20) {
+          const n = Math.min(8 << 20, r.source.size - off);
+          writeSync(fd, r.source.read(off, n), 0, n, r.lba * 512 + off);
+        }
+      }
+      closeSync(fd);
+      const dump = execFileSync('sfdisk', ['-d', disk], { encoding: 'utf8' });
+      expect(dump).toMatch(/start=\s*64, size=\s*131008, type=8DA63339-0007-60C0-C436-083AC8230908/);
+      const m = /start=\s*(\d+), size=\s*(\d+), type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=([0-9A-F-]+), name="Armbian"/.exec(dump)!;
+      expect(m).not.toBeNull();
+      expect(Number(m[1])).toBe(plan.linux!.firstLba);
+      expect(Number(m[2]) * 512).toBe(partitionBytes);
+      expect(m[3].toLowerCase()).toBe(plan.linux!.guid);
+      // Staging comes right before Armbian, so extending Windows over it reaches Armbian.
+      const data = /start=\s*(\d+), size=\s*(\d+), type=[^,]+, uuid=[^,]+, name="WOA-STAGE-DATA"/.exec(dump)!;
+      expect(Number(data[1]) + Number(data[2])).toBeLessThanOrEqual(plan.linux!.firstLba);
+      expect(plan.linux!.firstLba - (Number(data[1]) + Number(data[2]))).toBeLessThan(2048);
+      expect(spawnSync('sfdisk', ['--verify', disk], { encoding: 'utf8' }).stdout).not.toMatch(/corrupt|mismatch/i);
+      const back = fileSource(disk);
+      expect(back.read(plan.linux!.firstLba * 512, 512).every((x) => x === 0xa1)).toBe(true);
+      expect(back.read(plan.linux!.firstLba * 512 + rootfs.length - 512, 512).every((x) => x === 0xa2)).toBe(true);
+      // The EFI files are on the staging volume, where woa-stage.cmd copies them from.
+      const raw = Buffer.from(back.read(plan.dataFirst * 512, plan.regions.find((r) => r.label === 'Windows image')!.source.size));
+      expect(raw.includes(Buffer.from('bcfg boot add 0 x\r\n'))).toBe(true);
+      expect(raw.includes(Buffer.from('search --fs-uuid x\n'))).toBe(true);
+    } finally {
+      execFileSync('rm', ['-rf', dir]);
+    }
+  }, 120000);
+
+  it('refuses an Armbian partition that is too large, too small, off the eMMC or without its boot loader', () => {
+    if (!tools) return;
+    const dir = mkdtempSync(join(tmpdir(), 'stage-armbian-r-'));
+    try {
+      const winpe = fileSource(fakeWinpe(dir));
+      const grub = [{ path: 'armbian-esp/EFI/armbian/grubaa64.efi', data: new Uint8Array(512).fill(1) }];
+      const base = { board, diskBytes: 62008590336, head, winpe, image, rand, appVersion: 't' };
+      const rootfs = bytesSource(new Uint8Array(1 << 20));
+      expect(() => planStage({ ...base, extras: grub, linux: { source: rootfs, partitionBytes: 40e9 } })).toThrow(/more than half/);
+      expect(() => planStage({ ...base, extras: grub, linux: { source: rootfs, partitionBytes: 1 << 19 } })).toThrow(/smaller than its root/);
+      expect(() => planStage({ ...base, linux: { source: rootfs, partitionBytes: 1 << 30 } })).toThrow(/boot loader/);
+      expect(() => planStage({ ...base, extras: grub })).toThrow(/no Armbian partition/);
+      expect(() => planStage({ ...base, extras: [{ path: 'armbian-esp/../x', data: new Uint8Array(1) }], linux: { source: rootfs, partitionBytes: 1 << 30 } })).toThrow(/cannot go/);
+      expect(() => planStage({ ...base, board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), extras: grub, linux: { source: rootfs, partitionBytes: 1 << 30 } })).toThrow(/eMMC only/);
+    } finally {
+      execFileSync('rm', ['-rf', dir]);
+    }
+  }, 60000);
+
   it('refuses the ROCK 4D', () => {
     expect(() => planStage({ board: woaBoard('rock4d')!, diskBytes: 62008590336, head, winpe: bytesSource(new Uint8Array(1)), image, rand, appVersion: 't' })).toThrow(/NVMe/);
   });

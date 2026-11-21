@@ -165,4 +165,15 @@ describe('the scripts the board runs', () => {
     expect(INSTALL).toMatch(/delete volume override[\s\S]*extend/);
     expect(INSTALL).toMatch(/\/Compact \/Verify/);
   });
+  it('install: keeps the Armbian partition and puts GRUB on the new EFI partition after bcdboot', () => {
+    // The clean-up of an earlier attempt keeps the partition at linux_offset.
+    expect(INSTALL).toContain('if "!OFF!"=="%W_linux_offset%" set KEEP=1');
+    const bcdboot = INSTALL.indexOf('bcdboot W:\\Windows');
+    const copy = INSTALL.indexOf('xcopy "%STAGE%\\armbian-esp" S:\\ /e /i /q /y');
+    expect(bcdboot).toBeGreaterThan(0);
+    expect(copy).toBeGreaterThan(bcdboot);
+    // Only when the staging volume has it, so a Windows-only install is unchanged.
+    expect(INSTALL).toContain('if exist "%STAGE%\\armbian-esp\\EFI\\armbian\\grubaa64.efi" (');
+    expect(INSTALL).toMatch(/if "%W_armbian%"=="1" \(/);
+  });
 });
