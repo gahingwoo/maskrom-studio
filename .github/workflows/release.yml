@@ -68,7 +68,7 @@ jobs:
         run: |
           V=$(node -p "require('./package.json').version")
           f=$(ls dist/*.AppImage)
-          want="dist/roxora-imager-$V-linux-${{ matrix.arch }}.AppImage"
+          want="dist/woa-rk3576-imager-$V-linux-${{ matrix.arch }}.AppImage"
           [ "$f" = "$want" ] || mv "$f" "$want"
       - name: Install nfpm
         run: |
@@ -87,8 +87,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y appstream desktop-file-utils xvfb
-          appstreamcli validate --no-net packaging/io.github.roxora_os.imager.metainfo.xml
-          desktop-file-validate packaging/io.github.roxora_os.imager.desktop
+          appstreamcli validate --no-net packaging/io.github.gahingwoo.woa_rk3576_imager.metainfo.xml
+          desktop-file-validate packaging/io.github.gahingwoo.woa_rk3576_imager.desktop
       - name: Package deb and rpm
         env:
           PKG_ARCH: ${{ matrix.pkg_arch }}
@@ -110,7 +110,7 @@ jobs:
           ls squashfs-root/*.desktop squashfs-root/usr/share/icons/hicolor/*/apps/ 2>/dev/null || true
           rm -rf squashfs-root
       - name: Decompress a .img.xz in the packaged app
-        run: ELECTRON_RUN_AS_NODE=1 dist/app/roxora-imager scripts/check-decompress.cjs "$PWD/dist/app/resources/app.asar"
+        run: ELECTRON_RUN_AS_NODE=1 dist/app/woa-rk3576-imager scripts/check-decompress.cjs "$PWD/dist/app/resources/app.asar"
       # A healthy app keeps running until timeout kills it (124). Anything
       # else means it exited on its own and never opened its window.
       - name: Smoke-test the AppImage on this runner
@@ -123,17 +123,17 @@ jobs:
       - name: Smoke-test the .deb on this runner
         run: |
           sudo apt-get install -y ./dist/*.deb
-          test -u /opt/roxora-imager/chrome-sandbox
-          test -f /usr/lib/udev/rules.d/70-roxora-imager.rules
-          for f in /usr/share/icons/hicolor/{16x16,24x24,32x32,48x48,64x64,128x128,256x256,512x512}/apps/io.github.roxora_os.imager.png \
-                   /usr/share/icons/hicolor/scalable/apps/io.github.roxora_os.imager.svg \
-                   /usr/share/icons/hicolor/symbolic/apps/io.github.roxora_os.imager-symbolic.svg; do
+          test -u /opt/woa-rk3576-imager/chrome-sandbox
+          test -f /usr/lib/udev/rules.d/70-woa-rk3576-imager.rules
+          for f in /usr/share/icons/hicolor/{16x16,24x24,32x32,48x48,64x64,128x128,256x256,512x512}/apps/io.github.gahingwoo.woa_rk3576_imager.png \
+                   /usr/share/icons/hicolor/scalable/apps/io.github.gahingwoo.woa_rk3576_imager.svg \
+                   /usr/share/icons/hicolor/symbolic/apps/io.github.gahingwoo.woa_rk3576_imager-symbolic.svg; do
             test -f "$f" || { echo "FAIL: missing $f"; exit 1; }
           done
-          desktop-file-validate /usr/share/applications/io.github.roxora_os.imager.desktop
-          appstreamcli validate --no-net /usr/share/metainfo/io.github.roxora_os.imager.metainfo.xml
+          desktop-file-validate /usr/share/applications/io.github.gahingwoo.woa_rk3576_imager.desktop
+          appstreamcli validate --no-net /usr/share/metainfo/io.github.gahingwoo.woa_rk3576_imager.metainfo.xml
           set +e
-          timeout 30 xvfb-run -a roxora-imager > /tmp/deb.log 2>&1
+          timeout 30 xvfb-run -a woa-rk3576-imager > /tmp/deb.log 2>&1
           rc=$?
           cat /tmp/deb.log
           [ "$rc" = 124 ] || { echo "FAIL: installed app exited with $rc"; exit 1; }
@@ -178,7 +178,7 @@ jobs:
         run: |
           chmod +x dist/*.AppImage
           (cd dist && ./*.AppImage --appimage-extract > /dev/null)
-          ELECTRON_RUN_AS_NODE=1 dist/squashfs-root/roxora-imager scripts/check-decompress.cjs "$PWD/dist/squashfs-root/resources/app.asar"
+          ELECTRON_RUN_AS_NODE=1 dist/squashfs-root/woa-rk3576-imager scripts/check-decompress.cjs "$PWD/dist/squashfs-root/resources/app.asar"
 
   macos:
     name: macOS ${{ matrix.arch }}
@@ -217,8 +217,8 @@ jobs:
         run: |
           npx electron-builder --mac dir --${{ matrix.eb }} --publish never
           app=$(ls -d dist/${{ matrix.out }}/*.app | head -1)
-          [ "$app" = "dist/${{ matrix.out }}/Roxora Imager.app" ] || mv "$app" "dist/${{ matrix.out }}/Roxora Imager.app"
-          ls "dist/${{ matrix.out }}/Roxora Imager.app/Contents/MacOS" "dist/${{ matrix.out }}/Roxora Imager.app/Contents/Resources"
+          [ "$app" = "dist/${{ matrix.out }}/WoA RK3576 Imager.app" ] || mv "$app" "dist/${{ matrix.out }}/WoA RK3576 Imager.app"
+          ls "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/MacOS" "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/Resources"
       # Developer ID + hardened runtime when the signing secrets are set,
       # ad hoc otherwise.
       - name: Sign the app
@@ -228,20 +228,20 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: bash packaging/macos-sign.sh app "dist/${{ matrix.out }}/Roxora Imager.app"
+        run: bash packaging/macos-sign.sh app "dist/${{ matrix.out }}/WoA RK3576 Imager.app"
       - name: Confirm the architecture
-        run: file "dist/${{ matrix.out }}/Roxora Imager.app/Contents/MacOS/"*
+        run: file "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/MacOS/"*
       - name: Icon and no firmware blobs in the app
         run: |
-          node scripts/check-package.mjs "dist/${{ matrix.out }}/Roxora Imager.app/Contents/Resources" ${{ matrix.eb }}
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "dist/${{ matrix.out }}/Roxora Imager.app/Contents/Info.plist"
-          cmp build-res/icon.icns "dist/${{ matrix.out }}/Roxora Imager.app/Contents/Resources/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "dist/${{ matrix.out }}/Roxora Imager.app/Contents/Info.plist")"
+          node scripts/check-package.mjs "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/Resources" ${{ matrix.eb }}
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/Info.plist"
+          cmp build-res/icon.icns "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/Resources/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/Info.plist")"
           echo "OK: the bundle's icon is the design .icns"
 
       - name: Create the DMG
         run: |
           V=$(node -p "require('./package.json').version")
-          bash packaging/make-dmg.sh "dist/${{ matrix.out }}/Roxora Imager.app" "dist/roxora-imager-$V-macos-${{ matrix.arch }}.dmg"
+          bash packaging/make-dmg.sh "dist/${{ matrix.out }}/WoA RK3576 Imager.app" "dist/woa-rk3576-imager-$V-macos-${{ matrix.arch }}.dmg"
       - name: Notarize the DMG
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
@@ -254,7 +254,7 @@ jobs:
         run: |
           set +e
           # macOS has no timeout(1); SIGALRM after 30 s gives 142.
-          exe=$(ls "dist/${{ matrix.out }}/Roxora Imager.app/Contents/MacOS/"* | head -1)
+          exe=$(ls "dist/${{ matrix.out }}/WoA RK3576 Imager.app/Contents/MacOS/"* | head -1)
           ELECTRON_ENABLE_LOGGING=1 perl -e 'alarm 30; exec @ARGV' "$exe" --enable-logging > /tmp/app.log 2>&1
           rc=$?
           cat /tmp/app.log
@@ -295,12 +295,12 @@ jobs:
       - name: Name the zip
         run: |
           V=$(node -p "require('./package.json').version")
-          mv dist/roxora-imager-$V-win-x64.zip dist/roxora-imager-$V-windows-x64.zip
+          mv dist/woa-rk3576-imager-$V-win-x64.zip dist/woa-rk3576-imager-$V-windows-x64.zip
           ls -l dist
       - name: Smoke-test the app
         run: |
           set +e
-          timeout 30 "dist/win-unpacked/roxora-imager.exe" > app.log 2>&1
+          timeout 30 "dist/win-unpacked/woa-rk3576-imager.exe" > app.log 2>&1
           rc=$?
           cat app.log
           [ "$rc" = 124 ] || { echo "FAIL: exited with $rc"; exit 1; }

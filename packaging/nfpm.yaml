@@ -2,23 +2,24 @@
 #   VERSION=0.1.0 PKG_ARCH=amd64 nfpm package -f packaging/nfpm.yaml -p deb -t dist/
 # PKG_ARCH is amd64 or arm64. dist/app is electron-builder's unpacked app
 # (dist/linux-unpacked or dist/linux-arm64-unpacked), copied there.
-name: roxora-imager
+name: woa-rk3576-imager
 arch: ${PKG_ARCH}
 platform: linux
 version: ${VERSION}
-maintainer: Roxora Project <oss@gahingwoo.com>
+maintainer: Ga Hing Woo <gahing@gahingwoo.com>
 description: |
-  Write Roxora images to SD cards and USB drives, and to board storage
-  (eMMC, SPI NOR) over USB in Maskrom mode. Downloads come from the
-  Roxora releases and every write is read back and checked.
-homepage: https://github.com/roxora-os/imager
+  Install Windows 11 23H2 on the eMMC of Rockchip RK3576 boards over USB
+  in Maskrom mode, without a USB stick, and write their edk2-rk3576 UEFI
+  firmware. Downloads come from the edk2-rk3576 and woa-rk3576 releases
+  and are checked against their SHA-256.
+homepage: https://github.com/gahingwoo/woa-rk3576-imager
 license: GPL-2.0-only
 section: utils
 priority: optional
 
 # What Electron needs from the system: electron-builder's list, without
 # libXss (Electron no longer links or loads it), with libgbm and ALSA,
-# which the roxora-imager binary links and the list leaves out. On Ubuntu
+# which the woa-rk3576-imager binary links and the list leaves out. On Ubuntu
 # 24.04 and later libasound2t64 is the package, and the t64 packages
 # provide the old names (libgtk-3-0, libatspi2.0-0).
 depends:
@@ -50,28 +51,28 @@ overrides:
 
 contents:
   - src: ./dist/app/
-    dst: /opt/roxora-imager/
+    dst: /opt/woa-rk3576-imager/
     type: tree
   - src: ./packaging/launcher.sh
-    dst: /usr/bin/roxora-imager
+    dst: /usr/bin/woa-rk3576-imager
     file_info:
       mode: 0755
-  - src: ./packaging/io.github.roxora_os.imager.desktop
-    dst: /usr/share/applications/io.github.roxora_os.imager.desktop
-  - src: ./packaging/io.github.roxora_os.imager.metainfo.xml
-    dst: /usr/share/metainfo/io.github.roxora_os.imager.metainfo.xml
+  - src: ./packaging/io.github.gahingwoo.woa_rk3576_imager.desktop
+    dst: /usr/share/applications/io.github.gahingwoo.woa_rk3576_imager.desktop
+  - src: ./packaging/io.github.gahingwoo.woa_rk3576_imager.metainfo.xml
+    dst: /usr/share/metainfo/io.github.gahingwoo.woa_rk3576_imager.metainfo.xml
   - src: ./build-res/hicolor/
     dst: /usr/share/icons/hicolor/
     type: tree
   # USB access for the desktop user, so Maskrom writing needs no sudo.
-  - src: ./packaging/70-roxora-imager.rules
-    dst: /usr/lib/udev/rules.d/70-roxora-imager.rules
+  - src: ./packaging/70-woa-rk3576-imager.rules
+    dst: /usr/lib/udev/rules.d/70-woa-rk3576-imager.rules
   - src: ./packaging/udev-reload.sh
-    dst: /usr/share/roxora-imager/udev-reload.sh
+    dst: /usr/share/woa-rk3576-imager/udev-reload.sh
     file_info:
       mode: 0755
   - src: ./LICENSE
-    dst: /usr/share/doc/roxora-imager/LICENSE
+    dst: /usr/share/doc/woa-rk3576-imager/LICENSE
 
 scripts:
   postinstall: ./packaging/postinstall.sh

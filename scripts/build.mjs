@@ -23,6 +23,7 @@ await build({
   define: { 'process.env.NODE_ENV': JSON.stringify(prod ? 'production' : 'development') },
 });
 await build({ ...web, entryPoints: { 'maskrom-worker': 'src/maskrom/worker.ts' }, outdir: 'build/renderer' });
+await build({ ...web, entryPoints: { 'woa-worker': 'src/woa/woa-worker.ts' }, outdir: 'build/renderer' });
 cpSync('src/renderer/index.html', 'build/renderer/index.html');
 cpSync('src/renderer/theme.js', 'build/renderer/theme.js');
 

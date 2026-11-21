@@ -6,7 +6,7 @@
 // Fails when VERSION is not package.json's version (the tag must match it).
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const FILE = 'packaging/io.github.roxora_os.imager.metainfo.xml';
+const FILE = 'packaging/io.github.gahingwoo.woa_rk3576_imager.metainfo.xml';
 const [version, date] = process.argv.slice(2);
 const pkg = JSON.parse(readFileSync('package.json', 'utf8')).version;
 if (!version || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) {

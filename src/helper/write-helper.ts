@@ -25,6 +25,7 @@ import { guardReadsAfterClose } from './read-guard';
 import * as sourceDestination from 'etcher-sdk/build/source-destination';
 import { isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from '../main/linux-disks';
+import { runBoardJob, type BoardJob } from './board-write';
 
 export interface HelperArgs {
   socket: string;
@@ -58,7 +59,7 @@ export function parseArgs(argv: string[]): HelperArgs {
   return {
     socket: get('socket'), token: get('token'), image: get('image'), device: get('device'),
     extractSize, extractSha256,
-    allowLoop: argv.includes('--allow-loop') && process.env.ROXORA_IMAGER_TEST === '1',
+    allowLoop: argv.includes('--allow-loop') && process.env.WOA_IMAGER_TEST === '1',
     allowInternal: argv.includes('--allow-internal'),
   };
 }
@@ -151,6 +152,8 @@ export async function runWrite(a: HelperArgs, send: (m: HelperMessage) => void):
 }
 
 export async function main(argv: string[]): Promise<number> {
+  // WoA RK3576 Imager: writing the board this runs on (helper/board-write.ts).
+  if (argv.includes('--job')) return boardMain(argv);
   let args: HelperArgs;
   try {
     args = parseArgs(argv);
@@ -178,10 +181,36 @@ export async function main(argv: string[]): Promise<number> {
   return code;
 }
 
+async function boardMain(argv: string[]): Promise<number> {
+  const get = (k: string) => {
+    const i = argv.indexOf(`--${k}`);
+    if (i < 0 || i + 1 >= argv.length) throw new Error(`missing --${k}`);
+    return argv[i + 1];
+  };
+  const { readFileSync } = await import('node:fs');
+  const job = JSON.parse(readFileSync(get('job'), 'utf8')) as BoardJob;
+  const sock: Socket = await new Promise((resolve, reject) => {
+    const s = connect(get('socket'), () => resolve(s));
+    s.on('error', reject);
+  });
+  const send = (m: HelperMessage) => { sock.write(`${JSON.stringify(m)}\n`); };
+  send({ type: 'hello', token: get('token') });
+  sock.on('data', (d) => { if (d.toString().includes('"cancel"')) process.exit(3); });
+  let code = 0;
+  try {
+    await runBoardJob(job, send);
+  } catch (e) {
+    send({ type: 'done', ok: false, reason: 'Writing stopped with an error.', detail: String((e as Error)?.message ?? e) });
+    code = 1;
+  }
+  await new Promise<void>((r) => sock.end(r));
+  return code;
+}
+
 // Started directly (bundled as build/helper/write-helper.js). The flags are
 // looked up by name, so it does not matter whether the bootstrap file or
 // the helper itself is argv[1].
-if (process.env.ROXORA_IMAGER_HELPER === '1') {
+if (process.env.WOA_IMAGER_HELPER === '1') {
   main(process.argv.slice(1)).then((c) => process.exit(c), (e) => {
     process.stderr.write(`write-helper: ${String(e)}\n`);
     process.exit(1);

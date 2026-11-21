@@ -3,7 +3,7 @@
 //   npm run writer && node test/e2e/sd-ramdisk-mac.mjs
 //
 // Runs the app's macOS write path (src/main/mac-write.ts) with the real
-// roxora-imager-rawdisk and Apple's authopen against RAM disks from
+// woa-rk3576-imager-rawdisk and Apple's authopen against RAM disks from
 // `hdiutil attach -nomount ram://N`. Nothing in the path runs as root.
 //
 // A runner has nobody to answer the password dialog, so the test grants the
@@ -48,7 +48,7 @@ await build({ entryPoints: ['src/main/local-image.ts'], bundle: true, platform: 
   external: ['etcher-sdk'], outfile: join(root, 'build/e2e/local-image.cjs'), logLevel: 'warning' });
 const { describeLocal, measureFile } = createRequire(import.meta.url)(join(root, 'build/e2e/local-image.cjs'));
 
-const helperPath = join(root, 'build-res/writer/roxora-imager-rawdisk');
+const helperPath = join(root, 'build-res/writer/woa-rk3576-imager-rawdisk');
 const BIG = { maxBuffer: 512 * 1024 * 1024 };
 const sh = (cmd, args) => execFileSync(cmd, args, BIG).toString().trim();
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
@@ -148,7 +148,7 @@ try {
   const f = await write(big, { signal: ac.signal, onProgress: (p) => { if (p.stage === 'write' && p.bytes >= 8 * MIB) ac.abort(); } });
   check(f.out.ok === false && f.out.reason === 'Cancelled. The drive is only partly written.', 'cancelling during the write stops it and says the drive is partly written');
   let running = '';
-  try { running = sh('pgrep', ['-f', 'roxora-imager-rawdisk']); } catch { /* none */ }
+  try { running = sh('pgrep', ['-f', 'woa-rk3576-imager-rawdisk']); } catch { /* none */ }
   check(running === '', 'no helper is left running after the cancel');
 
   // Custom images: nothing to compare with but the file itself.

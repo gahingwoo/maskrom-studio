@@ -49,8 +49,8 @@ describe('Range requests', () => {
 describe('starting the writer', () => {
   it('quotes arguments for sh', () => {
     expect(quote("/tmp/it's here", 'linux')).toBe("'/tmp/it'\\''s here'");
-    expect(commandLine({ exec: '/opt/Roxora Imager/writer', env: {} }, ['--device', '/dev/sdb'], 'linux'))
-      .toBe("'/opt/Roxora Imager/writer' '--device' '/dev/sdb'");
+    expect(commandLine({ exec: '/opt/WoA RK3576 Imager/writer', env: {} }, ['--device', '/dev/sdb'], 'linux'))
+      .toBe("'/opt/WoA RK3576 Imager/writer' '--device' '/dev/sdb'");
   });
   it('quotes for cmd and refuses what cmd cannot take', () => {
     expect(quote('\\\\.\\PhysicalDrive1', 'win32')).toBe('"\\\\.\\PhysicalDrive1"');
@@ -117,7 +117,7 @@ describe('sudo-prompt on Node.js without util.isObject', () => {
       // A command starting with "sudo" is refused right after the argument
       // checks, before any password prompt.
       const err = await new Promise<Error | undefined>((resolve) => {
-        sudo.exec('sudo true', { name: 'Roxora Imager', env: { A: '1' } }, resolve);
+        sudo.exec('sudo true', { name: 'WoA RK3576 Imager', env: { A: '1' } }, resolve);
       });
       expect(String(err)).toMatch(/should not be prefixed with "sudo"/);
     } finally {

@@ -1,6 +1,6 @@
-Roxora Imager
+WoA RK3576 Imager
 
-Install: drag Roxora Imager onto the Applications folder.
+Install: drag WoA RK3576 Imager onto the Applications folder.
 
 On first launch macOS may say the app "can't be opened" or that the
 developer "can't be verified". The app is not notarized by Apple yet; this
@@ -11,13 +11,13 @@ does not mean anything is wrong with it.
   click "Open Anyway" and confirm with your password.
 - macOS 14 and earlier: in Applications, right-click (or Control-click) the
   app, choose Open, then Open.
-- Or run in Terminal: xattr -cr "/Applications/Roxora Imager.app"
+- Or run in Terminal: xattr -cr "/Applications/WoA RK3576 Imager.app"
 
 This is needed only once.
 
 To avoid the prompt, install from Terminal in one line (the download is
 checked against the SHA-256 GitHub publishes for it):
 
-curl -fsSL https://raw.githubusercontent.com/roxora-os/imager/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gahingwoo/woa-rk3576-imager/main/install.sh | sh
 
-https://github.com/roxora-os/imager
+https://github.com/gahingwoo/woa-rk3576-imager

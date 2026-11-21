@@ -31,31 +31,26 @@ jobs:
         with:
           name: rkdeveloptool-wasm
           path: vendor/rkdeveloptool-wasm
+      # For the tests that check the staged layout with the real tools:
+      # mkfs.vfat and mtools (FAT32), fsck.exfat, sfdisk and sgdisk.
+      - name: File system tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dosfstools mtools exfatprogs gdisk fdisk
       - name: Shell scripts
         run: shellcheck -S warning install.sh packaging/*.sh scripts/*.sh
       - run: npm run typecheck
-      - name: Unit tests (catalog, targets, Maskrom through the WASM against a pretend board)
+      - name: Unit tests (staged layout, file systems, Maskrom through the WASM against a pretend board)
         run: npm test
       - name: Maskrom loader built from rkbin matches its pin
         run: node scripts/check-loader.mjs
       - name: Tests of the modules copied from edk2-webflash (xz, image source)
         run: node --test test/webflash/*.test.js
-      - name: Web build
-        run: node scripts/build-web.mjs
       - run: npm run build
       - name: Maskrom path inside Electron against a pretend board
         run: xvfb-run -a node scripts/electron-maskrom-e2e.mjs
+      - name: Staged Windows install inside Electron against a pretend TaishanPi 3M
+        run: xvfb-run -a node scripts/electron-woa-e2e.mjs
       - name: Screenshots
-        run: |
-          xvfb-run -a node scripts/shots.mjs shots
-          xvfb-run -a node scripts/web-shots.mjs shots/web
-      # With the real releases from GitHub, for the README; a network
-      # problem must not fail CI.
-      - name: README screenshots
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: xvfb-run -a node scripts/readme-shots.mjs shots/readme
+        run: xvfb-run -a node scripts/shots.mjs shots
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots
@@ -75,7 +70,7 @@ jobs:
       # Built as in release.yml, so this is the helper the DMG ships.
       - name: Raw disk helper (C, opens the disk through authopen)
         run: npm run writer
-      - run: file build-res/writer/roxora-imager-rawdisk
+      - run: file build-res/writer/woa-rk3576-imager-rawdisk
       - run: command -v xz || brew install xz
       - name: Write, read back, refuse the system disk, cancel
         run: node test/e2e/sd-ramdisk-mac.mjs

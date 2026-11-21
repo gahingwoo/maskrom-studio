@@ -41,7 +41,7 @@ const output = (cmd: string, args: string[]) => {
   } catch { return ''; }
 };
 
-/** The app bundle on macOS: /Applications/Roxora Imager.app. */
+/** The app bundle on macOS: /Applications/WoA RK3576 Imager.app. */
 const appBundle = () => app.getPath('exe').replace(/\/Contents\/MacOS\/[^/]+$/, '');
 
 /** At start: clear away the bundle a previous in-app update on macOS put aside. */
@@ -59,7 +59,7 @@ export function detectInstall(): { kind: InstallKind; arch: string } {
   const kind = installKind({
     platform, packaged: app.isPackaged, appImage: process.env.APPIMAGE,
     brew: platform === 'darwin' && brewCaskOwns(exe.replace(/\/Contents\/MacOS\/[^/]+$/, ''), { realpath: realpathSync, readdir: readdirSync }),
-    nsis: platform === 'win32' && existsSync(join(dirname(exe), 'Uninstall Roxora Imager.exe')),
+    nsis: platform === 'win32' && existsSync(join(dirname(exe), 'Uninstall WoA RK3576 Imager.exe')),
     dpkg,
     rpm: platform === 'linux' && !process.env.APPIMAGE && owns('rpm', ['-qf', exe]),
     // A .deb that apt can get again from a repository: Roxora's packages on
@@ -72,19 +72,19 @@ export function detectInstall(): { kind: InstallKind; arch: string } {
 }
 
 // Unpackaged builds only, for the screenshots: a made-up answer, no network.
-const FAKE = !app.isPackaged ? process.env.ROXORA_IMAGER_FAKE_UPDATE : undefined;
+const FAKE = !app.isPackaged ? process.env.WOA_IMAGER_FAKE_UPDATE : undefined;
 function fakeCheck(): UpdateCheck {
   if (FAKE === 'error') return { state: 'error', message: 'Could not reach GitHub.' };
   if (FAKE === 'current') return { state: 'current', version: app.getVersion(), beta: false, newerBeta: null };
   if (FAKE === 'brew' || FAKE === 'apt') {
     return { state: 'newer', offer: {
-      version: '9.9.9', url: 'https://github.com/roxora-os/imager/releases', beta: false, kind: FAKE,
+      version: '9.9.9', url: 'https://github.com/gahingwoo/woa-rk3576-imager/releases', beta: false, kind: FAKE,
       notes: 'A made-up version for the screenshots.', asset: null,
     } };
   }
   return { state: 'newer', offer: {
-    version: '9.9.9', url: 'https://github.com/roxora-os/imager/releases', beta: false, kind: 'appimage',
-    notes: 'A made-up version for the screenshots.', asset: { name: 'roxora-imager-9.9.9-linux-x86_64.AppImage', size: 164283935 },
+    version: '9.9.9', url: 'https://github.com/gahingwoo/woa-rk3576-imager/releases', beta: false, kind: 'appimage',
+    notes: 'A made-up version for the screenshots.', asset: { name: 'woa-rk3576-imager-9.9.9-linux-x86_64.AppImage', size: 164283935 },
   } };
 }
 
@@ -174,7 +174,7 @@ export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
         brew, runningVersion: app.getVersion(), installedVersion: bundleVersion, onLog: log, signal: running.signal,
         onStage: (st) => stage(st === 'update' ? 'brew-update' : 'brew-upgrade'),
       });
-      if (r.ok) return { ok: true, restart: true, message: `Homebrew installed Roxora Imager ${o.release.tag_name.replace(/^v/, '')}. Restart to use it.` };
+      if (r.ok) return { ok: true, restart: true, message: `Homebrew installed WoA RK3576 Imager ${o.release.tag_name.replace(/^v/, '')}. Restart to use it.` };
       return r.cancelled ? { ok: false, reason: r.reason } : { ok: false, reason: `${r.reason} Its output is below. You can also update in Terminal:`, command: BREW_COMMAND };
     } finally {
       running = null;
@@ -184,7 +184,7 @@ export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
   if (o.kind === 'apt') return { ok: false, reason: 'This copy is updated with the system\'s software updates. You can also update it in a terminal:', command: APT_COMMAND };
   const asset = o.asset;
   if (o.kind === 'none' || !asset) return { ok: false, reason: 'The app cannot update this copy itself. Get the new version from the release page.' };
-  if (!asset.browser_download_url.startsWith(DOWNLOAD_PREFIX)) return { ok: false, reason: 'The release lists a download that is not on the Roxora Imager release page. Nothing was downloaded.' };
+  if (!asset.browser_download_url.startsWith(DOWNLOAD_PREFIX)) return { ok: false, reason: 'The release lists a download that is not on the WoA RK3576 Imager release page. Nothing was downloaded.' };
   const version = o.release.tag_name.replace(/^v/, '');
   running = new AbortController();
   const signal = running.signal;
@@ -204,40 +204,40 @@ export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
         const moved = at !== appBundle();
         if (moved) relaunchExe = join(at, 'Contents', 'MacOS', app.getPath('exe').split('/').pop()!);
         return { ok: true, restart: true, message: moved
-          ? `Roxora Imager ${version} is installed at ${at}, because ${appBundle().replace(/\/[^/]+$/, '')} cannot be written. The old copy is still at ${appBundle()}. Restart to use the new one.`
-          : `Roxora Imager ${version} is installed. Restart to use it.` };
+          ? `WoA RK3576 Imager ${version} is installed at ${at}, because ${appBundle().replace(/\/[^/]+$/, '')} cannot be written. The old copy is still at ${appBundle()}. Restart to use the new one.`
+          : `WoA RK3576 Imager ${version} is installed. Restart to use it.` };
       } catch (e) {
         // Not possible here: as before, the DMG is opened and the user drags the app.
         log(`${(e as Error).message}\n`);
         const err = await shell.openPath(dest);
         const why = e instanceof NotInPlace ? 'The app could not be replaced where it is' : 'Replacing the app did not work';
         return { ok: true, restart: false, message: `${why}: ${(e as Error).message.replace(/\.$/, '')}. The old app is unchanged. ${asset.name} is in your Downloads folder${err ? '. Open it' : ' and has been opened'}: `
-          + 'quit Roxora Imager, then drag the new Roxora Imager onto Applications and replace the old one.' };
+          + 'quit WoA RK3576 Imager, then drag the new WoA RK3576 Imager onto Applications and replace the old one.' };
       }
     }
     if (o.kind === 'windows') {
-      const dest = join(mkdtempSync(join(tmpdir(), 'roxora-imager-update-')), asset.name);
+      const dest = join(mkdtempSync(join(tmpdir(), 'woa-rk3576-imager-update-')), asset.name);
       stage('download');
       await downloadVerified({ ...d, dest });
       const err = await shell.openPath(dest);
       if (err) return { ok: false, reason: `The installer could not be started (${err}). It is at ${dest}.` };
       // The installer replaces the app, which must not be running then.
       setTimeout(() => app.quit(), 1500);
-      return { ok: true, restart: false, message: 'The installer is starting. Roxora Imager closes now.' };
+      return { ok: true, restart: false, message: 'The installer is starting. WoA RK3576 Imager closes now.' };
     }
     if (o.kind === 'appimage') {
       const current = process.env.APPIMAGE!;
       await replaceAppImage(current, d);
-      return { ok: true, restart: true, message: `Roxora Imager ${version} is now at ${current}. Restart to use it.` };
+      return { ok: true, restart: true, message: `WoA RK3576 Imager ${version} is now at ${current}. Restart to use it.` };
     }
-    const dest = join(mkdtempSync(join(tmpdir(), 'roxora-imager-update-')), asset.name);
+    const dest = join(mkdtempSync(join(tmpdir(), 'woa-rk3576-imager-update-')), asset.name);
     await downloadVerified({ ...d, dest });
     const cmd = packageInstallCommand(o.kind, dest, programExists);
     if (!cmd) return { ok: false, reason: `No package manager was found to install ${asset.name}. It is downloaded and checked, at ${dest}.` };
     const command = shellCommand(cmd);
     if (!programExists('pkexec')) return { ok: false, reason: 'The package is downloaded and checked. Install it in a terminal:', command };
     const r = await pkexec(cmd, signal);
-    if (r.code === 0) return { ok: true, restart: true, message: `Roxora Imager ${version} is installed. Restart to use it.` };
+    if (r.code === 0) return { ok: true, restart: true, message: `WoA RK3576 Imager ${version} is installed. Restart to use it.` };
     if (r.code === 126 || r.code === 127) {
       return { ok: false, reason: 'Administrator rights were not granted. The package is downloaded and checked; you can install it in a terminal:', command };
     }

@@ -2,8 +2,8 @@
 # From gahingwoo/RKDevelopTool-GUI packaging/macos-sign.sh, unchanged apart
 # from these comments.
 # Sign the macOS app or DMG.
-#   packaging/macos-sign.sh app "dist/mac-arm64/Roxora Imager.app"
-#   packaging/macos-sign.sh dmg dist/roxora-imager-0.1.0-macos-arm64.dmg
+#   packaging/macos-sign.sh app "dist/mac-arm64/WoA RK3576 Imager.app"
+#   packaging/macos-sign.sh dmg dist/woa-rk3576-imager-0.1.0-macos-arm64.dmg
 #
 # With a Developer ID certificate in the environment (repository secrets,
 # see below) the app is signed with the hardened runtime and the DMG is

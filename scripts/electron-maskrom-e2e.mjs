@@ -23,8 +23,8 @@ const sha = createHash('sha256').update(data).digest('hex');
 // the worker with edk2-webflash's xz decoder.
 execFileSync('xz', ['-1', '-k', '--check=crc64', join(dir, 'image.img')]);
 
-const env = { ...process.env, ROXORA_IMAGER_HIDDEN: '1', ROXORA_IMAGER_TEST_SERVE: join(dir, 'image.img'),
-  ROXORA_IMAGER_TEST_SERVE_XZ: join(dir, 'image.img.xz') };
+const env = { ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_TEST_SERVE: join(dir, 'image.img'),
+  WOA_IMAGER_TEST_SERVE_XZ: join(dir, 'image.img.xz') };
 delete env.ELECTRON_RUN_AS_NODE;
 const app = await electron.launch({ args: ['.'], env });
 let ok = false;

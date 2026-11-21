@@ -32,7 +32,7 @@ await build({ entryPoints: ['src/main/local-image.ts'], bundle: true, platform: 
   external: ['etcher-sdk'], outfile: join(root, 'build/e2e/local-image.cjs'), logLevel: 'warning' });
 const { describeLocal, measureFile } = createRequire(import.meta.url)(join(root, 'build/e2e/local-image.cjs'));
 
-const writerPath = join(root, 'build-res/writer/roxora-imager-writer');
+const writerPath = join(root, 'build-res/writer/woa-rk3576-imager-writer');
 const BIG = { maxBuffer: 256 * 1024 * 1024 };
 const sh = (cmd, args) => execFileSync(cmd, args, BIG).toString().trim();
 let failures = 0;
@@ -59,7 +59,7 @@ function elevateWith(extraEnv) {
   });
 }
 
-async function write(device, sha, extraEnv = { ROXORA_IMAGER_TEST: '1' }, allowLoop = true, image = xz, size = data.length) {
+async function write(device, sha, extraEnv = { WOA_IMAGER_TEST: '1' }, allowLoop = true, image = xz, size = data.length) {
   const progress = [];
   const out = await runHelper({
     launch: (dir) => helperLaunch({ writerPath, dir }),
@@ -112,7 +112,7 @@ try {
       `custom .${kind}: taken as a custom image, size before reading ${desc.extractSize}`);
     const m = await measureFile(path, () => {});
     check(m.size === custom.length && m.sha256 === sha256(custom), `custom .${kind}: measured size and SHA-256 are those of the image`);
-    const w = await write(loop, m.sha256, { ROXORA_IMAGER_TEST: '1' }, true, path, m.size);
+    const w = await write(loop, m.sha256, { WOA_IMAGER_TEST: '1' }, true, path, m.size);
     console.log(JSON.stringify(w.out));
     check(w.out.ok === true && w.out.sha256 === sha256(custom), `custom .${kind}: write and read-back match`);
     const got = execFileSync('sudo', ['head', '-c', String(custom.length), loop], BIG);

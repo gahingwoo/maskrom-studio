@@ -1,7 +1,7 @@
 // WebUSB in the Electron app on this machine, with whatever USB device is
 // at hand instead of a Rockchip board.
 //
-//   ROXORA_IMAGER_USB_TEST_VID=0x2e8a node scripts/usb-smoke.mjs
+//   WOA_IMAGER_USB_TEST_VID=0x2e8a node scripts/usb-smoke.mjs
 //
 // Starts the unpackaged app hidden with one extra USB vendor ID allowed and
 // checks, from the app's own page and from a worker of its origin (where the
@@ -18,8 +18,8 @@
 import { _electron as electron } from 'playwright-core';
 import { rmSync, writeFileSync } from 'node:fs';
 
-const vid = Number(process.env.ROXORA_IMAGER_USB_TEST_VID);
-if (!Number.isInteger(vid)) { console.error('set ROXORA_IMAGER_USB_TEST_VID'); process.exit(2); }
+const vid = Number(process.env.WOA_IMAGER_USB_TEST_VID);
+if (!Number.isInteger(vid)) { console.error('set WOA_IMAGER_USB_TEST_VID'); process.exit(2); }
 
 const WORKER = `
 self.onmessage = async () => {
@@ -48,7 +48,7 @@ self.onmessage = async () => {
 };`;
 
 writeFileSync('build/renderer/usb-smoke-worker.js', WORKER);
-const env = { ...process.env, ROXORA_IMAGER_HIDDEN: '1' };
+const env = { ...process.env, WOA_IMAGER_HIDDEN: '1' };
 delete env.ELECTRON_RUN_AS_NODE;
 const app = await electron.launch({ args: ['.'], env });
 const out = {};

@@ -53,7 +53,7 @@ export interface AppRelease {
   tag_name: string;
   html_url: string;
   draft?: boolean;
-  /** On GitHub a pre-release of Roxora Imager is a beta version. */
+  /** On GitHub a pre-release of WoA RK3576 Imager is a beta version. */
   prerelease?: boolean;
   body?: string | null;
   assets?: ReleaseAsset[];
@@ -126,11 +126,11 @@ export function installKind(f: InstallFacts): InstallKind {
   return 'none';
 }
 
-export const APT_PACKAGE = 'roxora-imager';
+export const APT_PACKAGE = 'woa-rk3576-imager';
 export const APT_COMMAND = `sudo apt update && sudo apt install --only-upgrade ${APT_PACKAGE}`;
 
 /**
- * Does `apt-cache policy roxora-imager` name a repository for the package?
+ * Does `apt-cache policy woa-rk3576-imager` name a repository for the package?
  * Its version table lists, under each version, where that version comes
  * from: a repository URI, or /var/lib/dpkg/status for what is installed.
  * A .deb installed by hand has only the latter. Only the source lines are
@@ -144,7 +144,7 @@ export function aptRepoCarries(policy: string): boolean {
   });
 }
 
-export const BREW_CASK = 'roxora-imager';
+export const BREW_CASK = 'woa-rk3576-imager';
 export const BREW_COMMAND = `brew upgrade --cask ${BREW_CASK}`;
 
 /**

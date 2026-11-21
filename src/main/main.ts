@@ -3,48 +3,46 @@
 
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, net, session, shell, type WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { open } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as drivelist from 'drivelist';
-import { formatBytes } from '../shared/format';
-import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
+import { classifyDrives, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
-import type { JobProgress, JobResult, LocalImage, PreparedFile, SaveSubject, SaveTarget } from '../shared/ipc';
-import type { CatalogImage } from '../shared/catalog';
-import { partitionedSize } from '../maskrom/spi-check';
-import { loadReleases, loadSample, writableImage, writableImages, type CatalogState } from './catalog-source';
+import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import { helperLaunch, runHelper, sudoPromptElevate } from './elevate';
-import { decompress, detectCompression, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
+import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
 import { ensureLoader } from './loader-cache';
-import { describeLocal, measureFile, sha256OfFile } from './local-image';
 import { handleProtocol, ORIGIN, registerScheme } from './protocol';
 import { macWrite } from './mac-write';
-import { freeBytes, saveImage } from './save-image';
 import { loadSettings, saveSettings } from './settings';
 import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restartApp } from './updater';
 import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
+import { boardHere, NO_MTD_HELP } from './board-here';
+import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './windows-image';
+import { firmwareRelease, FIRMWARE_REPO, latestRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type WinpeRelease } from '../woa/releases';
+import type { BoardId } from '../woa/boards';
+import type { BoardJob } from '../helper/board-write';
 
 registerScheme();
 
-// --dev-sample loads the sample catalog from the release contract instead of
-// GitHub. Its entries can be browsed but never written: the write handlers
-// only accept ids from the real releases (catalog-source.ts).
-const DEV_SAMPLE = process.argv.includes('--dev-sample') || process.env.ROXORA_IMAGER_SAMPLE === '1';
 // For screenshots and tests: do not show the window.
-const HIDDEN = process.env.ROXORA_IMAGER_HIDDEN === '1';
+const HIDDEN = process.env.WOA_IMAGER_HIDDEN === '1';
+// Unpackaged builds only: a pretend board for the screenshots (a folder laid out like / with proc and sys).
+const FAKE_ROOT = !app.isPackaged ? process.env.WOA_IMAGER_FAKE_ROOT : undefined;
 
 const appDir = app.getAppPath();
 const resourcesDir = join(appDir, 'resources');
 const cacheDir = () => join(app.getPath('userData'), 'images');
-// Rockchip's Maskrom loaders, built from rkbin on first use (loader-cache.ts).
 const loaderDir = () => join(app.getPath('userData'), 'loaders');
 
-const WRITER = process.platform === 'win32' ? 'roxora-imager-writer.exe' : 'roxora-imager-writer';
-// On macOS the disk is opened by Apple's authopen instead (mac-write.ts).
-const RAWDISK = 'roxora-imager-rawdisk';
+const WRITER = process.platform === 'win32' ? 'woa-rk3576-imager-writer.exe' : 'woa-rk3576-imager-writer';
+const RAWDISK = 'woa-rk3576-imager-rawdisk';
 function writerPath(name = WRITER): string {
   return app.isPackaged ? join(process.resourcesPath, 'writer', name) : join(appDir, 'build-res', 'writer', name);
 }
+
+const LINKS = /^https:\/\/(github\.com\/gahingwoo\/|flash\.gahingwoo\.com\/|edk2\.gahingwoo\.com\/|zadig\.akeo\.ie\/)/;
 
 let win: BrowserWindow | null = null;
 let job: AbortController | null = null;
@@ -64,12 +62,10 @@ function askUsb(wc: WebContents, choices: UsbChoice[]): Promise<string> {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1100, height: 760, minWidth: 720, minHeight: 560,
+    width: 1100, height: 780, minWidth: 720, minHeight: 560,
     show: false,
-    title: 'Roxora Imager',
-    // The design icon (resources/icons/, from roxora-os/design) for the title
-    // bar and task switcher on Linux and Windows; macOS uses the bundle's .icns.
-    icon: join(resourcesDir, 'icons', 'png', 'roxora-imager-256.png'),
+    title: 'WoA RK3576 Imager',
+    icon: join(resourcesDir, 'icons', 'png', 'woa-rk3576-imager-256.png'),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1b1d21' : '#f0f0f0',
     autoHideMenuBar: true,
     webPreferences: {
@@ -77,12 +73,11 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      // Hidden runs (screenshots, tests) render off screen so they can be captured.
       ...(HIDDEN ? { offscreen: true } : {}),
     },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\/(github\.com\/roxora-os\/|roxora-os\.github\.io\/|zadig\.akeo\.ie\/)/.test(url)) shell.openExternal(url);
+    if (LINKS.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(ORIGIN)) e.preventDefault(); });
@@ -90,320 +85,269 @@ function createWindow() {
   win.loadURL(`${ORIGIN}/index.html`);
 }
 
-let lastCatalog: CatalogState | null = null;
-
-ipcMain.handle('catalog:load', async (_e, opts: { sample: boolean }) => {
-  if (FAKE_NO_RELEASES) return { state: 'none', problems: [], sample: false };
-  lastCatalog = opts.sample && DEV_SAMPLE ? loadSample(join(resourcesDir, 'sample-catalog.json')) : await loadReleases();
-  return lastCatalog;
-});
-
-// For screenshots and UI tests of an unpackaged build only: a made-up drive
-// list (device names that cannot exist) and an empty release list.
-const FAKE_DRIVES = !app.isPackaged && process.env.ROXORA_IMAGER_FAKE_DRIVES === '1';
-const FAKE_NO_RELEASES = !app.isPackaged && process.env.ROXORA_IMAGER_FAKE_RELEASES === 'none';
-const fakeDrives: DriveInfo[] = [
-  { device: '/dev/roxora-test-sda', description: 'ATA Samsung SSD 870', size: 512e9, mountpoints: [{ path: '/' }],
-    isReadOnly: false, isSystem: true, isVirtual: false, isRemovable: false, isCard: false, isUSB: false },
-  { device: '/dev/roxora-test-sdb', description: 'SanDisk Ultra 32 GB', size: 31914983424, mountpoints: [{ path: '/media/user/boot' }],
-    isReadOnly: false, isSystem: false, isVirtual: false, isRemovable: true, isCard: false, isUSB: true },
-  { device: '/dev/roxora-test-mmcblk0', description: 'SD card reader, 2 GB card', size: 1977614336, mountpoints: [],
-    isReadOnly: false, isSystem: false, isVirtual: false, isRemovable: true, isCard: true, isUSB: false },
-  // A board running from its SD card, with an eMMC and an NVMe drive, as linuxDiskFacts describes them.
-  { device: '/dev/roxora-test-mmcblk1', description: 'SD64G', size: 63864569856, mountpoints: [{ path: '/' }, { path: '/boot' }],
-    isReadOnly: false, isSystem: true, isVirtual: false, isRemovable: false, isCard: null, isUSB: false,
-    internal: 'sd', allMounts: ['/', '/boot'], busy: null },
-  { device: '/dev/roxora-test-mmcblk2', description: 'A3A561', size: 62537072640, mountpoints: [],
-    isReadOnly: false, isSystem: true, isVirtual: false, isRemovable: false, isCard: null, isUSB: false,
-    internal: 'emmc', allMounts: [], busy: null },
-  { device: '/dev/roxora-test-nvme0n1', description: 'Samsung SSD 980 500GB', size: 500107862016, mountpoints: [],
-    isReadOnly: false, isSystem: true, isVirtual: false, isRemovable: false, isCard: null, isUSB: false,
-    internal: 'nvme', allMounts: [], busy: null },
-];
-
-ipcMain.handle('drives:list', async (_e, minSize: number, internal?: boolean) => {
-  const drives = FAKE_DRIVES ? fakeDrives : await withDiskFacts(await drivelist.list() as unknown as DriveInfo[]);
-  return classifyDrives(drives, { minSize, platform: process.platform, internal: internal === true });
-});
-
-ipcMain.handle('job:cancel', () => { job?.abort(); });
-
-/** Write an image file to a drive and read it back: macOS through authopen, else the elevated writer. */
-async function writeDrive(wc: WebContents, signal: AbortSignal,
-  w: { file: string; device: string; extractSize: number; extractSha256: string; internal: boolean }): Promise<JobResult> {
-  const out = process.platform === 'darwin'
-    ? await macWrite({
-      signal, image: w.file, device: w.device, extractSize: w.extractSize, extractSha256: w.extractSha256,
-      helperPath: writerPath(RAWDISK),
-      onProgress: (p) => sendProgress(wc, { stage: p.stage, bytes: p.bytes, total: w.extractSize, speed: p.speed }),
-    })
-    : await runHelper({
-      signal,
-      launch: (dir) => helperLaunch({ writerPath: writerPath(), dir, appImage: process.env.APPIMAGE }),
-      args: (socket, token) => [
-        '--socket', socket, '--token', token, '--image', w.file, '--device', w.device,
-        '--extract-size', String(w.extractSize), '--extract-sha256', w.extractSha256,
-        ...(w.internal ? ['--allow-internal'] : []),
-      ],
-      onMessage: (m) => {
-        if (m.type === 'progress') {
-          sendProgress(wc, { stage: m.stage, bytes: m.bytes, total: w.extractSize, speed: m.speed });
-        }
-      },
-      elevate: sudoPromptElevate,
-    });
-  if (out.ok) return { ok: true, sha256: out.sha256 };
-  return { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) };
-}
-
-ipcMain.handle('sd:write', async (e, imageId: string, device: string, internal?: boolean): Promise<JobResult> => {
-  const img = writableImage(imageId);
-  if (!img || img.sample) return { ok: false, reason: 'This image is not from a published release and cannot be written.' };
-  if (job) return { ok: false, reason: 'Another write is running.' };
+/** Run one job at a time; a second one is refused. */
+async function exclusive<T>(fn: (signal: AbortSignal) => Promise<T>, busy: T): Promise<T> {
+  if (job) return busy;
   job = new AbortController();
-  const wc = e.sender;
   try {
-    const file = await fetchImage(img, cacheDir(), (p) => sendProgress(wc, p), job.signal);
-    return await writeDrive(wc, job.signal, { file, device, extractSize: img.extractSize, extractSha256: img.extractSha256, internal: internal === true });
-  } catch (err) {
-    if (job?.signal.aborted) return { ok: false, reason: 'Cancelled.' };
-    return { ok: false, reason: String((err as Error).message ?? err) };
+    return await fn(job.signal);
   } finally {
     job = null;
   }
+}
+
+// --- releases ---------------------------------------------------------------
+
+let firmware: FirmwareRelease | null = null;
+let winpe: WinpeRelease | null = null;
+
+// Unpackaged builds only, for the screenshots: made-up releases, no network.
+const FAKE_RELEASES = !app.isPackaged && process.env.WOA_IMAGER_FAKE_RELEASES === '1';
+if (FAKE_RELEASES) {
+  const a = (file: string, size: number) => ({ file, url: `https://example.invalid/${file}`, size, sha256: '0'.repeat(64), sample: false as const });
+  firmware = { tag: '0.4.1', url: null, problems: [], images: {
+    tspi3m: a('TaishanPi3M-emmc-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-emmc-edk2-0.4.1.img', 33554432), rock4d: a('ROCK4D-spi-edk2-0.4.1.img', 16777216),
+  } };
+  winpe = { tag: '0.1.1', url: null, problems: [], image: a('woa-rk3576-winpe-0.1.1.img.xz', 352252908) };
+}
+
+ipcMain.handle('woa:releases', async (_e, force: boolean): Promise<Releases> => {
+  const problems: string[] = [];
+  if (FAKE_RELEASES) force = false;
+  const fetchFn = (url: string, init?: { headers?: Record<string, string> }) => net.fetch(url, init);
+  if (!firmware || force) {
+    try {
+      const { rel, sums } = await latestRelease(FIRMWARE_REPO, fetchFn);
+      firmware = firmwareRelease(rel, sums);
+    } catch (e) { problems.push(`edk2-rk3576: ${(e as Error).message}`); }
+  }
+  if (!winpe || force) {
+    try {
+      const { rel, sums } = await latestRelease(WINPE_REPO, fetchFn);
+      winpe = winpeRelease(rel, sums);
+    } catch (e) { problems.push(`woa-rk3576: ${(e as Error).message}`); }
+  }
+  return {
+    firmware: firmware ? {
+      tag: firmware.tag, url: firmware.url,
+      boards: Object.fromEntries(Object.entries(firmware.images).map(([k, v]) => [k, { file: v!.file, size: v!.size }])),
+    } : null,
+    winpe: winpe?.image ? { tag: winpe.tag, url: winpe.url, file: winpe.image.file, size: winpe.image.size } : null,
+    problems: [...problems, ...(firmware?.problems ?? []), ...(winpe?.problems ?? [])],
+  };
 });
 
-// An image file on this computer for the SD/USB path (local-image.ts). The
-// page only holds a token; the path stays here.
-let localImage: { token: string; path: string; image: CatalogImage | null; sizeHint: number; extractSize: number } | null = null;
+// Files served to the Maskrom worker, and the paths behind them (the page holds tokens only).
+const servedPaths = new Map<string, string>();
+const serve = (path: string, name: string): Served => {
+  const s = serveFile(path);
+  servedPaths.set(s.token, path);
+  return { token: s.token, url: `${ORIGIN}/file/${s.token}`, size: s.size, name };
+};
 
-async function describeForPage(path: string): Promise<LocalImage | { error: string }> {
-  if (job) return { error: 'Another job is running.' };
-  job = new AbortController();
+async function firmwareFile(wc: WebContents, board: BoardId, signal: AbortSignal): Promise<string> {
+  const img = firmware?.images[board];
+  if (!img) throw new Error('The edk2-rk3576 release has no firmware image for this board (or it could not be read).');
+  return fetchImage(img, cacheDir(), (p) => sendProgress(wc, p), signal);
+}
+
+ipcMain.handle('woa:prepare-firmware', (e, board: BoardId) => exclusive(async (signal) => {
   try {
-    const d = await describeLocal(path, writableImages(), { signal: job.signal });
-    const token = randomBytes(16).toString('hex');
-    localImage = { token, path, image: d.image, sizeHint: d.extractSize || d.size, extractSize: d.extractSize };
-    return { token, name: d.name, size: d.size, extractSize: d.extractSize, imageId: d.image?.id ?? null };
+    const path = await firmwareFile(e.sender, board, signal);
+    return serve(path, firmware!.images[board]!.file);
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
-  } finally {
-    job = null;
+  }
+}, { error: 'Another job is running.' }));
+
+/** The WinPE image, decompressed once into the cache (about 540 MB). */
+let winpeImg: { tag: string; path: string; size: number; sha256: string } | null = null;
+async function winpeFile(wc: WebContents, signal: AbortSignal): Promise<typeof winpeImg & object> {
+  if (!winpe?.image) throw new Error('The woa-rk3576 release has no WinPE image (or it could not be read).');
+  if (winpeImg && winpeImg.tag === winpe.tag) return winpeImg;
+  const xz = await fetchImage(winpe.image, cacheDir(), (p) => sendProgress(wc, p), signal);
+  // One decompressed copy per release, kept with its SHA-256 beside it; older ones are removed.
+  const dir = join(cacheDir(), 'winpe');
+  const name = `${winpe.image.file.replace(/\.xz$/, '')}`;
+  const keep = join(dir, name);
+  try {
+    const [sum, size] = readFileSync(`${keep}.sha256`, 'utf8').trim().split(/\s+/);
+    if (/^[0-9a-f]{64}$/.test(sum) && statSync(keep).size === Number(size)) {
+      winpeImg = { tag: winpe.tag, path: keep, size: Number(size), sha256: sum };
+      return winpeImg;
+    }
+  } catch { /* not there yet */ }
+  rmSync(dir, { recursive: true, force: true });
+  const out = await decompress(xz, dir, (p) => sendProgress(wc, p), signal);
+  renameSync(out.path, keep);
+  writeFileSync(`${keep}.sha256`, `${out.sha256} ${out.size}\n`);
+  winpeImg = { tag: winpe.tag, path: keep, size: out.size, sha256: out.sha256 };
+  return winpeImg;
+}
+
+ipcMain.handle('woa:prepare-winpe', (e) => exclusive(async (signal) => {
+  try {
+    const w = await winpeFile(e.sender, signal);
+    return serve(w.path, winpe!.image!.file.replace(/\.xz$/, ''));
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
+ipcMain.handle('woa:release', (_e, token: string) => {
+  servedPaths.delete(token);
+  forgetFile(token, false);
+});
+
+// --- the Windows image --------------------------------------------------------
+
+const windowsImages = new Map<string, WindowsImage & { sha256?: string }>();
+
+function describeWindows(path: string): WindowsChoice | { error: string } {
+  try {
+    const img = inspectWindowsImage(path);
+    const token = randomBytes(16).toString('hex');
+    windowsImages.set(token, img);
+    return {
+      token, fileName: img.fileName, container: img.container, imageName: img.imageName, imageSize: img.imageSize,
+      fileSize: img.fileSize, extents: img.extents,
+      editions: img.editions.map((x) => ({ index: x.index, name: x.name, build: x.build, spBuild: x.spBuild, refuse: x.refuse, totalBytes: x.totalBytes })),
+    };
+  } catch (e) {
+    return { error: String((e as Error).message ?? e) };
   }
 }
 
-// Unpackaged builds only: the file "chosen" without a dialog, for the screenshots.
-const TEST_PICK = !app.isPackaged ? process.env.ROXORA_IMAGER_TEST_PICK : undefined;
+const TEST_PICK = !app.isPackaged ? process.env.WOA_IMAGER_TEST_PICK : undefined;
 
-ipcMain.handle('sd:pick', async () => {
-  if (TEST_PICK) return describeForPage(TEST_PICK);
+ipcMain.handle('woa:pick-windows', async () => {
+  if (TEST_PICK) return describeWindows(TEST_PICK);
   const r = await dialog.showOpenDialog(win!, {
-    title: 'Choose an image file',
+    title: 'Choose the Windows 11 23H2 ARM64 image',
     properties: ['openFile'],
-    filters: [{ name: 'Images', extensions: ['img', 'xz', 'gz', 'bz2', 'raw'] }, { name: 'All files', extensions: ['*'] }],
+    filters: [{ name: 'Windows images', extensions: ['iso', 'wim', 'esd'] }, { name: 'All files', extensions: ['*'] }],
   });
   if (r.canceled || r.filePaths.length === 0) return null;
-  return describeForPage(r.filePaths[0]);
+  return describeWindows(r.filePaths[0]);
 });
 
-ipcMain.handle('sd:drop', async (_e, path: unknown) => {
-  if (typeof path !== 'string' || !path) return { error: 'That is not a file on this computer.' };
-  return describeForPage(path);
+ipcMain.handle('woa:drop-windows', (_e, path: unknown) => (typeof path === 'string' && path ? describeWindows(path) : { error: 'That is not a file on this computer.' }));
+
+ipcMain.handle('woa:hash-windows', (e, token: string) => exclusive(async (signal) => {
+  const img = windowsImages.get(token);
+  if (!img) return { error: 'Choose the Windows image again.' };
+  if (img.sha256) return { sha256: img.sha256 };
+  try {
+    img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(e.sender, { stage: 'check', bytes, total: img.imageSize }), signal);
+    return { sha256: img.sha256 };
+  } catch (err) {
+    if (signal.aborted) return { error: 'Cancelled.' };
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
+ipcMain.handle('woa:serve-windows', (_e, token: string) => {
+  const img = windowsImages.get(token);
+  if (!img) return { error: 'Choose the Windows image again.' };
+  return serve(img.path, img.fileName);
 });
 
-/** A file on this computer that is a release image, checked against the release again, as a download is. Null when it matches. */
-async function checkLocalRelease(wc: WebContents, path: string, image: CatalogImage, signal: AbortSignal,
-  done: 'written' | 'saved'): Promise<JobResult | null> {
-  const total = image.size;
-  const got = await sha256OfFile(path, (bytes) => sendProgress(wc, { stage: 'check', bytes, total }), signal);
-  if (got === image.sha256) return null;
-  return { ok: false, reason: `The file no longer matches the release. Nothing was ${done}.`,
-    detail: `sha256 ${got}, release ${image.sha256}` };
+// --- this board ------------------------------------------------------------------
+
+ipcMain.handle('woa:board-here', async (): Promise<BoardHereInfo> => {
+  const h = await boardHere(FAKE_ROOT ?? '');
+  return {
+    rk3576: h.rk3576, boardId: h.board?.id ?? null, boardName: h.board?.name ?? null,
+    compatible: h.compatible, smbiosProduct: h.smbiosProduct,
+    emmc: h.emmc ? { device: h.emmc.device, bytes: h.emmc.bytes, model: h.emmc.model, mounts: h.emmc.mounts } : null,
+    emmcRefusal: h.emmcRefusal, mtd: h.mtd, noMtdHelp: NO_MTD_HELP,
+  };
+});
+
+function runElevated(wc: WebContents, signal: AbortSignal, args: (socket: string, token: string) => string[], total: () => number): Promise<JobResult> {
+  return runHelper({
+    signal,
+    launch: (dir) => helperLaunch({ writerPath: writerPath(), dir, appImage: process.env.APPIMAGE }),
+    args,
+    onMessage: (m) => {
+      if (m.type === 'progress') sendProgress(wc, { stage: m.stage, bytes: m.bytes, total: Math.max(total(), m.bytes), speed: m.speed });
+    },
+    elevate: sudoPromptElevate,
+  }).then((out) => (out.ok ? { ok: true, sha256: out.sha256 } : { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) }));
 }
 
-ipcMain.handle('sd:write-file', async (e, token: string, device: string, internal?: boolean): Promise<JobResult> => {
-  const l = localImage;
-  if (!l || l.token !== token) return { ok: false, reason: 'Choose the image file again. Nothing was written.' };
-  if (job) return { ok: false, reason: 'Another write is running.' };
-  job = new AbortController();
+ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (signal): Promise<JobResult> => {
+  if (process.platform !== 'linux') return { ok: false, reason: 'Writing the board this runs on works on Linux only.' };
   const wc = e.sender;
-  const signal = job.signal;
+  let bj: BoardJob;
+  let total = 0;
   try {
-    let extractSize: number;
-    let extractSha256: string;
-    if (l.image) {
-      const changed = await checkLocalRelease(wc, l.path, l.image, signal, 'written');
-      if (changed) return changed;
-      ({ extractSize, extractSha256 } = l.image);
+    if (req.kind === 'stage') {
+      const img = windowsImages.get(req.windowsToken);
+      if (!img) return { ok: false, reason: 'Choose the Windows image again. Nothing was written.' };
+      const ed = img.editions.find((x) => x.index === req.index);
+      if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
+      const pe = await winpeFile(wc, signal);
+      if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
+      bj = { kind: 'stage', device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
+        image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
+          index: ed.index, edition: ed.name, build: ed.build ?? 0 } };
+      total = img.imageSize + pe.size;
     } else {
-      // A custom image: its own decompressed data is what the drive must read back as.
-      const m = await measureFile(l.path, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: Math.max(l.sizeHint, bytes) }), signal);
-      extractSize = m.size;
-      extractSha256 = m.sha256;
-      const drives = await withDiskFacts(await drivelist.list() as unknown as DriveInfo[]);
-      if (!isOfferedTarget(device, drives, { minSize: m.size, platform: process.platform, internal: internal === true })) {
-        return { ok: false, reason: `${device} is smaller than the image (${formatBytes(m.size)}), or no longer a drive the imager writes to. Nothing was written.` };
-      }
+      const path = await firmwareFile(wc, req.boardId, signal);
+      bj = req.kind === 'firmware'
+        ? { kind: 'firmware', device: req.device, boardId: req.boardId, targetId: req.targetId, image: path }
+        : { kind: 'spinor', device: req.device, boardId: req.boardId, image: path };
+      total = firmware!.images[req.boardId]!.size;
     }
-    return await writeDrive(wc, signal, { file: l.path, device, extractSize, extractSha256, internal: internal === true });
   } catch (err) {
     if (signal.aborted) return { ok: false, reason: 'Cancelled. Nothing was written.' };
     return { ok: false, reason: String((err as Error).message ?? err) };
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'woa-rk3576-imager-job-'));
+  const jobFile = join(dir, 'job.json');
+  writeFileSync(jobFile, JSON.stringify(bj), { mode: 0o600 });
+  try {
+    return await runElevated(wc, signal, (socket, token) => ['--socket', socket, '--token', token, '--job', jobFile], () => total);
   } finally {
-    job = null;
+    rmSync(dir, { recursive: true, force: true });
   }
+}, { ok: false, reason: 'Another write is running.' }));
+
+// --- the fallback: the WinPE image on a USB drive ----------------------------------
+
+ipcMain.handle('drives:list', async (_e, minSize: number) => {
+  const drives = await withDiskFacts(await drivelist.list() as unknown as DriveInfo[]);
+  return classifyDrives(drives, { minSize, platform: process.platform, internal: false });
 });
 
-// Saving the image as a plain .img file (save-image.ts): for Ventoy and the
-// like, and for virtual machines. No writer, no pkexec or authopen: the app
-// writes the file itself. The page only holds a token for the chosen path.
-let saveTarget: { token: string; path: string } | null = null;
-
-// Unpackaged builds only: the path "chosen" without a dialog, for the screenshots.
-const TEST_SAVE = !app.isPackaged ? process.env.ROXORA_IMAGER_TEST_SAVE : undefined;
-
-ipcMain.handle('save:pick', async (_e, name: unknown): Promise<SaveTarget | { error: string } | null> => {
-  if (job) return { error: 'Another job is running.' };
-  // Only a name: the folder is the Downloads folder, then wherever the user goes.
-  const offered = typeof name === 'string' ? basename(name) : '';
-  let path = TEST_SAVE;
-  if (!path) {
-    const r = await dialog.showSaveDialog(win!, {
-      title: 'Save the image as',
-      defaultPath: join(app.getPath('downloads'), offered || 'roxora.img'),
-      buttonLabel: 'Choose',
-      filters: [{ name: 'Disk images', extensions: ['img'] }, { name: 'All files', extensions: ['*'] }],
-      properties: ['createDirectory', 'showOverwriteConfirmation'],
-    });
-    if (r.canceled || !r.filePath) return null;
-    path = r.filePath;
-  }
-  const dir = dirname(path);
-  const free = await freeBytes(dir).catch(() => -1);
-  saveTarget = { token: randomBytes(16).toString('hex'), path };
-  return { token: saveTarget.token, path, dir, free };
-});
-
-ipcMain.handle('save:run', async (e, what: SaveSubject, saveToken: string): Promise<JobResult> => {
-  const t = saveTarget;
-  if (!t || t.token !== saveToken) return { ok: false, reason: 'Choose where to save the image again. Nothing was saved.' };
-  if (job) return { ok: false, reason: 'Another job is running.' };
-  job = new AbortController();
+ipcMain.handle('woa:write-stick', (e, device: string) => exclusive(async (signal): Promise<JobResult> => {
   const wc = e.sender;
-  const signal = job.signal;
-  const onProgress = (bytes: number, total: number) => sendProgress(wc, { stage: 'write', bytes, total });
   try {
-    let source: string;
-    let expected: { size: number; sha256: string } | null;
-    let sizeHint = 0;
-    if ('imageId' in what) {
-      const img = writableImage(what.imageId);
-      if (!img || img.sample) return { ok: false, reason: 'This image is not from a published release and cannot be saved.' };
-      // The cache and the checks of the SD path: the download (or its parts, joined) against the release sha256.
-      source = await fetchImage(img, cacheDir(), (p) => sendProgress(wc, p), signal);
-      expected = { size: img.extractSize, sha256: img.extractSha256 };
-    } else {
-      const l = localImage;
-      if (!l || l.token !== what.localToken) return { ok: false, reason: 'Choose the image file again. Nothing was saved.' };
-      source = l.path;
-      if (l.image) {
-        const changed = await checkLocalRelease(wc, l.path, l.image, signal, 'saved');
-        if (changed) return changed;
-        expected = { size: l.image.extractSize, sha256: l.image.extractSha256 };
-      } else {
-        // A custom image: nothing to compare with; its own SHA-256 is reported.
-        expected = null;
-        // 0 for gzip and bzip2: then a full disk shows only when it fills.
-        sizeHint = l.extractSize;
-      }
-    }
-    const out = await saveImage({ source, dest: t.path, expected, sizeHint, onProgress, signal });
-    return { ok: true, sha256: out.sha256 };
+    const w = await winpeFile(wc, signal);
+    const out = process.platform === 'darwin'
+      ? await macWrite({
+        signal, image: w.path, device, extractSize: w.size, extractSha256: w.sha256, helperPath: writerPath(RAWDISK),
+        onProgress: (p) => sendProgress(wc, { stage: p.stage, bytes: p.bytes, total: w.size, speed: p.speed }),
+      })
+      : await runHelper({
+        signal,
+        launch: (dir) => helperLaunch({ writerPath: writerPath(), dir, appImage: process.env.APPIMAGE }),
+        args: (socket, token) => ['--socket', socket, '--token', token, '--image', w.path, '--device', device,
+          '--extract-size', String(w.size), '--extract-sha256', w.sha256],
+        onMessage: (m) => { if (m.type === 'progress') sendProgress(wc, { stage: m.stage, bytes: m.bytes, total: w.size, speed: m.speed }); },
+        elevate: sudoPromptElevate,
+      });
+    return out.ok ? { ok: true, sha256: out.sha256 } : { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) };
   } catch (err) {
-    if (signal.aborted) return { ok: false, reason: 'Cancelled. Nothing was saved.' };
+    if (signal.aborted) return { ok: false, reason: 'Cancelled.' };
     return { ok: false, reason: String((err as Error).message ?? err) };
-  } finally {
-    job = null;
   }
-});
+}, { ok: false, reason: 'Another write is running.' }));
 
-ipcMain.handle('save:show', (_e, saveToken: string) => {
-  if (saveTarget && saveTarget.token === saveToken) shell.showItemInFolder(saveTarget.path);
-});
+ipcMain.handle('job:cancel', () => { job?.abort(); });
 
-/** The size of the disk a plain image's partition table describes, for the SPI NOR check (maskrom/spi-check.ts). */
-async function diskSizeOf(path: string): Promise<number> {
-  const fh = await open(path, 'r');
-  try {
-    const head = Buffer.alloc(1024);
-    const { bytesRead } = await fh.read(head, 0, head.length, 0);
-    return partitionedSize(head.subarray(0, bytesRead));
-  } finally {
-    await fh.close();
-  }
-}
-
-async function prepare(wc: WebContents, path: string, name: string, expected: { size: number; sha256: string } | null,
-  signal: AbortSignal): Promise<PreparedFile> {
-  const kind = await detectCompression(path);
-  if (kind === null) {
-    // A plain image is served as it is; its hash is taken while it is written.
-    const s = serveFile(path);
-    return { token: s.token, url: `${ORIGIN}/file/${s.token}`, size: s.size, sha256: expected?.sha256 ?? null, name,
-      diskSize: await diskSizeOf(path) };
-  }
-  const out = await decompress(path, join(cacheDir(), 'maskrom'), (p) => sendProgress(wc, p), signal, expected?.size);
-  if (expected && (out.size !== expected.size || out.sha256 !== expected.sha256)) {
-    forgetFile(serveFile(out.path).token, true);
-    throw new Error(`The decompressed image does not match the release (sha256 ${out.sha256}, expected ${expected.sha256}).`);
-  }
-  const s = serveFile(out.path);
-  temporary.add(s.token);
-  return { token: s.token, url: `${ORIGIN}/file/${s.token}`, size: s.size, sha256: out.sha256, name,
-    diskSize: await diskSizeOf(out.path) };
-}
-
-const temporary = new Set<string>();
-
-ipcMain.handle('maskrom:prepare', async (e, imageId: string, what: 'image' | 'spi' = 'image') => {
-  const img = writableImage(imageId);
-  if (!img || img.sample) return { error: 'This image is not from a published release and cannot be written.' };
-  if (what === 'spi' && !img.spi) return { error: 'This release has no SPI bootloader for the board.' };
-  if (job) return { error: 'Another job is running.' };
-  job = new AbortController();
-  try {
-    if (what === 'spi') {
-      // A plain image: served as it is, and the read-back is compared with its release sha256.
-      const spi = img.spi!;
-      const file = await fetchImage({ ...spi, sample: img.sample }, cacheDir(), (p) => sendProgress(e.sender, p), job.signal);
-      return await prepare(e.sender, file, spi.file, { size: spi.size, sha256: spi.sha256 }, job.signal);
-    }
-    const file = await fetchImage(img, cacheDir(), (p) => sendProgress(e.sender, p), job.signal);
-    return await prepare(e.sender, file, img.file, { size: img.extractSize, sha256: img.extractSha256 }, job.signal);
-  } catch (err) {
-    return { error: String((err as Error).message ?? err) };
-  } finally {
-    job = null;
-  }
-});
-
-ipcMain.handle('maskrom:pick', async (e) => {
-  const r = await dialog.showOpenDialog(win!, {
-    title: 'Choose an image or bootloader file',
-    properties: ['openFile'],
-    filters: [{ name: 'Images', extensions: ['img', 'bin', 'xz', 'gz', 'bz2'] }, { name: 'All files', extensions: ['*'] }],
-  });
-  if (r.canceled || r.filePaths.length === 0) return null;
-  job = new AbortController();
-  try {
-    const path = r.filePaths[0];
-    return await prepare(e.sender, path, path.split(/[\\/]/).pop() ?? path, null, job.signal);
-  } catch (err) {
-    return { error: String((err as Error).message ?? err) };
-  } finally {
-    job = null;
-  }
-});
+// --- Maskrom loader, USB, settings, updates ---------------------------------------
 
 ipcMain.handle('maskrom:loader', async (_e, name: string) => {
   try {
@@ -412,10 +356,6 @@ ipcMain.handle('maskrom:loader', async (_e, name: string) => {
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
   }
-});
-
-ipcMain.handle('maskrom:release', (_e, token: string) => {
-  forgetFile(token, temporary.delete(token));
 });
 
 ipcMain.on('usb:answer', (e, deviceId: string) => {
@@ -438,38 +378,32 @@ ipcMain.handle('settings:set', (_e, patch: { updateCheck?: boolean; betaUpdates?
   });
 });
 ipcMain.handle('update:check', (_e, force: boolean) => checkForUpdate(force === true));
-// Only after the user pressed Update and confirmed (the page asks), and never during a write.
 ipcMain.handle('update:install', (e) => (job
   ? { ok: false, reason: 'A write is running. Update when it is done.' } : installUpdate(e.sender)));
 ipcMain.handle('update:cancel', () => cancelUpdate());
 ipcMain.handle('update:restart', () => { if (!job) restartApp(); });
-// Copy buttons. The page has no clipboard permission of its own (usb.ts
-// grants nothing but USB), so navigator.clipboard does nothing there.
 ipcMain.handle('clipboard:write', (_e, text: unknown) => {
   if (typeof text !== 'string' || text.length > 20000) return false;
   clipboard.writeText(text);
   return true;
 });
 ipcMain.handle('open-external', (_e, url: string) => {
-  if (/^https:\/\/(github\.com\/roxora-os\/|roxora-os\.github\.io\/|zadig\.akeo\.ie\/)/.test(url)) return shell.openExternal(url);
+  if (LINKS.test(url)) return shell.openExternal(url);
 });
 ipcMain.on('app:info', (e) => {
-  e.returnValue = { platform: process.platform, version: app.getVersion(), devSample: DEV_SAMPLE };
+  e.returnValue = { platform: process.platform, version: app.getVersion() };
 });
 ipcMain.on('theme', (_e, t: 'light' | 'dark') => { nativeTheme.themeSource = t; });
 
 app.whenReady().then(() => {
   afterUpdateCleanup();
   handleProtocol(join(appDir, 'build', 'renderer'), resourcesDir, loaderDir());
-  // Unpackaged builds only: let the WebUSB smoke test (scripts/usb-smoke.mjs)
-  // reach a device that is not a Rockchip board, and serve it a test file.
-  const testVid = !app.isPackaged ? Number(process.env.ROXORA_IMAGER_USB_TEST_VID ?? NaN) : NaN;
+  const testVid = !app.isPackaged ? Number(process.env.WOA_IMAGER_USB_TEST_VID ?? NaN) : NaN;
   const vendorIds = Number.isInteger(testVid) ? [ROCKCHIP_VID, testVid] : [ROCKCHIP_VID];
-  if (!app.isPackaged && process.env.ROXORA_IMAGER_TEST_SERVE) serveFileAs('test', process.env.ROXORA_IMAGER_TEST_SERVE);
-  if (!app.isPackaged && process.env.ROXORA_IMAGER_TEST_SERVE_XZ) serveFileAs('xz', process.env.ROXORA_IMAGER_TEST_SERVE_XZ);
+  if (!app.isPackaged && process.env.WOA_IMAGER_TEST_SERVE) serveFileAs('test', process.env.WOA_IMAGER_TEST_SERVE);
+  if (!app.isPackaged && process.env.WOA_IMAGER_TEST_SERVE_XZ) serveFileAs('xz', process.env.WOA_IMAGER_TEST_SERVE_XZ);
   installUsbHandlers(session.defaultSession, { origins: [ORIGIN], vendorIds }, askUsb);
   createWindow();
 });
 
 app.on('window-all-closed', () => app.quit());
-

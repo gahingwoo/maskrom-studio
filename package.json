@@ -1,14 +1,14 @@
 {
-  "name": "roxora-imager",
-  "productName": "Roxora Imager",
-  "version": "0.1.10",
-  "description": "Write Roxora images to SD cards and USB drives, and flash SPI NOR or eMMC over Maskrom.",
-  "homepage": "https://github.com/roxora-os/imager",
+  "name": "woa-rk3576-imager",
+  "productName": "WoA RK3576 Imager",
+  "version": "0.1.0",
+  "description": "Install Windows 11 on Rockchip RK3576 boards over USB, without a USB stick, and write their edk2-rk3576 UEFI firmware.",
+  "homepage": "https://github.com/gahingwoo/woa-rk3576-imager",
   "license": "GPL-2.0-only",
   "author": "Ga Hing Woo <gahing@gahingwoo.com>",
   "private": true,
   "main": "build/main/main.js",
-  "desktopName": "io.github.roxora_os.imager.desktop",
+  "desktopName": "io.github.gahingwoo.woa_rk3576_imager.desktop",
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron .",
@@ -18,7 +18,6 @@
     "e2e:maskrom": "node scripts/electron-maskrom-e2e.mjs",
     "shots": "node scripts/shots.mjs dev/shots",
     "writer": "node scripts/build-writer.mjs",
-    "build:web": "node scripts/build-web.mjs",
     "test:webflash": "node --test test/webflash/*.test.js"
   },
   "dependencies": {
@@ -47,9 +46,9 @@
     "vitest": "4.0.8"
   },
   "build": {
-    "appId": "io.github.roxora-os.imager",
-    "productName": "Roxora Imager",
-    "executableName": "roxora-imager",
+    "appId": "io.github.gahingwoo.woa-rk3576-imager",
+    "productName": "WoA RK3576 Imager",
+    "executableName": "woa-rk3576-imager",
     "directories": {
       "output": "dist",
       "buildResources": "build-res"
@@ -70,7 +69,7 @@
       "**/*.node"
     ],
     "npmRebuild": false,
-    "artifactName": "roxora-imager-${version}-${os}-${arch}.${ext}",
+    "artifactName": "woa-rk3576-imager-${version}-${os}-${arch}.${ext}",
     "linux": {
       "target": [
         "dir",
@@ -99,7 +98,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "roxora-imager-${version}-windows-${arch}-setup.${ext}"
+      "artifactName": "woa-rk3576-imager-${version}-windows-${arch}-setup.${ext}"
     },
     "publish": null,
     "extraResources": [

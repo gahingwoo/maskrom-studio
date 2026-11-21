@@ -24,9 +24,9 @@ beforeAll(async () => {
       res.end(JSON.stringify([
         { tag_name: 'v0.1.4-beta.1', html_url: `${base}/tag/v0.1.4-beta.1`, prerelease: true, assets: [] },
         { tag_name: 'v0.1.4', html_url: `${base}/tag/v0.1.4`, body: '- New: updates.', assets: [
-          file('roxora-imager-0.1.4-linux-x86_64.AppImage', `sha256:${sha(newApp)}`),
-          file('roxora-imager-0.1.4-linux-arm64.AppImage', `sha256:${'0'.repeat(64)}`),
-          file('roxora-imager_0.1.4_amd64.deb', null),
+          file('woa-rk3576-imager-0.1.4-linux-x86_64.AppImage', `sha256:${sha(newApp)}`),
+          file('woa-rk3576-imager-0.1.4-linux-arm64.AppImage', `sha256:${'0'.repeat(64)}`),
+          file('woa-rk3576-imager_0.1.4_amd64.deb', null),
         ] },
         { tag_name: 'v0.1.3', html_url: `${base}/tag/v0.1.3`, prerelease: true, assets: [] },
       ]));
@@ -55,7 +55,7 @@ describe('the release list', () => {
     const list = await fetchReleases(f, `${base}/releases`);
     expect(newestRelease(list, { beta: false })?.tag_name).toBe('v0.1.4');
     expect(judgeReleases('0.1.3', list, { beta: false, kind: 'appimage', arch: 'x64' }))
-      .toMatchObject({ state: 'newer', offer: { version: '0.1.4', notes: 'New: updates.', asset: { name: 'roxora-imager-0.1.4-linux-x86_64.AppImage' } } });
+      .toMatchObject({ state: 'newer', offer: { version: '0.1.4', notes: 'New: updates.', asset: { name: 'woa-rk3576-imager-0.1.4-linux-x86_64.AppImage' } } });
   });
   it('fails plainly when GitHub does not answer with a list', async () => {
     await expect(fetchReleases(f, `${base}/missing`)).rejects.toThrow('HTTP 404');
@@ -109,23 +109,23 @@ describe('replacing an AppImage', () => {
     return { dir, current };
   };
   it('puts the checked new file under the old name, executable, with nothing else left in the folder', async () => {
-    const { dir, current } = setup('roxora-imager.AppImage');
+    const { dir, current } = setup('woa-rk3576-imager.AppImage');
     const list = await fetchReleases(f, `${base}/releases`);
     const asset = pickAsset(newestRelease(list, { beta: false })!.assets, 'appimage', 'x64')!;
     await replaceAppImage(current, { url: asset.browser_download_url, sha256: assetSha256(asset), fetch: f });
     expect(readFileSync(current).equals(newApp)).toBe(true);
     expect(statSync(current).mode & 0o111).toBe(0o111);
-    expect(readdirSync(dir)).toEqual(['roxora-imager.AppImage']);
+    expect(readdirSync(dir)).toEqual(['woa-rk3576-imager.AppImage']);
   });
   it('leaves the old AppImage alone when the download is not the published file', async () => {
-    const { dir, current } = setup('roxora-imager.AppImage');
+    const { dir, current } = setup('woa-rk3576-imager.AppImage');
     const list = await fetchReleases(f, `${base}/releases`);
     const wrong = pickAsset(newestRelease(list, { beta: false })!.assets, 'appimage', 'arm64')!;
     await expect(replaceAppImage(current, { url: wrong.browser_download_url, sha256: assetSha256(wrong), fetch: f })).rejects.toThrow(/not the published file/);
     const noDigest = pickAsset(newestRelease(list, { beta: false })!.assets, 'deb', 'x64')!;
     await expect(replaceAppImage(current, { url: noDigest.browser_download_url, sha256: assetSha256(noDigest), fetch: f })).rejects.toThrow(/lists no SHA-256/);
     expect(readFileSync(current, 'utf8')).toBe('old version');
-    expect(readdirSync(dir)).toEqual(['roxora-imager.AppImage']);
+    expect(readdirSync(dir)).toEqual(['woa-rk3576-imager.AppImage']);
   });
 });
 
@@ -139,8 +139,8 @@ describe('installing a package', () => {
     expect(packageInstallCommand('appimage', '/tmp/x', has('apt-get'))).toBeNull();
   });
   it('gives the command to type instead', () => {
-    expect(shellCommand(['env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install', '-y', '/tmp/roxora-imager-update-Ab12/roxora-imager_0.1.4_amd64.deb']))
-      .toBe('sudo apt-get install -y /tmp/roxora-imager-update-Ab12/roxora-imager_0.1.4_amd64.deb');
+    expect(shellCommand(['env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install', '-y', '/tmp/woa-rk3576-imager-update-Ab12/woa-rk3576-imager_0.1.4_amd64.deb']))
+      .toBe('sudo apt-get install -y /tmp/woa-rk3576-imager-update-Ab12/woa-rk3576-imager_0.1.4_amd64.deb');
     expect(shellCommand(['dnf', 'install', '-y', "/tmp/it's here/a.rpm"])).toBe("sudo dnf install -y '/tmp/it'\\''s here/a.rpm'");
   });
 });
