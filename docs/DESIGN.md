@@ -320,6 +320,207 @@ Added, all chosen on the "Windows setup" page:
   follows what worked by hand on the TaishanPi 3M; `Add-WindowsCapability
   OpenSSH.Server` hung for over 20 minutes there and is not used.
 
+## Armbian next to Windows
+
+Added 2026-11-21, from what was done by hand on the TaishanPi 3M that day
+(Armbian edge 7.3.4 GNOME booted through edk2-rk3576 and GRUB from a
+partition after a shrunken C:). Not yet run from the app on hardware.
+
+### Where it is offered, and what is left out
+
+With the staged install onto the eMMC (over Maskrom, or on the board
+itself) the task page has "Also install Armbian next to Windows". Windows
+and Armbian are laid out together on a fresh eMMC, so nothing has to be
+resized. It is not offered:
+
+- for an SD card or NVMe target, or the Windows host build: the host build
+  runs on Windows, which has no e2fsprogs (below); the SD and NVMe layouts
+  can take the same partition later;
+- on Windows hosts at all: the root file system is edited with e2fsprogs;
+- next to an existing Windows. That needs C: shrunk (ntfsresize on the PC,
+  or diskpart `shrink` in Windows) and GRUB put into the existing EFI
+  partition. Over Maskrom the EFI partition (from 64 MiB) is past the 32 MiB
+  that reads back reliably, so the app cannot read and rewrite its FAT
+  safely. The clean way is a small "Add Armbian" task for the board itself
+  (Linux from an SD card: the ESP can be mounted there), or a separate
+  small FAT partition next to the Armbian one; both left for later.
+- for a download of the image: Armbian publishes no images for
+  lckfb-taishanpi-3m yet. dl.armbian.com/lckfb-taishanpi-3m/Trixie_edge_gnome
+  answers 404 behind its redirect, and github.armbian.com/all-images.json
+  lists no such board. Once it does, that file is the stable index
+  (board_slug, file_url, redi_url) to pick from. The user chooses a file.
+
+### Layout
+
+    0..33              GPT (written last)
+    64..131071         firmware partition, not touched
+    131072..           ESP 260 MiB, MSR 16 MiB, Windows (made by WinPE)
+                       WOA-STAGE-BOOT, WOA-STAGE-DATA (deleted by WinPE)
+    linuxFirst..       "Armbian", type 0FC63DAF-8483-4772-8E79-3D69D8477DE4
+    end-33..end-1      backup GPT
+
+The Armbian partition is the last one, 1 MiB aligned, its size the root
+file system's rounded up to whole GiB (6 GiB for the 5.75 GiB of the
+GNOME image), adjustable up to half the eMMC. The staging partitions sit
+right before it, so when WinPE deletes them `extend` gives Windows the space
+up to Armbian. Only the image's root partition is written, never its sector
+0 or its partition table, and nothing below sector 131072 but the new GPT.
+woa-stage.ini carries `linux_offset`; woa-stage.cmd keeps the partition at
+that offset when it clears leftovers of an earlier attempt, and after
+bcdboot copies `armbian-esp\` from the staging volume onto the new ESP.
+
+### The image and the changes to it
+
+The user picks the image as Armbian publishes it (.img, .img.xz). The app
+copies its one Linux partition into its own folder (decompressing as it
+goes; about 6 GB, so free space is checked first) and reads
+`/etc/armbian-release` there: `BOARD` must be the board's
+(`lckfb-taishanpi-3m`, `armsom-cm5-io`), `ARCH` arm64, `BOOT_SOC` rk3576
+when present. Anything else is refused before the board is involved. The
+user's file is never changed. Images with a separate boot partition are
+refused.
+
+When the write starts, the copy is edited offline with e2fsprogs, which
+needs no root on a file: `e2fsck -fy` (on the copy), `tune2fs -U` with a
+new random UUID, one `debugfs -w -f` script, then `e2fsck -fn` and every
+file read back with debugfs. No loop mounts. File contents go through
+host files in a private folder (one holds the password) that is removed
+straight after; the script holds only paths. The copy is written once and
+deleted after the write.
+
+- **A new file system UUID**, always: the same image on an SD card would
+  otherwise give two root file systems with one UUID. `/etc/fstab` and
+  `/boot/armbianEnv.txt` (`rootdev=`) are rewritten with it, keeping their
+  owner and mode.
+- **`lckfb-tspi-3m-screen.service` masked** (TaishanPi 3M): a link to
+  /dev/null in /etc/systemd/system, and `systemd.mask=` on the kernel
+  command line as well. Under U-Boot it writes a device tree overlay into
+  armbianEnv.txt and reboots; under UEFI nothing reads that file, so it
+  would reboot forever.
+- **ALSA UCM** (TaishanPi 3M): under UEFI the kernel names the sound cards
+  after SMBIOS, "LCKFB-TaishanPi3M-0", the ES8388 and the HDMI card alike,
+  so UCM finds no profile. `/usr/share/alsa/ucm2/conf.d/simple-card/
+  LCKFB-TaishanPi3M-0.conf` sends the card whose id is "rockchipes8388" to
+  Armbian's own rockchip-es8388.conf (content verified on the board).
+  Desktop audio was still silent afterwards; the app does not claim it
+  works.
+- **Touch**: nothing. With native DSI (the firmware's "Force UEFI GOP
+  Display" off, the default) the panel's device tree has rotation 270 and
+  GNOME rotates touch itself. With force GOP on, Linux gets simpledrm
+  (connector "None-1"), mutter cannot tie the touch screen to it, and it
+  needs, by hand: a udev rule `ACTION=="add|change", KERNEL=="event*",
+  ATTRS{name}=="Goodix Capacitive TouchScreen",
+  ENV{LIBINPUT_CALIBRATION_MATRIX}="0 -1 1 1 0 0"` and monitors.xml with
+  rotation `left`, then a restart of gdm. Not installed, because it is
+  wrong for the default.
+- **First-start presets**: with an account on the Windows setup page,
+  `/root/.not_logged_in_yet` (0600) gets PRESET_ROOT_PASSWORD and
+  PRESET_USER_PASSWORD (the Windows password), PRESET_USER_NAME (the
+  Windows name made Linux-safe, editable), PRESET_DEFAULT_REALNAME,
+  PRESET_USER_SHELL, PRESET_LOCALE, PRESET_TIMEZONE,
+  SET_LANG_BASED_ON_LOCATION="n", PRESET_NET_CHANGE_DEFAULTS="0", each
+  single-quoted for bash (armbian-firstlogin sources it, then deletes it).
+  Without an account Armbian asks on its first start as usual. A pasted SSH
+  key goes to `/root/.ssh/authorized_keys` (0700/0600, root).
+- **Resize**: Armbian's armbian-resize-filesystem grows the root partition
+  by deleting and recreating it with fdisk keystrokes written for an MBR
+  (`d`, `n`, `p`, ...). On this GPT that would change the partition's GUID
+  and type at best. It only gets there when the partition is the last one
+  and ends before 99% of the disk; at the end of the eMMC its arithmetic
+  refuses ("shrink"), but that is luck, not design. So
+  `/root/.no_rootfs_resize` switches it off, and a one-shot
+  `armbian-uefi-firstboot.service` runs `resize2fs` on the root device
+  (online, to the partition the GPT already gives it) and writes the GRUB
+  menu from the running system, then removes its flag.
+
+### Boot chain
+
+    Boot#### "Armbian" -> \EFI\armbian\grubaa64.efi
+      -> \EFI\armbian\grub.cfg            (per install)
+        -> /boot/grub/armbian-uefi.cfg    (per kernel, on the root fs)
+
+`grubaa64.efi` is a standalone GRUB 2.12 (Ubuntu 2.12-1ubuntu7.3,
+scripts/build-grub.sh, reproducible, its size and SHA-256 pinned in
+src/woa/armbian.ts and checked before use). Its embedded config is fixed:
+it reads `grub.cfg` beside it (`$cmdpath`), and without one looks for any
+file system with `/boot/grub/armbian-uefi.cfg`. One binary serves every
+install; the per-install part, the root file system's UUID, is in the
+plain-text `grub.cfg` on the ESP instead of being patched into the binary.
+
+`grub.cfg` (ESP) finds the root file system by UUID and `configfile`s
+`/boot/grub/armbian-uefi.cfg` there. If that file is missing, its own
+entries boot `/vmlinuz` and `/initrd.img`, the links Debian's kernel
+packages keep pointing at the newest kernel, plus `/vmlinuz.old`, so even
+then a kernel upgrade still boots.
+
+`/boot/grub/armbian-uefi.cfg` has one entry per `/boot/vmlinuz-<version>`,
+newest first (`sort -V`), with `root=UUID=<uuid> rootwait rw
+console=ttyS0,1500000 console=tty1 loglevel=4` and the board's
+`systemd.mask=`, a Windows entry (chainloads
+`\EFI\Microsoft\Boot\bootmgfw.efi`, found by `search --file`) and
+"UEFI firmware settings". It is written by `/usr/sbin/
+armbian-uefi-grub-update` from `/etc/default/armbian-uefi` (command line,
+default system, timeout), which runs from `/etc/kernel/postinst.d`,
+`/etc/kernel/postrm.d` and `/etc/initramfs/post-update.d`
+(`zz-armbian-uefi-grub`). The last one matters: Debian may build the
+initramfs later than the kernel's own hooks, through a trigger. The app
+writes the same file at install time (a test runs the shell script and
+compares), so the first start has the menu too.
+
+No devicetree is loaded in GRUB: the firmware's own (edk2-rk3576 main
+describes audio, touch, backlight and the DSI panel; the GPU is left
+disabled) reaches Linux through the EFI configuration table.
+
+### The boot option
+
+Boot options written by a running OS do not stay with the current
+firmware (runtime variable writes are not merged into the eMMC store),
+so `efibootmgr` from Armbian and `bcdedit /set {fwbootmgr}` from WinPE are
+both out. The options considered:
+
+1. **startup.nsh, run by the UEFI Shell (chosen).** The ESP gets a
+   `startup.nsh` in its root. The user presses F1 once in the firmware's
+   countdown; the Shell runs startup.nsh after its 5 second prompt. The
+   script finds the file system that has both `startup.nsh` and
+   `\EFI\armbian\grubaa64.efi` (fs0 to fs9), runs `bcfg boot add`,
+   renames itself to `\EFI\armbian\startup.nsh.done` so it runs once, and
+   starts GRUB. The Shell writes the variable during boot services, so it
+   stays, as `bcfg` did by hand on the board. Position 0 when the user
+   chose Armbian as the default (then it comes before the SD card and USB
+   too; GRUB's menu offers Windows), position 99 (last) otherwise. Run in
+   QEMU (virt, Cortex-A72, AAVMF 2024.02) against the real Armbian root
+   file system after the app's edits: the Shell added Boot0004 at
+   position 0, renamed the script and started GRUB, which found the root
+   file system by its new UUID and showed the menu from
+   /boot/grub/armbian-uefi.cfg. The next start went straight to GRUB from
+   Boot0004; with a QEMU-only grub.cfg (console=ttyAMA0) GRUB loaded
+   /vmlinuz and /initrd.img from that ext4 and Linux 7.3.4 started. The
+   kernel's own console on the board (ttyS0) cannot be seen in QEMU.
+2. **Boot Maintenance Manager or Boot From File**: the firmware's own menus
+   (Esc/F2, Boot Maintenance Manager, Boot Options, Add Boot Option) do the
+   same with no script. Documented as the fallback; more steps.
+3. **Writing Boot#### into the firmware's variable store over Maskrom**
+   (the FIT nvdata slot at sector 43648, 192 KiB, an authenticated variable
+   store behind an _FVH header). Not done: the ESP's partition GUID, which
+   the device path needs, is only made by WinPE's diskpart after the write;
+   the slot is all 0xFF on a freshly written firmware until the first boot
+   builds the store; and a wrong store costs every setting. It would need
+   the firmware's FTW and variable formats reproduced and tested first.
+4. Making GRUB `\EFI\Boot\bootaa64.efi` (the eMMC's default) with a menu:
+   no NVRAM at all, but Windows would then always start through GRUB's
+   chainloader, which has not been tried on these boards, and Windows
+   servicing may put bootmgfw back there.
+
+### Kernel upgrades
+
+An Armbian kernel upgrade installs `vmlinuz-<new>` and
+`initrd.img-<new>` and removes the old ones. The postinst and
+post-update hooks rewrite the menu with the new version first; the ESP
+config never names a version. If the hooks did not run, the ESP config's
+fallback boots `/vmlinuz`, which the kernel package moves to the new
+version. The test suite runs the hook script on a fake /boot through an
+upgrade (7.3.4 replaced by 7.4.1) and compares.
+
 ## Languages
 
 The page is in English and Simplified Chinese, following the system
@@ -343,3 +544,5 @@ shown in Chinese through patterns, unknown ones as they are.
   principle (uupdump does it), but it means converting ESDs, and is left
   out.
 - The web build. flash.gahingwoo.com remains the browser flasher.
+- Armbian next to an existing Windows, on an SD card or NVMe drive, from a
+  Windows host, or downloaded by the app (see "Armbian next to Windows").

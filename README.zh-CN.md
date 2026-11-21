@@ -13,6 +13,7 @@
 - **把 Windows 11 装到 eMMC。** 你提供一个 Windows 11 23H2 ARM64 的 ISO（或其中的 install.wim / install.esd）。开发板进入 MaskROM 模式后，应用把 [woa-rk3576](https://github.com/gahingwoo/woa-rk3576) 的 WinPE 和你的 Windows 映像写进 eMMC 上固件之后的空闲空间。开发板随后从 eMMC 启动这个 WinPE，用 DISM 把 Windows 装到 eMMC 上，加入 RK3576 驱动，删掉暂存空间，再重启进入 Windows。原理和取舍见 [docs/DESIGN.md](docs/DESIGN.md)（英文）。
 - **其他安装位置。** Windows 也可以装到插在电脑读卡器里的 SD 卡，或装在 USB 硬盘盒里的 NVMe 硬盘，写好后再装到开发板上。在 Windows 电脑上，还可以由应用直接用 DISM 生成装好的 Windows（适用于这两种位置，也适用于 eMMC：先生成虚拟磁盘，再通过 MaskROM 写入），开发板开机直接进入 Windows。
 - **装好的 Windows 直接可用。** 自带 RK3576 驱动并信任其测试证书；可以再加一个驱动文件夹（显示、触摸屏等）；默认开启 OpenSSH 服务器（22 端口）；按 UTC 读取主板时钟，每次开机后联网校时（板子的 RTC 不可靠，时间不对时测试签名的驱动会装不上）；首次启动可以走 Windows 自己的设置向导（OOBE），也可以完全跳过：填好用户名和密码，开机直接进桌面。
+- **Windows 旁边装 Armbian。** 用暂存方式安装到 eMMC 时，还可以把本开发板的 Armbian 映像（.img 或 .img.xz）放进 eMMC 末尾单独的分区，由固件通过 GRUB 启动，账户和 SSH 公钥与 Windows 相同。需要在 Linux 或 macOS 上运行（要用 e2fsprogs），详见 [docs/DESIGN.md](docs/DESIGN.md#armbian-next-to-windows)（英文）。
 - **UEFI 固件。** 从 edk2-rk3576 最新发布中取固件，按网页刷写工具 [flash.gahingwoo.com](https://flash.gahingwoo.com/) 完全相同的方式写入（“完整映像”或“保留分区”），通过 MaskROM。
 - **在开发板上直接运行。** 在开发板上的 Linux（从 SD 卡或 U 盘启动）里运行本应用，可以直接写入本机的 eMMC 或 SPI NOR，不需要第二台电脑。
 - **WinPE 启动 U 盘。** 把 woa-rk3576 的 WinPE 映像写到 U 盘，按 woa-rk3576 的 [INSTALL.md](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/INSTALL.md) 手动安装。

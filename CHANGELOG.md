@@ -26,4 +26,11 @@ changelog is in the git history before this fork).
   the eMMC, staged for the board to install; and on a Windows PC, built
   finished with DISM (for the eMMC into a virtual disk written over
   Maskrom).
+- Armbian next to Windows on the eMMC (TaishanPi 3M, CM5-IO): the
+  root partition of the chosen Armbian image in its own partition at the
+  end, booted by edk2-rk3576 through a standalone GRUB with a menu that
+  follows kernel upgrades; the board fixes Armbian needs under UEFI and
+  the first-start account presets are put in offline with e2fsprogs. The
+  boot option is added once from the UEFI Shell (startup.nsh). Linux and
+  macOS hosts.
 - Not yet run on hardware.

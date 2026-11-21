@@ -145,3 +145,100 @@ board: LCKFB TaishanPi 3M" on the first page.
 
 Test 2 on the CM5-IO (Maskrom button). The eMMC should report about
 31272730624 bytes.
+
+## 5. Armbian next to Windows (TaishanPi 3M)
+
+From the `armbian-uefi` branch. Needs a Linux PC (or macOS with
+`brew install e2fsprogs`): the option is greyed out on Windows. The write
+lays out the whole eMMC again: **everything on it except the firmware
+partition goes**, including a hand-made Windows and Armbian.
+
+Before you start:
+
+- Firmware: edk2-rk3576 main (the device tree with audio, touch, backlight
+  and the DSI panel, and the DSI handoff fix), "Force UEFI GOP Display" off.
+- A boot option "Armbian" made by hand earlier points at the old EFI
+  partition, whose GUID changes. Remove it first: Esc/F2, Boot Maintenance
+  Manager, Boot Options, Delete Boot Option (or `bcfg boot dump`, then
+  `bcfg boot rm N` in the Shell). Otherwise there are two "Armbian" entries
+  and the old one fails with "Not Found".
+- SD card slot and USB ports empty.
+
+Steps:
+
+1. Board TaishanPi 3M; What to write: Windows 11, the board's eMMC, on the
+   board (WinPE); tick "Also install Armbian next to Windows".
+2. Windows image as in test 2. Windows setup: "Skip setup" with a user and
+   password (Armbian takes the same password), SSH on, paste your public
+   key.
+3. Armbian page: choose `Armbian-unofficial_26.11.0-trunk_Lckfb-taishanpi-3m_trixie_edge_7.3.4_gnome_desktop.img.xz`.
+   It copies the root partition out (about 6 GB in the app's data folder,
+   `~/.config/WoA RK3576 Imager/armbian/`; about 2 minutes on a PC here,
+   note how long it takes). The
+   line under the button should say Armbian 26.11.0-trunk for the Taishan
+   Pi 3M, Linux 7.3.4-edge-rockchip64. Size 6 GiB. Pick the default system
+   (try Windows first). The Linux user name is the Windows one in lower
+   case; time zone from this PC.
+   Also try an image for another board (any other Armbian .img.xz): it
+   must be refused with the board name.
+4. Review shows the Armbian row and the accounts row. Connect and write.
+   The confirm card lists "Armbian gets 6.4 GB at the end of the eMMC".
+   Note the total time: about 6.2 GB more than test 2.
+5. WinPE, as in test 2. Extra lines to watch for: "Putting Armbian's boot
+   loader on the EFI partition." after "Writing the boot files.", and at
+   the end the note about F1.
+6. Windows starts as before. In Windows, Disk Management: firmware, EFI,
+   MSR, C:, then a 6 GB partition at the end with no letter. C: must end
+   where the Armbian partition begins (no free space between). Optional:
+   `mountvol S: /s` and `dir S:\EFI\armbian` (grubaa64.efi, grub.cfg), and
+   `S:\startup.nsh`.
+7. Restart and press F1 in the countdown. On serial:
+   - `Press ESC in 5 seconds to skip startup.nsh` (do not press anything),
+   - `bcfg: Add Boot000N as <n>`: with Windows as the default, n is the
+     number of boot options before it (last place); with Armbian, 0,
+   - `Moving FS0:\startup.nsh -> fs0:\EFI\armbian\startup.nsh.done`,
+   - `Boot option Armbian added. Starting it.`, then the GRUB menu with
+     "Armbian, Linux 7.3.4-edge-rockchip64", "Armbian, the kernel /vmlinuz
+     names", "Windows", "UEFI firmware settings".
+   If the Shell's FS0 is not the eMMC's EFI partition, the script still
+   finds it (fs0 to fs9). If nothing happens, type
+   `bcfg boot add 99 fs0:\EFI\armbian\grubaa64.efi "Armbian"` by hand and
+   note what `map -r` showed.
+8. The kernel log follows on serial (console=ttyS0,1500000). Watch for: no
+   "lckfb-tspi-3m-screen" starting and no reboot; "Starting
+   armbian-uefi-firstboot.service", resize2fs "On-line resizing" lines;
+   armbian-firstlogin making the accounts; then GDM on the DSI screen.
+9. In Armbian (ssh root@<board> with your key, or the user with the
+   password):
+   - `findmnt /`, `blkid`: the root UUID is a new one, not
+     0bb4374f-5bdf-42c2-b951-03fc3cb84ca8 (the image's);
+     `cat /proc/cmdline` has `root=UUID=<that>` and
+     `systemd.mask=lckfb-tspi-3m-screen.service`.
+   - `df -h /`: about 6 GB (grown from 5.75 GiB).
+     `journalctl -b -u armbian-uefi-firstboot` shows resize2fs;
+     `ls /var/lib/armbian-uefi/` is empty;
+     `systemctl is-enabled armbian-resize-filesystem` says disabled.
+   - `sudo sgdisk -p /dev/mmcblk0` (or the eMMC's name) and `sudo sgdisk
+     -v`: the Armbian partition still has type 8300 and its name "Armbian",
+     no problems found.
+   - `systemctl is-enabled lckfb-tspi-3m-screen.service`: masked.
+   - `id <user>`, `locale`, `timedatectl`: the values from the app.
+     `ls /root/.not_logged_in_yet` must be gone.
+   - Touch on the DSI screen works with no rule (GNOME rotates it).
+   - `aplay -l` shows the cards named LCKFB-TaishanPi3M-0;
+     `alsaucm -c <card> list _verbs` for the ES8388 card should list a
+     verb now. Audio itself is not expected to work.
+   - `cat /boot/grub/armbian-uefi.cfg`.
+10. Kernel upgrade, simulated: `sudo cp /boot/vmlinuz-7.3.4-edge-rockchip64
+    /boot/vmlinuz-7.3.99-test; sudo cp /boot/initrd.img-7.3.4-edge-rockchip64
+    /boot/initrd.img-7.3.99-test; sudo /etc/kernel/postinst.d/zz-armbian-uefi-grub`.
+    The menu now has 7.3.99-test first; reboot and pick it (it is the same
+    kernel), then remove the two files and run the hook again. A real
+    `apt upgrade` that brings a new kernel should do the same through the
+    hook.
+11. Boot order: with "Windows" as the default the board starts Windows;
+    Esc/F2, Boot Manager, "Armbian" starts GRUB. In GRUB, the "Windows"
+    entry chainloads Windows' boot manager: not tried on these boards
+    before, note whether it works.
+12. Repeat with "Armbian" as the default on a second run: the board starts
+    GRUB by itself (5 seconds, then Armbian).

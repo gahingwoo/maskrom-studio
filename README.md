@@ -35,6 +35,11 @@ Status: first version, not yet run on hardware. See
   synced over the network after every start (the boards' RTC cannot be
   trusted), and either Windows' own first-start setup or none at all: give
   a user name and password and the board starts straight to the desktop.
+- **Armbian next to Windows.** With the staged install onto the eMMC, the
+  app can also put an Armbian image for the board (.img or .img.xz) into
+  its own partition at the end of the eMMC, started by the firmware
+  through GRUB, with the same account and SSH key. Needs Linux or macOS
+  (e2fsprogs); see [docs/DESIGN.md](docs/DESIGN.md#armbian-next-to-windows).
 - **UEFI firmware.** The latest edk2-rk3576 release, written as the web
   flasher [flash.gahingwoo.com](https://flash.gahingwoo.com/) writes it
   ("whole image" or "keep the partitions"), over Maskrom.
