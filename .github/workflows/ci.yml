@@ -33,8 +33,10 @@ jobs:
           path: vendor/rkdeveloptool-wasm
       # For the tests that check the staged layout with the real tools:
       # mkfs.vfat and mtools (FAT32), fsck.exfat, sfdisk and sgdisk.
-      - name: File system tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq dosfstools mtools exfatprogs gdisk fdisk
+      # fonts-noto-cjk: the runner has no Chinese font, so the zh-CN
+      # screenshots came out as boxes.
+      - name: File system tools and a Chinese font
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dosfstools mtools exfatprogs gdisk fdisk fonts-noto-cjk
       - name: Shell scripts
         run: shellcheck -S warning install.sh packaging/*.sh scripts/*.sh
       - run: npm run typecheck
