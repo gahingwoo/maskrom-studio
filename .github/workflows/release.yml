@@ -328,6 +328,8 @@ jobs:
       - run: npm run icons
       - name: Native addons for windows-${{ matrix.arch }} only
         run: node scripts/native-for-target.mjs ${{ matrix.arch }}
+      - name: Where the native addons are before packaging
+        run: find node_modules -name '*.node' -not -path '*/test/*' | sort
       # Unsigned: SmartScreen will warn. See docs/install.md.
       - name: Installer and zip
         run: npx electron-builder --win nsis zip --${{ matrix.arch }} --publish never
