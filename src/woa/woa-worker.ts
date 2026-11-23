@@ -122,7 +122,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
               summary: {
                 kind: 'stage', capacity: p.capacity, windowsBytes: plan.windowsBytes, totalBytes: plan.totalBytes,
                 removed: plan.removed.map((x) => ({ name: x.name || '(no name)', bytes: (x.lastLba - x.firstLba + 1) * 512 })),
-                diskGuid: plan.diskGuid, certificates: plan.certificates, layout: plan.layout, chosen: !!job.setup.layout,
+                diskGuid: plan.diskGuid, certificates: plan.certificates, layout: plan.layout, chosen: !!job.setup?.layout,
               },
             };
           } catch (e) {
