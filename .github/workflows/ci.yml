@@ -36,7 +36,15 @@ jobs:
       # fonts-noto-cjk: the runner has no Chinese font, so the zh-CN
       # screenshots came out as boxes.
       - name: File system tools and a Chinese font
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq dosfstools mtools exfatprogs gdisk fdisk fonts-noto-cjk
+        # A mirror that hangs fails the step in minutes, and is tried again, instead of holding the job.
+        timeout-minutes: 12
+        run: |
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          for i in 1 2 3; do
+            sudo apt-get $APT update -qq && sudo apt-get $APT install -y -qq dosfstools mtools exfatprogs gdisk fdisk fonts-noto-cjk && exit 0
+            echo "apt failed (try $i); again in 20 s"; sleep 20
+          done
+          exit 1
       - name: Shell scripts
         run: shellcheck -S warning install.sh packaging/*.sh scripts/*.sh
       - run: npm run typecheck
