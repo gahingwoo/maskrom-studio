@@ -320,6 +320,34 @@ Added, all chosen on the "Windows setup" page:
   follows what worked by hand on the TaishanPi 3M; `Add-WindowsCapability
   OpenSSH.Server` hung for over 20 minutes there and is not used.
 
+## How much of the disk Windows gets
+
+`src/woa/windows-layout.ts`. By default Windows takes all of it, as
+before. For a staged install (eMMC, SD card or NVMe drive; not the build
+on a Windows PC) the Windows setup step can instead set the Windows
+partition's size, at least 32 GB (1 GB = 1024 MiB there), and say what the
+rest becomes: unallocated, or a data partition (NTFS or exFAT, a label of
+1 to 11 letters, digits, - or _), with an amount kept unallocated at the
+very end for a Linux install later. On the disk, after the firmware
+partition (eMMC sectors 64..131071) or from 1 MiB:
+
+    ESP 260 MiB (FAT32) | MSR 16 MiB | Windows (NTFS) | data | free
+
+The page shows the result before anything is written (with the board's
+usual eMMC size, or the chosen drive's), the plan is made again on the
+size the board or drive reports, and the confirmation states it. The
+CM5-IO's eMMC (about 31 GB) has no room for anything beside a 32 GB
+Windows, so there it is the whole disk only.
+
+How the install script does it (woa-stage.ini): Windows is first made in
+the gap before the staging partitions, at its size when that fits
+(`windows_create_mb`), else as large as the gap allows and then grown over
+the freed staging space by exactly the rest (`windows_extend_mb`); the
+whole-disk default keeps `create partition primary` and `extend` as they
+were. Then the data partition (`create partition primary size=`,
+`format quick fs=ntfs|exfat label=`), one MiB under its computed size
+against rounding; what is left stays unallocated.
+
 ## Which Windows images are taken
 
 Everything is read on the PC before the board is involved

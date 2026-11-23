@@ -74,6 +74,13 @@ const flow = async (page, shot) => {
   await page.fill('#acc-password', 'example');
   await page.fill('#acc-password2', 'example');
   await shot('4-setup');
+  // A chosen disk layout: 40 GB of Windows, an exFAT data partition, 8 GB kept for Linux.
+  await page.click('label[for="layout-custom"]');
+  await page.fill('#layout-win', '40');
+  await page.click('label[for="rest-exfat"]');
+  await page.fill('#layout-linux', '8');
+  await page.locator('#layout-linux').scrollIntoViewIfNeeded();
+  await shot('4-setup-layout');
   await next(page);
   await page.waitForSelector('.pf-v6-c-description-list');
   await shot('5-review');

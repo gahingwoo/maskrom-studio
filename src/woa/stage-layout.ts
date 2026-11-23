@@ -27,6 +27,7 @@ import { crlf, INSTALL, LAUNCHER } from './stage-scripts';
 import type { WoaBoard } from './boards';
 import { certsCmd, trustedCerts } from './certs';
 import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
+import { layoutIni, planLayout, WHOLE_DISK, type Layout, type LayoutChoice } from './windows-layout';
 
 const ALIGN = 2048; // 1 MiB
 /** Windows 11 23H2 applied with /Compact takes about 10 GB; leave room for updates and a page file. */
@@ -80,6 +81,8 @@ export interface StageInput {
    * SSH is on) and "extra-drivers/..." (driver packages the user added).
    */
   extras?: Array<{ path: string; data: Uint8Array }>;
+  /** How the disk is shared after the install; default: Windows takes all of it. */
+  layout?: LayoutChoice;
 }
 
 export interface StagePlan {
@@ -95,6 +98,8 @@ export interface StagePlan {
   /** What is on the eMMC now besides the firmware: it is removed. */
   removed: GptPartition[];
   ini: string;
+  /** The disk after the install: Windows, a data partition, free space. */
+  layout: Layout;
   /** Thumbprints of the certificates the installed Windows will trust. */
   certificates: string[];
 }
@@ -198,6 +203,10 @@ export function planStage(o: StageInput): StagePlan {
     ...generated,
     ...extras.filter((e) => setup.ssh || !e.path.startsWith('openssh/')).map((e) => ({ name: e.path, source: bytesSource(e.data) })),
   ];
+  const choice = o.layout ?? setup.layout ?? WHOLE_DISK;
+  const freeBytes = (lastUsable + 1 - windowsFirst) * SECTOR;
+  const layout = planLayout(freeBytes, choice);
+  if ('problem' in layout) throw new StageError(`${layout.problem} Nothing was written.`);
   const iniFor = (bootFirst: number, dataFirst: number) => stageIni({
     tool: `Maskrom Studio ${o.appVersion}`,
     board: o.board.id,
@@ -217,6 +226,7 @@ export function planStage(o: StageInput): StagePlan {
     skip_setup: setup.skipSetup ? 1 : 0,
     ssh: setup.ssh ? 1 : 0,
     certificates: certs.map((c) => c.thumbprint).join(' ') || 'none',
+    ...layoutIni((bootFirst - windowsFirst) * SECTOR, layout, choice.windowsBytes === null),
   });
   const when = o.now ?? new Date();
   const first = buildExfat({ files: files(iniFor(0, 0)), label: 'WOASTAGE', partitionOffset: 0, serial, when });
@@ -263,7 +273,7 @@ export function planStage(o: StageInput): StagePlan {
     if (r.lba !== 0 && r.lba < windowsFirst) throw new StageError(`${r.label} would overwrite the firmware`);
   }
   return {
-    regions, diskGuid, bootFirst, dataFirst, windowsBytes, removed, ini, certificates: certs.map((c) => c.thumbprint),
+    regions, diskGuid, bootFirst, dataFirst, windowsBytes, removed, ini, layout, certificates: certs.map((c) => c.thumbprint),
     totalBytes: regions.reduce((s, r) => s + r.source.size, 0),
   };
 }

@@ -276,12 +276,17 @@ for /l %%i in (%NPART%,-1,1) do (
   )
 )
 echo partitions left over from an earlier attempt: %NDEL% >> "%LOG%"
+rem The Windows partition: the whole gap, or the size chosen in the imager
+rem (windows_create_mb; 0 is the whole gap).
+if not defined W_windows_create_mb set W_windows_create_mb=0
+set WSIZE=
+if not "%W_windows_create_mb%"=="0" set WSIZE= size=%W_windows_create_mb%
 >> X:\woa-stage\dp.txt (
   echo create partition efi size=260 offset=%W_windows_offset_kb%
   echo format quick fs=fat32 label=System
   echo assign letter=S
   echo create partition msr size=16
-  echo create partition primary
+  echo create partition primary!WSIZE!
   echo format quick fs=ntfs label=Windows
   echo assign letter=W
   echo list partition
@@ -295,20 +300,34 @@ call :checkfw || goto :faillog
 
 set APPLY_OPTS=/Compact /Verify
 ${CONFIGURE}rem --- 5. remove the staging partitions, give their space to Windows ---------
-echo Removing the staging partitions and extending the Windows partition.
+echo Removing the staging partitions and giving their space to Windows (and the data partition).
 mkdir W:\Windows\Logs 2>nul
 copy /y "%LOG%" W:\Windows\Logs\woa-stage.log >nul
 set PEL=%PE:~0,1%
 set STL=%STAGE:~0,1%
+rem How far Windows grows over the freed space (windows_extend_mb: all, none
+rem or a number of MiB), then the data partition if one was chosen; what
+rem is left stays unallocated (for Linux later, or nothing).
+if not defined W_windows_extend_mb set W_windows_extend_mb=all
+if not defined W_data_fs set W_data_fs=none
 > X:\woa-stage\dp.txt (
   echo select volume %STL%
   echo delete volume override
   echo select volume %PEL%
   echo delete volume override
   echo select volume W
-  echo extend
-  echo list partition
 )
+if /i "%W_windows_extend_mb%"=="all" (
+  >> X:\woa-stage\dp.txt echo extend
+) else if /i not "%W_windows_extend_mb%"=="none" (
+  >> X:\woa-stage\dp.txt echo extend size=%W_windows_extend_mb%
+)
+if /i not "%W_data_fs%"=="none" (
+  >> X:\woa-stage\dp.txt echo select disk %DISK%
+  >> X:\woa-stage\dp.txt echo create partition primary size=%W_data_mb%
+  >> X:\woa-stage\dp.txt echo format quick fs=%W_data_fs% label=%W_data_label%
+)
+>> X:\woa-stage\dp.txt echo list partition
 diskpart /s X:\woa-stage\dp.txt >> "%LOG%" 2>&1 || (
   echo Removing the staging partitions failed. Windows is installed; the
   echo staging partitions may still be there. Delete them from Disk Management.

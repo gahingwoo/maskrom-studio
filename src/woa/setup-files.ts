@@ -27,6 +27,8 @@
 // minutes on a fresh install here and is not used. The default shell stays
 // sshd's default, cmd.exe.
 
+import type { LayoutChoice } from './windows-layout';
+
 export const OPENSSH = {
   version: '9.5.0.0p1-Beta',
   file: 'OpenSSH-ARM64.zip',
@@ -57,6 +59,8 @@ export interface SetupOptions {
   ssh: boolean;
   /** An OpenSSH public key line for administrators_authorized_keys, or empty. */
   sshKey: string;
+  /** How the disk is shared after a staged install (windows-layout.ts); absent: Windows takes all of it. */
+  layout?: LayoutChoice;
 }
 
 export const DEFAULT_SETUP: SetupOptions = { skipSetup: null, ssh: true, sshKey: '' };

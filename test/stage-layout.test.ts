@@ -129,6 +129,23 @@ describe('staged install layout', () => {
     execFileSync('rm', ['-rf', dir]);
   }, 60000);
 
+  it('passes a chosen layout to the install script, and refuses one that does not fit', () => {
+    if (!tools) return;
+    const dir = mkdtempSync(join(tmpdir(), 'stage-layout-'));
+    const winpe = fileSource(fakeWinpe(dir));
+    const GiB = 1024 ** 3;
+    const plan = planStage({ board, diskBytes: 62008590336, head, winpe, image, rand, appVersion: 't',
+      setup: { skipSetup: null, ssh: false, sshKey: '', layout: { windowsBytes: 40 * GiB, rest: 'exfat', dataLabel: 'Shared', linuxReserveBytes: 8 * GiB } } });
+    // 40 GiB is less than the gap before the staging partitions: made at that size, never extended.
+    expect(plan.ini).toMatch(/\r\nwindows_create_mb=40960\r\nwindows_extend_mb=none\r\ndata_fs=exfat\r\ndata_label=Shared\r\ndata_mb=\d+\r\n/);
+    expect(plan.layout).toMatchObject({ windowsBytes: 40 * GiB, data: { fs: 'exfat', label: 'Shared' }, linuxReserveBytes: 8 * GiB });
+    const whole = planStage({ board, diskBytes: 62008590336, head, winpe, image, rand, appVersion: 't' });
+    expect(whole.ini).toMatch(/\r\nwindows_create_mb=0\r\nwindows_extend_mb=all\r\ndata_fs=none\r\n/);
+    expect(() => planStage({ board, diskBytes: 62008590336, head, winpe, image, rand, appVersion: 't',
+      setup: { skipSetup: null, ssh: false, sshKey: '', layout: { windowsBytes: 20 * GiB, rest: 'unallocated', dataLabel: 'x', linuxReserveBytes: 0 } } })).toThrow(/at least 32\.0 GB/);
+    execFileSync('rm', ['-rf', dir]);
+  }, 60000);
+
   it('refuses the ROCK 4D', () => {
     expect(() => planStage({ board: woaBoard('rock4d')!, diskBytes: 62008590336, head, winpe: bytesSource(new Uint8Array(1)), image, rand, appVersion: 't' })).toThrow(/NVMe/);
   });

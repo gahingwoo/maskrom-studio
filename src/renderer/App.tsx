@@ -23,6 +23,7 @@ import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateMod
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
+import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, NOMINAL_EMMC_BYTES, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'stick' | 'armbian' | 'factory';
@@ -42,7 +43,8 @@ interface Run {
   confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | UpgradeSummary | null;
   result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[] } | null;
 }
-interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }> }
+interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }>;
+  layout?: { windowsBytes: number; data: { fs: string; label: string; bytes: number } | null; unallocatedBytes: number }; chosen?: boolean }
 interface WholeSummary { kind: 'whole'; label: string; capacity: number | null; bytes: number; clearsBackupGpt: boolean }
 interface FactorySummary { kind: 'factory'; capacity: number | null; chip: string; model: string; version: string; partitions: Array<{ name: string; lba: number; bytes: number }>; skipped: string[]; bytes: number }
 interface UpgradeSummary { kind: 'upgrade'; manufacturer: string | null; capacity: number | null; installed: string | null; next: string | null; settings: 'kept' | 'reset' | 'none'; backup: string | null; nvdataLba: number; nvdataSectors: number; lba: number; bytes: number }
@@ -116,6 +118,11 @@ export function App() {
   const [method, setMethod] = useState<Method>('stage');
   const [disk, setDisk] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<'whole' | 'custom'>('whole');
+  const [winGb, setWinGb] = useState('');
+  const [rest, setRest] = useState<RestUse>('unallocated');
+  const [dataLabel, setDataLabel] = useState('Data');
+  const [linuxGb, setLinuxGb] = useState('0');
   const [understood, setUnderstood] = useState(false);
   const [branch, setBranch] = useState<ArmbianBranch>('vendor');
   const [armbian, setArmbian] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
@@ -174,11 +181,26 @@ export function App() {
   const checkText = (e: EditionInfo): string | null => (e.check.level === 'ok' ? null : t(`win.check.${e.check.code}`, e.check.vars));
   const errorText = (e: string) => (/^[a-z]+\.[a-z.]+$/.test(e) ? t(e) : msg(e));
 
-  const setup: SetupOptions = { skipSetup: skip ? account : null, ssh, sshKey: ssh ? sshKey : '' };
+  // The disk after the install (windows-layout.ts). Sizes are typed in GB (GiB); the preview uses the
+  // board's usual eMMC size, or the chosen drive's; the plan on the real size is checked again when writing.
+  const staged = method === 'stage';
+  const gbToBytes = (v: string) => (/^\d+(\.\d+)?$/.test(v.trim()) ? Math.round(Number(v) * 1024) * MiB : NaN);
+  const layoutChoice: LayoutChoice | undefined = !staged || layoutMode === 'whole' ? undefined : {
+    windowsBytes: gbToBytes(winGb), rest, dataLabel, linuxReserveBytes: linuxGb.trim() === '' ? 0 : gbToBytes(linuxGb),
+  };
+  const layoutDisk = dest === 'emmc' ? (board ? NOMINAL_EMMC_BYTES[board.id] ?? null : null) : (drives?.find((x) => x.device === disk)?.size ?? null);
+  const layoutFree = layoutDisk ? freeBytesOf(layoutDisk, dest === 'emmc') : null;
+  const layoutMaxWin = layoutFree ? Math.floor((layoutFree - (ESP_MIB + MSR_MIB + 2) * MiB) / MiB) * MiB : null;
+  const customPossible = layoutMaxWin === null || layoutMaxWin >= MIN_WINDOWS_CHOSEN;
+  const layoutPlan = layoutChoice && layoutFree ? planLayout(layoutFree, layoutChoice)
+    : layoutChoice && (Number.isNaN(layoutChoice.windowsBytes) || Number.isNaN(layoutChoice.linuxReserveBytes)) ? { problem: 'layout.number' } : null;
+  const layoutErr = layoutChoice && (Number.isNaN(layoutChoice.windowsBytes!) || Number.isNaN(layoutChoice.linuxReserveBytes)) ? t('layout.number')
+    : layoutPlan && 'problem' in layoutPlan ? (layoutPlan.problem === 'layout.number' ? t('layout.number') : msg(layoutPlan.problem)) : null;
+  const setup: SetupOptions = { skipSetup: skip ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}) };
   const accountErr = skip ? accountProblem(account) : null;
   const passwordMismatch = skip && account.password !== password2;
   const keyErr = ssh ? sshKeyProblem(sshKey) : null;
-  const setupOk = !accountErr && !passwordMismatch && !keyErr;
+  const setupOk = !accountErr && !passwordMismatch && !keyErr && !layoutErr;
 
   const refreshDrives = (min = 600e6) => { setDrives(null); api.listDrives(min).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
   const onPc = task === 'windows' && dest !== 'emmc';
@@ -719,6 +741,55 @@ export function App() {
     </FormGroup>
   );
 
+  const GBs = (n: number) => `${(n / GiB).toFixed(1)} GB`;
+  const layoutRows = (): string[] => {
+    const rows: string[] = [];
+    if (dest === 'emmc') rows.push(t('layout.row.firmware'));
+    rows.push(t('layout.row.esp'), t('layout.row.msr'));
+    if (!layoutChoice) { rows.push(t('layout.row.windowsAll')); return rows; }
+    if (layoutPlan && !('problem' in layoutPlan)) {
+      rows.push(t('layout.row.windows', { size: GBs(layoutPlan.windowsBytes) }));
+      if (layoutPlan.data) rows.push(t('layout.row.data', { size: GBs(layoutPlan.data.bytes), fs: layoutPlan.data.fs === 'ntfs' ? 'NTFS' : 'exFAT', label: layoutPlan.data.label }));
+      if (layoutPlan.linuxReserveBytes > 0) rows.push(t('layout.row.linux', { size: GBs(layoutPlan.linuxReserveBytes) }));
+      const other = layoutPlan.unallocatedBytes - layoutPlan.linuxReserveBytes;
+      if (other >= 512 * MiB) rows.push(t('layout.row.free', { size: GBs(other) }));
+    }
+    return rows;
+  };
+  const layoutGroup = staged && (
+    <FormGroup role="radiogroup" fieldId="layout" label={t('layout.label')} isStack>
+      <Radio id="layout-whole" name="layout" label={t('layout.whole')} isChecked={layoutMode === 'whole'} onChange={() => setLayoutMode('whole')} description={t('layout.whole.desc')} />
+      <Radio id="layout-custom" name="layout" label={t('layout.custom')} isChecked={layoutMode === 'custom'} isDisabled={!customPossible}
+        onChange={() => { setLayoutMode('custom'); if (!winGb && layoutMaxWin) setWinGb(String(Math.max(32, Math.floor(layoutMaxWin / GiB / 2)))); }}
+        description={customPossible ? t('layout.custom.desc', { min: GBs(MIN_WINDOWS_CHOSEN) }) : t('layout.custom.tooSmall', { min: GBs(MIN_WINDOWS_CHOSEN) })} />
+      {layoutMode === 'custom' && (
+        <>
+          <FormGroup label={t('layout.windowsSize')} fieldId="layout-win" isRequired>
+            <TextInput id="layout-win" value={winGb} onChange={(_e, v) => setWinGb(v)} type="text" inputMode="decimal" validated={layoutErr ? 'error' : 'default'} />
+            <FormHelperText><HelperText><HelperTextItem>{layoutMaxWin ? t('layout.windowsSize.help', { min: GBs(MIN_WINDOWS_CHOSEN), max: GBs(layoutMaxWin) }) : t('layout.windowsSize.helpNoDisk', { min: GBs(MIN_WINDOWS_CHOSEN) })}</HelperTextItem></HelperText></FormHelperText>
+          </FormGroup>
+          <FormGroup role="radiogroup" fieldId="layout-rest" label={t('layout.rest')} isStack>
+            <Radio id="rest-free" name="rest" label={t('layout.rest.free')} isChecked={rest === 'unallocated'} onChange={() => setRest('unallocated')} />
+            <Radio id="rest-ntfs" name="rest" label={t('layout.rest.ntfs')} isChecked={rest === 'ntfs'} onChange={() => setRest('ntfs')} />
+            <Radio id="rest-exfat" name="rest" label={t('layout.rest.exfat')} isChecked={rest === 'exfat'} onChange={() => setRest('exfat')} description={t('layout.rest.exfat.desc')} />
+          </FormGroup>
+          {rest !== 'unallocated' && (
+            <FormGroup label={t('layout.dataLabel')} fieldId="layout-label">
+              <TextInput id="layout-label" value={dataLabel} onChange={(_e, v) => setDataLabel(v)} />
+            </FormGroup>
+          )}
+          <FormGroup label={t('layout.linux')} fieldId="layout-linux">
+            <TextInput id="layout-linux" value={linuxGb} onChange={(_e, v) => setLinuxGb(v)} type="text" inputMode="decimal" />
+            <FormHelperText><HelperText><HelperTextItem>{t('layout.linux.help')}</HelperTextItem></HelperText></FormHelperText>
+          </FormGroup>
+          {layoutErr && <HelperText><HelperTextItem variant="error">{layoutErr}</HelperTextItem></HelperText>}
+        </>
+      )}
+      <Content component="p" className="muted">{layoutDisk ? t(dest === 'emmc' ? 'layout.preview.emmc' : 'layout.preview.drive', { size: GBs(layoutDisk) }) : t('layout.preview.later')}</Content>
+      {layoutDisk && <List>{layoutRows().map((r) => <ListItem key={r}>{r}</ListItem>)}</List>}
+    </FormGroup>
+  );
+
   const setupStep = (
     <StepPage title={t('step.setup')} lead={t('setup.lead')}>
       <Form onSubmit={(e) => e.preventDefault()} className="setup-form">
@@ -757,6 +828,7 @@ export function App() {
             <FormHelperText><HelperText><HelperTextItem variant={keyErr ? 'error' : 'default'}>{keyErr ? t(keyErr) : t('setup.ssh.key.help')}</HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
         )}
+        {layoutGroup}
         <FormGroup label={t('setup.drivers')} fieldId="drivers" role="group">
           <Content component="p">{t('setup.drivers.always')}</Content>
           <Content component="p" className="muted">{t('setup.drivers.desc')}</Content>
@@ -794,13 +866,14 @@ export function App() {
   if (board && task) {
     reviewRows.push([t('review.board'), onBoard ? t('review.board.here', { board: board.name }) : t('review.board.maskrom', { board: board.name })]);
     if (task === 'windows') {
-      reviewRows = reviewRows.concat([
+      reviewRows = reviewRows.concat(([
         [t('review.windows'), edition ? t('review.windows.value', { edition: edition.name, build: `${edition.build}${edition.spBuild ? `.${edition.spBuild}` : ''}`, file: windows!.fileName }) : t('review.notChosen')],
         [t('review.winpe'), releases?.winpe ? `woa-rk3576 ${releases.winpe.tag} (${releases.winpe.file})` : t('review.unavailable')],
         [t('review.setup'), skip ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
         [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
         [t('review.target'), t(`review.target.${dest}.${method}`)],
+        ...(staged ? [[t('layout.label'), layoutDisk ? layoutRows().join('; ') : t('layout.preview.later')] as [string, string]] : []),
         [t('review.erased'), dest === 'emmc' ? t('review.erased.windows') : disk ? t('review.erased.disk', { drive: drives?.find((x) => x.device === disk)?.description ?? disk }) : t('review.disk.choose')],
         ...(method === 'stage' ? [
           [t('review.written'), t('review.written.windows', { size: windows ? formatBytes(windows.imageSize + 560e6) : '' }) + (onBoard || dest !== 'emmc' ? '' : t('review.written.maskrom'))],
@@ -809,7 +882,7 @@ export function App() {
         ] as Array<[string, string]> : [
           [t('review.checked'), dest === 'emmc' ? t('review.checked.host.emmc') : t('review.checked.host.disk')],
         ] as Array<[string, string]>),
-      ]);
+      ] as Array<[string, string]>));
       if (!edition) why = t('why.windows');
       else if (!setupOk) why = t('why.setup');
       if (!releases?.winpe) why = t('why.winpe');
@@ -919,7 +992,11 @@ export function App() {
       <Review rows={[
         [t('confirm.kept'), t('confirm.kept.value')],
         [t('confirm.removed'), c.removed.length ? c.removed.map((p) => `${p.name} (${GB(p.bytes)})`).join(', ') : t('confirm.removed.none')],
-        [t('confirm.windowsGets'), t('confirm.windowsGets.value', { size: GB(c.windowsBytes) })],
+        [t('confirm.windowsGets'), c.chosen && c.layout ? t('confirm.windowsGets.chosen', {
+          size: GB(c.windowsBytes), win: GB(c.layout.windowsBytes),
+          data: c.layout.data ? t('confirm.layout.data', { size: GB(c.layout.data.bytes), fs: c.layout.data.fs === 'ntfs' ? 'NTFS' : 'exFAT', label: c.layout.data.label }) : '',
+          free: c.layout.unallocatedBytes >= 512 * MiB ? t('confirm.layout.free', { size: GB(c.layout.unallocatedBytes) }) : '',
+        }) : t('confirm.windowsGets.value', { size: GB(c.windowsBytes) })],
         [t('confirm.sent'), formatBytes(c.totalBytes)],
       ]} />
     </Stack>

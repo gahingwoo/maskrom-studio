@@ -39,6 +39,10 @@ Status: first version, not yet run on hardware. See
   a Windows PC the app can instead build the finished Windows itself with
   DISM, for these and for the eMMC (written over Maskrom from a virtual
   disk), so the board starts straight into Windows.
+- **Not the whole disk, if you like.** Windows can take a chosen size (32 GB
+  or more) and leave the rest unallocated, as an NTFS or exFAT data
+  partition, or free at the end for Linux later; the layout is shown before
+  anything is written.
 - **Windows comes out configured.** The RK3576 drivers with their test
   certificate trusted, any extra driver folder you add (display, touch),
   OpenSSH server on port 22 (on by default), the clock read as UTC and
