@@ -21,8 +21,9 @@ Status: first version, not yet run on hardware. See
 [docs/hardware-test.md](docs/hardware-test.md).
 
 <p>
-  <img src="docs/imgs/what-to-write.png" alt="The What to write step: Windows 11, the UEFI firmware as a whole image or keeping the partitions, or a WinPE USB stick, and where Windows goes" width="49%">
-  <img src="docs/imgs/review.png" alt="The Review step: board, Windows build, WinPE release, first start, SSH, drivers, what is erased and written, and how it is checked" width="49%">
+  <img src="docs/imgs/what-to-write.png" alt="The What to write step for the LCKFB TaishanPi 3M: Windows 11, UEFI firmware as a whole image or keeping the partitions, upgrading the UEFI firmware while keeping Windows and the settings, UEFI firmware on an SD card, Armbian, a factory image you downloaded, and the WinPE USB stick" width="49%">
+  <img src="docs/imgs/review.png" alt="The Review step for Windows on the eMMC: board, Windows build, WinPE release, first start, SSH, drivers, where it is installed, the disk layout (firmware kept, EFI system partition, MSR, a 40 GB Windows partition, an exFAT data partition and 8 GB kept for Linux), what is erased and what is written" width="49%">
+  <img src="docs/imgs/about.png" alt="About Maskrom Studio: version, design system, network, what it keeps on the device, images, boards, licence, author, source and what it is based on" width="49%">
 </p>
 
 ## What it does

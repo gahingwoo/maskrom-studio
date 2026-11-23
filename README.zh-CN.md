@@ -11,8 +11,8 @@
 现状：第一个版本，还没有在实际开发板上跑过。测试步骤见 [docs/hardware-test.md](docs/hardware-test.md)（英文）。
 
 <p>
-  <img src="docs/imgs/what-to-write-zh-CN.png" alt="写入内容这一步：Windows 11、UEFI 固件（完整映像或保留分区）、WinPE 启动 U 盘，以及 Windows 装到哪里" width="49%">
-  <img src="docs/imgs/windows-setup-zh-CN.png" alt="Windows 设置这一步：首次启动走设置向导还是跳过，用户名、密码和计算机名" width="49%">
+  <img src="docs/imgs/what-to-write-zh-CN.png" alt="写入内容这一步（立创泰山派 3M）：Windows 11、UEFI 固件（完整映像或保留分区）、保留 Windows 和设置的 UEFI 固件升级、写到 SD 卡的 UEFI 固件、Armbian、自己下载的出厂映像，以及 WinPE 启动 U 盘" width="49%">
+  <img src="docs/imgs/windows-setup-zh-CN.png" alt="Windows 设置这一步的磁盘布局：自己设定 Windows 大小（40 GB），剩下的空间建 exFAT 数据分区，在末尾给 Linux 留 8 GB" width="49%">
 </p>
 
 ## 能做什么
