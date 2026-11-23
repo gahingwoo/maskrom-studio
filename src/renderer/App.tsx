@@ -11,7 +11,7 @@ import {
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import { formatBytes } from '../shared/format';
-import type { BoardHereInfo, DriverFolder, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
 import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WoaBoard } from '../woa/boards';
@@ -21,6 +21,7 @@ import type { RegionResult, RegionStage } from '../woa/maskrom-regions';
 import { accountProblem, DEFAULT_SETUP, OPENSSH, sshKeyProblem, type Account, type SetupOptions } from '../woa/setup-files';
 import { api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal } from './common';
 import { useI18n } from './i18n';
+import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { applyTheme, readTheme, type Theme } from './theme';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'stick';
@@ -149,14 +150,7 @@ export function App() {
     const key = b.id === 'tspi3m' ? `maskrom.tspi3m.${i + 1}` : `maskrom.button.${i + 1}`;
     return t(key) || s;
   });
-  const refuseText = (r: string): string => {
-    if (lang === 'en') return r;
-    const build = /build (\d+)\./.exec(r);
-    if (build && /24H2/.test(r)) return t('win.refuse.new', { build: build[1] });
-    const arch = /for (\S+), not ARM64/.exec(r);
-    if (arch) return t('win.refuse.arch', { arch: arch[1] });
-    return r;
-  };
+  const checkText = (e: EditionInfo): string | null => (e.check.level === 'ok' ? null : t(`win.check.${e.check.code}`, e.check.vars));
   const errorText = (e: string) => (/^[a-z]+\.[a-z.]+$/.test(e) ? t(e) : msg(e));
 
   const setup: SetupOptions = { skipSetup: skip ? account : null, ssh, sshKey: ssh ? sshKey : '' };
@@ -175,7 +169,9 @@ export function App() {
     if (!r) return;
     if ('error' in r) { setWindowsError(errorText(r.error)); setWindows(null); setIndex(null); return; }
     setWindows(r);
-    const ok = r.editions.filter((e) => !e.refuse);
+    // 22H2 and 23H2 first; an untested or preview edition only when there is nothing else.
+    const clean = r.editions.filter((e) => !e.refuse && !e.warn);
+    const ok = clean.length ? clean : r.editions.filter((e) => !e.refuse);
     const pro = ok.find((e) => /\bpro\b/i.test(e.name) && !/workstation|education/i.test(e.name));
     setIndex((pro ?? ok[0])?.index ?? null);
   };
@@ -450,22 +446,68 @@ export function App() {
     </StepPage>
   );
 
+  // What was read from the chosen image, before anything is written.
+  const windowsFound = (w: WindowsChoice) => {
+    const uniq = (xs: string[]) => [...new Set(xs)];
+    const builds = uniq(w.editions.map((e) => {
+      const b = `${e.build ?? '?'}${e.spBuild ? `.${e.spBuild}` : ''}`;
+      return `${b} (${e.release ?? t('win.preview')})`;
+    }));
+    const boot = w.container !== 'iso' ? null
+      : !w.boot ? t('win.found.boot.none')
+      : (['arm64', 'x64', 'x86'] as const).filter((k) => w.boot![k]).map((k) => t(`win.found.boot.${k}`)).join(', ') || t('win.found.boot.none');
+    const rows: Array<[string, string]> = [
+      [t('win.found.file'), `${w.fileName}, ${formatBytes(w.fileSize)}`],
+      [t('win.found.image'), `${w.container === 'iso' ? t('win.inIso', { name: w.imageName }) : w.imageName}, ${formatBytes(w.imageSize)}`],
+      [t('win.found.arch'), uniq(w.editions.map((e) => e.archName)).join(', ')],
+      [t('win.found.build'), builds.join(', ')],
+      ...(boot ? [[t('win.found.boot'), boot] as [string, string]] : []),
+      [t('win.found.languages'), uniq(w.editions.flatMap((e) => e.languages)).join(', ') || '?'],
+      [t('win.found.editions'), t('win.found.editions.value', { all: String(w.editions.length), ok: String(w.editions.filter((e) => !e.refuse).length) })],
+    ];
+    return (
+      <DescriptionList isCompact isHorizontal aria-label={t('win.found')}>
+        {rows.map(([k, v]) => (
+          <DescriptionListGroup key={k}><DescriptionListTerm>{k}</DescriptionListTerm><DescriptionListDescription>{v}</DescriptionListDescription></DescriptionListGroup>
+        ))}
+      </DescriptionList>
+    );
+  };
+
   const windowsStep = (
     <StepPage title={t('step.windows')} lead={t('win.lead')}>
       <Alert isInline variant="info" title={t('win.24h2.title')}>{t('win.24h2.text')}</Alert>
+      <ExpandableSection toggleText={t('win.get')} isIndented className="sources">
+        <Content component="p">{t('win.get.text')}</Content>
+        <DescriptionList isCompact>
+          {WINDOWS_SOURCES.map((src) => (
+            <DescriptionListGroup key={src.id}>
+              <DescriptionListTerm>
+                <Button variant="link" isInline component="a" href={src.url} target="_blank">{src.title[lang]}</Button>
+                {src.recommended && <span className="muted"> ({src.recommended[lang]})</span>}
+                {!src.fits && <span className="muted"> ({t('win.get.unsuitable')})</span>}
+              </DescriptionListTerm>
+              <DescriptionListDescription>{src.text[lang]}</DescriptionListDescription>
+            </DescriptionListGroup>
+          ))}
+        </DescriptionList>
+      </ExpandableSection>
       <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
         <FlexItem><Button variant="secondary" onClick={() => chooseWindows(() => api.pickWindows())}>{t('win.choose')}</Button></FlexItem>
-        {windows && (
-          <FlexItem>
-            {windows.fileName}: {windows.container === 'iso' ? t('win.inIso', { name: windows.imageName }) : windows.imageName}, {formatBytes(windows.imageSize)}
-          </FlexItem>
-        )}
       </Flex>
       <div className="drop" onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) chooseWindows(() => api.dropWindows(f)); }}>
         {t('win.drop')}
       </div>
       {windowsError && <Alert isInline variant="danger" title={windowsError} />}
+      {windows && windowsFound(windows)}
+      {windows && (windows.refuse || windows.editions.every((e) => e.refuse)) && (
+        <Alert isInline variant="danger" title={t('win.refused')}>
+          {windows.refuse ? msg(windows.refuse) : checkText(windows.editions[0])}
+        </Alert>
+      )}
+      {edition?.check.level === 'notice' && <Alert isInline variant="custom" title={t('win.untested')}>{checkText(edition)}</Alert>}
+      {edition?.check.level === 'warn' && <Alert isInline variant="warning" title={t('win.warned')}>{checkText(edition)}</Alert>}
       {windows && (
         <Table aria-label={t('win.col.edition')} variant="compact">
           <Thead><Tr><Th screenReaderText="-" /><Th>{t('win.col.edition')}</Th><Th>{t('win.col.build')}</Th><Th>{t('win.col.installed')}</Th></Tr></Thead>
@@ -473,7 +515,7 @@ export function App() {
             {windows.editions.map((e) => (
               <Tr key={e.index}>
                 <Td select={{ rowIndex: e.index, isSelected: index === e.index, onSelect: () => setIndex(e.index), isDisabled: !!e.refuse, variant: 'radio' }} />
-                <Td dataLabel={t('win.col.edition')}>{e.name}{e.refuse && <div className="muted">{refuseText(e.refuse)}</div>}</Td>
+                <Td dataLabel={t('win.col.edition')}>{e.name}{!windows.refuse && checkText(e) && <div className="muted">{checkText(e)}</div>}</Td>
                 <Td dataLabel={t('win.col.build')}>{e.build ?? '?'}{e.spBuild ? `.${e.spBuild}` : ''}</Td>
                 <Td dataLabel={t('win.col.installed')}>{e.totalBytes > 1e6 ? formatBytes(e.totalBytes) : ''}</Td>
               </Tr>

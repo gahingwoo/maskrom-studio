@@ -35,3 +35,5 @@ html, body, #root { height: 100%; }
 
 /* The Windows setup form: fields at a readable width. */
 .setup-form { max-width: 44rem; }
+/* Long ISO file names in the places to get Windows wrap instead of widening the page. */
+.sources { overflow-wrap: anywhere; }

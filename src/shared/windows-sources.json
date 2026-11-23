@@ -1,0 +1,68 @@
+{
+  "comment": "Where to get Windows 11 23H2 ARM64. Shown on the Windows image step in this order; add a source by adding an entry. The app opens only the URLs listed here. fits: false marks a page that does not offer an image that runs on RK3576 (shown so it is not mistaken for one). recommended: a short label, or null. fetched: when the page was last checked. Texts: en and zh-CN.",
+  "sources": [
+    {
+      "id": "ntriver",
+      "fits": true,
+      "recommended": {
+        "en": "recommended in China",
+        "zh-CN": "中国大陆推荐"
+      },
+      "url": "https://ntriver.org/download-windows-11",
+      "fetched": "2026-11-23",
+      "title": {
+        "en": "NTriver: Download Windows 11",
+        "zh-CN": "NTriver：Download Windows 11"
+      },
+      "text": {
+        "en": "Lists Windows 11 ISOs, with downloads that work from China. The 23H2 ARM64 ones are the Business (volume licence) media, SW_DVD9_Win_Pro_11_23H2.23_Arm64_<language>_Pro_Ent_EDU_N_MLF, and the IoT Enterprise 23H2 arm64 ISO. The 23H2 Consumer media there is x64 only.",
+        "zh-CN": "列出 Windows 11 ISO，下载在中国大陆可用。其中 23H2 ARM64 的是商业版（批量许可）介质 SW_DVD9_Win_Pro_11_23H2.23_Arm64_<语言>_Pro_Ent_EDU_N_MLF，以及 IoT Enterprise 23H2 arm64 ISO。那里的 23H2 消费者版介质只有 x64。"
+      }
+    },
+    {
+      "id": "uupdump",
+      "fits": true,
+      "recommended": null,
+      "url": "https://uupdump.net/known.php?q=22631+arm64",
+      "fetched": "2026-11-23",
+      "title": {
+        "en": "UUP dump",
+        "zh-CN": "UUP dump"
+      },
+      "text": {
+        "en": "Builds the ISO on your own computer from files on Microsoft's update servers. Choose the newest \"Windows 11, version 23H2 (22631.x) arm64\" (not \"Cumulative Update\"), a language and the editions, then \"Download and convert to ISO\", and run the script in the zip (Windows, Linux or macOS).",
+        "zh-CN": "在你自己的电脑上，用 Microsoft 更新服务器上的文件生成 ISO。选择最新的“Windows 11, version 23H2 (22631.x) arm64”（不是“Cumulative Update”），选语言和版本，再选“Download and convert to ISO”，然后运行压缩包里的脚本（Windows、Linux、macOS 均可）。"
+      }
+    },
+    {
+      "id": "visualstudio",
+      "fits": true,
+      "recommended": null,
+      "url": "https://my.visualstudio.com/Downloads",
+      "fetched": "2026-11-23",
+      "title": {
+        "en": "Visual Studio subscriptions",
+        "zh-CN": "Visual Studio 订阅"
+      },
+      "text": {
+        "en": "For subscribers. Older releases may be listed there; search for Windows 11 version 23H2 arm64.",
+        "zh-CN": "仅限订阅用户。可能列有旧版本，请搜索 Windows 11 version 23H2 arm64。"
+      }
+    },
+    {
+      "id": "microsoft-arm64",
+      "fits": false,
+      "recommended": null,
+      "url": "https://www.microsoft.com/software-download/windows11arm64",
+      "fetched": "2026-11-23",
+      "title": {
+        "en": "Microsoft: Windows 11 for Arm-based PCs",
+        "zh-CN": "Microsoft：适用于 Arm 电脑的 Windows 11"
+      },
+      "text": {
+        "en": "Offers only the current release (24H2 or later), which cannot run on RK3576. There is no 23H2 there.",
+        "zh-CN": "只提供当前版本（24H2 或更新），无法在 RK3576 上运行。这里没有 23H2。"
+      }
+    }
+  ]
+}

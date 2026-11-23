@@ -63,6 +63,10 @@ const flow = async (page, shot) => {
   await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /Choose a file|选择文件/.test(b.textContent))?.click(); });
   await page.waitForSelector('text=Windows 11 Pro');
   await shot('3-windows');
+  // The places to get Windows 11 23H2 ARM64, opened.
+  await page.click('.pf-v6-c-expandable-section__toggle button');
+  await shot('3-windows-get');
+  await page.click('.pf-v6-c-expandable-section__toggle button');
   await next(page);
   await page.waitForSelector('#first-skip');
   await page.click('label[for="first-skip"]');

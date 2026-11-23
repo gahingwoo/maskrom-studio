@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import * as drivelist from 'drivelist';
 import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
+import { isWindowsSourceUrl } from '../shared/windows-sources';
 import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './elevate';
 import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
@@ -53,7 +54,9 @@ function writerPath(name = WRITER): string {
   return app.isPackaged ? join(process.resourcesPath, 'writer', name) : join(appDir, 'build-res', 'writer', name);
 }
 
-const LINKS = /^https:\/\/(github\.com\/gahingwoo\/|flash\.gahingwoo\.com\/|edk2\.gahingwoo\.com\/|zadig\.akeo\.ie\/)/;
+const OWN_LINKS = /^https:\/\/(github\.com\/gahingwoo\/|flash\.gahingwoo\.com\/|edk2\.gahingwoo\.com\/|zadig\.akeo\.ie\/)/;
+/** Links the page may open in the browser: ours, and the listed places to get Windows. */
+const LINKS = { test: (url: string) => OWN_LINKS.test(url) || isWindowsSourceUrl(url) };
 
 let win: BrowserWindow | null = null;
 let job: AbortController | null = null;
@@ -221,8 +224,11 @@ function describeWindows(path: string): WindowsChoice | { error: string } {
     windowsImages.set(token, img);
     return {
       token, fileName: img.fileName, container: img.container, imageName: img.imageName, imageSize: img.imageSize,
-      fileSize: img.fileSize, extents: img.extents,
-      editions: img.editions.map((x) => ({ index: x.index, name: x.name, build: x.build, spBuild: x.spBuild, refuse: x.refuse, totalBytes: x.totalBytes })),
+      fileSize: img.fileSize, extents: img.extents, boot: img.boot, refuse: img.refuse,
+      editions: img.editions.map((x) => ({
+        index: x.index, name: x.name, build: x.build, spBuild: x.spBuild, archName: x.archName, release: x.release, languages: x.languages,
+        refuse: x.refuse, warn: x.warn, check: { level: x.check.level, code: x.check.code, vars: x.check.vars }, totalBytes: x.totalBytes,
+      })),
     };
   } catch (e) {
     return { error: String((e as Error).message ?? e) };

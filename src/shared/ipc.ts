@@ -36,7 +36,15 @@ export interface EditionInfo {
   name: string;
   build: number | null;
   spBuild: number | null;
+  /** "ARM64", "x64", "x86". */
+  archName: string;
+  /** "Windows 11 23H2", or null for a preview build. */
+  release: string | null;
+  languages: string[];
   refuse: string | null;
+  warn: string | null;
+  /** The check behind refuse/warn, for the page's own language (wim.ts checkEdition). */
+  check: { level: 'ok' | 'notice' | 'warn' | 'refuse'; code: string; vars: Record<string, string> };
   totalBytes: number;
 }
 
@@ -49,6 +57,10 @@ export interface WindowsChoice {
   imageSize: number;
   fileSize: number;
   extents: Extent[] | null;
+  /** What an ISO's efi\boot folder holds; null for a .wim or .esd, or an ISO without one. */
+  boot: { arm64: boolean; x64: boolean; x86: boolean } | null;
+  /** Why the whole image is refused (an x64 ISO), or null. */
+  refuse: string | null;
   editions: EditionInfo[];
 }
 

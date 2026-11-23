@@ -54,8 +54,19 @@ The app is in English and Simplified Chinese; it follows the system
 language, and the switch at the top keeps your choice.
 
 Windows 11 24H2 and later cannot run on RK3576 (ARMv8.0); images newer than
-build 25999 are refused before anything is written. The app does not
-download Windows.
+build 25999 are refused before anything is written, and so is anything not
+ARM64. Windows 11 21H2 and Windows 10 (1809 and later) are allowed with a
+notice: untested with the current drivers; 23H2 is the tested version. The app shows what it read from the image (architecture, build,
+boot files, editions) before you choose. It does not ship or download
+Windows: you download the image yourself and need a valid licence.
+Microsoft's own ARM64 ISO page offers only the current release, which is
+too new. Where a 23H2 ARM64 ISO can be had is listed in the app's Windows
+step ([src/shared/windows-sources.json](src/shared/windows-sources.json)):
+[NTriver](https://ntriver.org/download-windows-11) (works from China; the
+23H2 ARM64 ISOs there are the volume licence Pro and the IoT Enterprise
+media, the Consumer one is x64 only) and
+[UUP dump](https://uupdump.net/known.php?q=22631+arm64), which builds the
+ISO on your computer from Microsoft's update servers.
 
 ## Install
 

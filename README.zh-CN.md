@@ -31,7 +31,7 @@ RK3576 是 ARMv8.0，无法运行 Windows 11 24H2 及更新版本。版本号高
 需要准备：
 
 - 开发板、USB-C 数据线（接板上标有 OTG+DP 的口）、USB 键盘、HDMI 显示器。
-- 一个 Windows 11 23H2 ARM64 的 ISO（版本号 22631）。
+- 一个 Windows 11 23H2 ARM64 的 ISO（版本号 22631）。本应用不提供也不下载 Windows，需要自己下载，并且需要有效的许可证。Microsoft 官网的 ARM64 ISO 只有当前版本，太新，无法使用。可以从 [NTriver](https://ntriver.org/download-windows-11)（中国大陆可用；其中 23H2 ARM64 的是批量许可 Pro 介质和 IoT Enterprise 介质，消费者版只有 x64）获取，或者用 [UUP dump](https://uupdump.net/known.php?q=22631+arm64) 在自己电脑上从 Microsoft 更新服务器生成 ISO。应用的“Windows 映像”一步里也列出了这些地方。
 - eMMC 上已经有 edk2-rk3576 固件，并且是用“完整映像”写的。还没有的话，先在本应用里选“UEFI 固件，完整映像”写一次。
 - SD 卡槽和 USB 口保持空着：固件会先从它们启动，再轮到 eMMC。
 
@@ -39,7 +39,7 @@ RK3576 是 ARMv8.0，无法运行 Windows 11 24H2 及更新版本。版本号高
 
 1. **开发板**：选择 LCKFB TaishanPi 3M。
 2. **写入内容**：选“把 Windows 11 装到 eMMC”。
-3. **Windows 映像**：点“选择文件”选中 ISO，或者把 ISO 拖进窗口。表格里会列出映像中的各个版本，选一个（默认选专业版）。
+3. **Windows 映像**：点“选择文件”选中 ISO，或者把 ISO 拖进窗口。应用会显示从映像里读到的架构、版本号、启动文件和语言；不是 ARM64 的映像、24H2（26100）及更新的版本、早于 Windows 10 1809（17763）的版本会被拒绝；Windows 11 21H2 和 Windows 10 可以安装，但会提示没有用当前驱动测试过，推荐 23H2。表格里会列出映像中的各个版本，选一个（默认选专业版）。
 4. **Windows 设置**：
    - 首次启动：保留 Windows 设置向导，或者选“跳过设置向导”，填写用户名、密码（以及可选的计算机名、语言、键盘、时区）。
    - OpenSSH 服务器：默认开启；可以粘贴一行公钥，用于免密码登录管理员账户。

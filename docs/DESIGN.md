@@ -320,6 +320,50 @@ Added, all chosen on the "Windows setup" page:
   follows what worked by hand on the TaishanPi 3M; `Add-WindowsCapability
   OpenSSH.Server` hung for over 20 minutes there and is not used.
 
+## Which Windows images are taken
+
+Everything is read on the PC before the board is involved
+(`src/main/windows-image.ts`, `src/woa/wim.ts`, `src/woa/udf.ts`), in plain
+TypeScript, no DISM or wimlib:
+
+- The install image: `sources/install.wim` or `install.esd` inside the ISO
+  (UDF), or the .wim/.esd itself. Its XML data (UTF-16, at the end of the
+  file, never compressed, also in solid ESDs) gives each edition's ARCH,
+  BUILD, SPBUILD and languages. The setup and WinPE images an ESD from
+  Microsoft also holds are left out.
+- Per edition: ARCH must be 12 (ARM64); 9 (x64), 0 (x86), 5 (ARM32) or a
+  missing ARCH is refused. BUILD 26000 and above is refused: 24H2 (26100),
+  25H2 (26200) and later need ARMv8.1 atomics (LSE), and RK3576's
+  Cortex-A72/A53 are ARMv8.0. 22621 and 22631 (22H2, 23H2) are the tested
+  ones and get no remark. Windows 11 21H2 (22000) and Windows 10 1809 to
+  22H2 (17763 to 19045) are allowed with a notice (a custom alert): not
+  tested on these boards with the current drivers, 23H2 recommended. The
+  drivers have only been run on Windows 11. Below 17763 is refused (no
+  ARM64 media before 1809), and so is a MAJOR below 10. Other builds in
+  between are Insider previews: allowed with a warning.
+- An ISO's `efi/boot` folder: bootx64.efi or bootia32.efi without
+  bootaa64.efi means a PC ISO, refused as a whole even if its XML were to
+  say otherwise; bootaa64.efi with no ARM64 edition inside is refused too.
+- The page shows what was read: file, install image, architecture, builds
+  with their release names, boot files, languages, how many editions can
+  be installed, and the reason next to each refused or warned edition.
+
+No SHA-256 of the ISO is compared with a list: people get the image from
+many places, UUP dump builds it locally, and a match or mismatch says
+nothing about whether it runs on the board. The XML is the gate.
+
+**Getting Windows.** The app does not ship, mirror or download Windows.
+The Windows step lists where a 23H2 ARM64 ISO can be had, from
+`src/shared/windows-sources.json` (shown in its order, each with a date it
+was last checked; the app opens only those URLs). As of 2026-11-23:
+NTriver's Windows 11 page (works from China; the 23H2 ARM64 ISOs there are
+the volume licence Pro media, SW_DVD9_Win_Pro_11_23H2.23_Arm64_..., and IoT
+Enterprise 23H2 arm64; its 23H2 Consumer media is x64 only), UUP dump
+(builds the ISO from Microsoft's update servers; api.uupdump.net listed
+22631.7714 arm64 on 2026-11-13), Visual Studio subscriptions (not
+checked), and Microsoft's own ARM64 ISO page, marked unsuitable: it offers
+only the current release (26H2 on that date).
+
 ## Languages
 
 The page is in English and Simplified Chinese, following the system

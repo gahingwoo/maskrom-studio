@@ -159,6 +159,17 @@ export class UdfVolume {
     return out;
   }
 
+  /** The names in a folder ("efi/boot"), or null when there is no such folder. */
+  names(path: string): string[] | null {
+    let lbn = this.root.lbn;
+    for (const name of path.split(/[\\/]/).filter(Boolean)) {
+      const hit = this.list(lbn).find((e) => e.name.toLowerCase() === name.toLowerCase());
+      if (!hit || !hit.dir) return null;
+      lbn = hit.lbn;
+    }
+    return this.list(lbn).map((e) => e.name);
+  }
+
   /** A file by path, case-insensitive ("sources/install.wim"), or null. */
   find(path: string): IsoFile | null {
     let lbn = this.root.lbn;

@@ -1,7 +1,9 @@
 // The Windows image the user chose: an ISO, an install.wim or an
 // install.esd. Read in place (src/woa/udf.ts finds install.wim inside an
-// ISO), checked before the board is involved: editions, ARM64, build at most
-// 25999. No Electron here, so the tests use it directly.
+// ISO), checked before the board is involved: editions, ARM64 (the XML's
+// ARCH, and in an ISO its EFI boot file names too), build at most 25999 with
+// 22621 and 22631 the ones without a warning. No Electron here, so the tests
+// use it directly.
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -9,7 +11,7 @@ import { basename } from 'node:path';
 import { fileSource } from '../helper/board-write';
 import type { ByteSource } from '../woa/pieces';
 import { UdfVolume, extentSource, type Extent } from '../woa/udf';
-import { installable, readWimInfo, refuseReason, whyNotWholeImage, type WimImage } from '../woa/wim';
+import { archName, bootFilesFrom, bootFilesProblem, checkEdition, installable, readWimInfo, releaseName, whyNotWholeImage, type BootFiles, type EditionCheck, type WimImage } from '../woa/wim';
 
 export interface Edition {
   index: number;
@@ -17,8 +19,15 @@ export interface Edition {
   build: number | null;
   spBuild: number | null;
   arch: number | null;
+  archName: string;
+  /** "Windows 11 23H2", or null for a preview build. */
+  release: string | null;
+  languages: string[];
   /** Why it cannot be installed on RK3576, or null. */
   refuse: string | null;
+  /** Why it can be installed but is not the tested version (check.level "notice" or "warn"), or null. */
+  warn: string | null;
+  check: EditionCheck;
   totalBytes: number;
 }
 
@@ -32,6 +41,10 @@ export interface WindowsImage {
   /** Where install.wim/esd is inside the ISO; null for a .wim or .esd file. */
   extents: Extent[] | null;
   fileSize: number;
+  /** The names found in an ISO's efi\boot folder; null for a .wim or .esd file, or an ISO without one. */
+  boot: BootFiles | null;
+  /** Why the image as a whole is refused (an x64 ISO), or null. Every edition is then refused too. */
+  refuse: string | null;
   editions: Edition[];
 }
 
@@ -42,6 +55,7 @@ export function inspectWindowsImage(path: string): WindowsImage {
     let extents: Extent[] | null = null;
     let imageName: WindowsImage['imageName'] = 'install.wim';
     let src: ByteSource = file;
+    let boot: BootFiles | null = null;
     const magic = new TextDecoder('latin1').decode(file.read(0, Math.min(8, file.size)));
     if (magic === 'MSWIM\0\0\0') {
       container = /\.esd$/i.test(path) ? 'esd' : 'wim';
@@ -56,17 +70,27 @@ export function inspectWindowsImage(path: string): WindowsImage {
       container = 'iso';
       imageName = /\.esd$/i.test(f.path) ? 'install.esd' : 'install.wim';
       extents = f.extents;
+      const names = udf.names('efi/boot');
+      boot = names ? bootFilesFrom(names) : null;
       src = extentSource(file, f);
     }
     const info = readWimInfo(src);
     const whole = whyNotWholeImage(info);
     if (whole) throw new Error(whole);
-    const editions = installable(info).map((i: WimImage) => ({
-      index: i.index, name: i.displayName || i.name, build: i.build, spBuild: i.spBuild, arch: i.arch,
-      refuse: refuseReason(i), totalBytes: i.totalBytes,
-    }));
-    if (editions.length === 0) throw new Error('The image lists no Windows editions to install.');
-    return { path, fileName: basename(path), container, imageName, imageSize: src.size, extents, fileSize: file.size, editions };
+    const found = installable(info);
+    if (found.length === 0) throw new Error('The image lists no Windows editions to install.');
+    const refuse = bootFilesProblem(boot, found);
+    const editions = found.map((i: WimImage): Edition => {
+      const check = checkEdition(i);
+      return {
+        index: i.index, name: i.displayName || i.name, build: i.build, spBuild: i.spBuild, arch: i.arch,
+        archName: archName(i.arch), release: releaseName(i.build), languages: i.languages,
+        refuse: refuse ?? (check.level === 'refuse' ? check.text : null),
+        warn: check.level === 'warn' || check.level === 'notice' ? check.text : null,
+        check, totalBytes: i.totalBytes,
+      };
+    });
+    return { path, fileName: basename(path), container, imageName, imageSize: src.size, extents, fileSize: file.size, boot, refuse, editions };
   } finally {
     file.close();
   }
@@ -88,3 +112,4 @@ export async function hashWindowsImage(img: WindowsImage, onBytes: (done: number
   if (done !== img.imageSize) throw new Error('The image file changed while it was read.');
   return h.digest('hex');
 }
+
