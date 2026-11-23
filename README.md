@@ -10,21 +10,19 @@ board straight from a PC over USB, with no USB stick, writes and upgrades
 the boards' [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI
 firmware, and puts a board back to Armbian or a factory image.
 
-Earlier versions were called WoA RK3576 Imager (repository
-gahingwoo/woa-rk3576-imager, which GitHub now redirects here). See
-[Coming from WoA RK3576 Imager](#coming-from-woa-rk3576-imager).
-
 Boards: LCKFB TaishanPi 3M and ArmSoM CM5-IO (Windows and firmware), Radxa
 ROCK 4D (firmware only; it has no eMMC).
 
 Status: first version, not yet run on hardware. See
 [docs/hardware-test.md](docs/hardware-test.md).
 
-<p>
-  <img src="docs/imgs/what-to-write.png" alt="The What to write step for the LCKFB TaishanPi 3M: Windows 11, UEFI firmware as a whole image or keeping the partitions, upgrading the UEFI firmware while keeping Windows and the settings, UEFI firmware on an SD card, Armbian, a factory image you downloaded, and the WinPE USB stick" width="49%">
-  <img src="docs/imgs/review.png" alt="The Review step for Windows on the eMMC: board, Windows build, WinPE release, first start, SSH, drivers, where it is installed, the disk layout (firmware kept, EFI system partition, MSR, a 40 GB Windows partition, an exFAT data partition and 8 GB kept for Linux), what is erased and what is written" width="49%">
-  <img src="docs/imgs/about.png" alt="About Maskrom Studio: version, design system, network, what it keeps on the device, images, boards, licence, author, source and what it is based on" width="49%">
-</p>
+| | |
+|---|---|
+| ![The What to write step for the TaishanPi 3M with every task](docs/imgs/task.png) What to write | ![A Windows 11 23H2 ARM64 ISO read: architecture, builds, boot files, editions; its 24H2 edition refused with the reason](docs/imgs/windows-image.png) A Windows image checked |
+| ![Windows setup with a chosen disk layout: 40 GB Windows, an exFAT data partition, 8 GB kept for Linux](docs/imgs/windows-setup.png) Disk layout | ![The firmware upgrade's confirmation: installed 0.4.1, new 0.4.2, UEFI settings kept](docs/imgs/upgrade-confirm.png) Firmware upgrade |
+| ![Armbian written to an SD card, with the board's note](docs/imgs/armbian.png) Armbian to an SD card | ![About Maskrom Studio](docs/imgs/about.png) About |
+
+More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.md).
 
 ## What it does
 
@@ -89,23 +87,13 @@ media, the Consumer one is x64 only) and
 [UUP dump](https://uupdump.net/known.php?q=22631+arm64), which builds the
 ISO on your computer from Microsoft's update servers.
 
-## Coming from WoA RK3576 Imager
+## Coming from an earlier version
 
-- Settings, the theme and language, and saved UEFI settings copies are
-  copied from the old data folder (`WoA RK3576 Imager` next to the new
-  `Maskrom Studio` one) on the first start; the old download cache is
-  left where it is and can be deleted.
-- The app id is now `com.gahingwoo.MaskromStudio` (was
-  `io.github.gahingwoo.woa-rk3576-imager`), so it installs as a new app:
-  - Windows: uninstall "WoA RK3576 Imager" from Settings, Apps.
-  - macOS: delete `WoA RK3576 Imager.app`; Homebrew: `brew uninstall
-    --cask woa-rk3576-imager`, then install `maskrom-studio`.
-  - Linux .deb/.rpm: the `maskrom-studio` package replaces and conflicts
-    with `woa-rk3576-imager`, so installing it removes the old one. An
-    AppImage from install.sh: delete `~/.local/bin/woa-rk3576-imager.AppImage`
-    and its menu entry.
-- The old app's update check looks for files named `woa-rk3576-imager-*`
-  and will not find the new ones: install Maskrom Studio by hand once.
+On the first start, the settings, the theme and language, and the saved
+UEFI settings copies are copied over from an earlier version's data
+folder. Its download cache stays where it was and can be deleted. The app
+id changed, so an earlier version is not updated in place: install this
+one, then remove the old app (the .deb and .rpm do that themselves).
 
 ## Install
 

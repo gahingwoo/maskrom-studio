@@ -22,6 +22,7 @@ import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './im
 import { ensureLoader } from './loader-cache';
 import { handleProtocol, ORIGIN, registerScheme } from './protocol';
 import { migrateOldData } from './migrate';
+import { cacheInfo, clearCache } from './cache';
 import { macWrite } from './mac-write';
 import { loadSettings, saveSettings } from './settings';
 import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restartApp } from './updater';
@@ -327,7 +328,7 @@ ipcMain.handle('upgrade:save-nvdata', (_e, board: BoardId, data: Uint8Array) => 
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const path = join(nvdataDir(), `${board}-nvdata-${stamp}.bin`);
     writeFileSync(path, data);
-    return { path };
+    return { path: shownPath(path) };
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
   }
@@ -732,6 +733,24 @@ ipcMain.on('usb:answer', (e, deviceId: string) => {
   r?.(deviceId);
 });
 
+// Screenshots only (unpackaged builds): the data folder as a neutral profile
+// would have it, instead of the path on the machine that takes them.
+const SHOWN_DATA_DIR = !app.isPackaged ? process.env.WOA_IMAGER_SHOW_DATA_DIR : undefined;
+const shownPath = (p: string) => (SHOWN_DATA_DIR ? p.replace(app.getPath('userData'), SHOWN_DATA_DIR) : p);
+
+ipcMain.handle('cache:info', () => {
+  const c = cacheInfo(app.getPath('userData'));
+  for (const part of [c.images, c.loaders, c.nvdata]) part.dir = shownPath(part.dir);
+  return c;
+});
+ipcMain.handle('cache:clear', (_e, o: { nvdata: boolean }) => {
+  // A running job, or files served to a MaskROM run (the worker reads them
+  // while it writes), may be the cached images themselves.
+  const r = clearCache(app.getPath('userData'), { nvdata: o?.nvdata === true, busy: job !== null || servedPaths.size > 0 });
+  if (r.ok) winpeImg = null;
+  return r;
+});
+
 ipcMain.handle('settings:get', () => {
   const s = loadSettings();
   return { updateCheck: s.updateCheck, betaUpdates: s.betaUpdates, resetAfterMaskrom: s.resetAfterMaskrom };
@@ -759,7 +778,11 @@ ipcMain.handle('open-external', (_e, url: string) => {
   if (LINKS.test(url)) return shell.openExternal(url);
 });
 ipcMain.on('app:info', (e) => {
-  e.returnValue = { platform: process.platform, version: app.getVersion(), dataDir: app.getPath('userData') };
+  e.returnValue = {
+    platform: process.platform, version: app.getVersion(), dataDir: shownPath(app.getPath('userData')),
+    // Screenshots only (unpackaged builds): a worker with a pretend board.
+    ...(!app.isPackaged && process.env.WOA_IMAGER_TEST_WORKER ? { testWorker: process.env.WOA_IMAGER_TEST_WORKER } : {}),
+  };
 });
 ipcMain.on('theme', (_e, t: 'light' | 'dark') => { nativeTheme.themeSource = t; });
 

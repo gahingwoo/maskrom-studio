@@ -32,3 +32,7 @@ All in the app's data folder (Linux `~/.config/Maskrom Studio`, Windows
   firmware upgrade that keeps them.
 - `images/`: downloaded firmware, WinPE and Armbian images.
 - `loaders/`: the MaskROM loader built from rkbin.
+
+Settings, Clear cache, deletes `images/` and `loaders/` after showing what
+they hold; `nvdata-backups/` only when its own box is ticked. It is
+refused while a write runs or a file is prepared for one.

@@ -16,8 +16,7 @@
       Windows from there by itself.</p>
     <p>It also writes and upgrades the edk2-rk3576 UEFI firmware (keeping
       Windows and the saved settings), and puts the board back to Armbian
-      or to a factory image you downloaded. Earlier versions were called
-      WoA RK3576 Imager.</p>
+      or to a factory image you downloaded.</p>
   </description>
   <launchable type="desktop-id">com.gahingwoo.MaskromStudio.desktop</launchable>
   <icon type="stock">com.gahingwoo.MaskromStudio</icon>

@@ -93,7 +93,12 @@ input, textarea, [contenteditable="true"],
   --pf-v6-c-description-list--RowGap: var(--pf-t--global--spacer--sm);
 }
 .about-backdrop .pf-v6-c-description-list__description a { overflow-wrap: anywhere; }
-.about-backdrop { z-index: 1000; }
+/* Every dialog's backdrop (PatternFly's, the About box's) covers the whole
+   window, masthead included, and blurs what is behind it. */
+.pf-v6-c-backdrop { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+@media (prefers-reduced-transparency: reduce) {
+  .pf-v6-c-backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
 .credit-badge { display: block; width: 9rem; height: auto; }
 .credit-badge__mark { fill: #9472db; }
 .credit-badge__label, .credit-badge__name { font-family: var(--pf-t--global--font--family--mono); }

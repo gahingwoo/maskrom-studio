@@ -4,6 +4,7 @@ import type { UpdateCheck, UpdateResult } from './update';
 import type { BoardId } from '../woa/boards';
 import type { Extent } from '../woa/udf';
 import type { SetupOptions } from '../woa/setup-files';
+import type { CacheInfo, ClearResult } from '../main/cache';
 
 export type JobProgress = {
   stage: 'download' | 'check' | 'decompress' | 'write' | 'verify';
@@ -150,6 +151,8 @@ export interface ImagerApi {
   version: string;
   /** The app's data folder (settings, caches, the settings backups). */
   dataDir: string;
+  /** Unpackaged builds, screenshots only: the Maskrom worker script to use instead of woa-worker.js. */
+  testWorker?: string;
   releases(force?: boolean): Promise<Releases>;
   /** Download the board's firmware from the release, checked, and serve it to the Maskrom worker. */
   prepareFirmware(board: BoardId): Promise<Served | { error: string }>;
@@ -190,6 +193,10 @@ export interface ImagerApi {
   listDrives(minSize: number): Promise<{ targets: Target[]; hidden: HiddenDrive[] }>;
   /** Write the WinPE image to a USB drive (the fallback install stick). */
   writeWinpeStick(device: string): Promise<JobResult>;
+  /** What the downloads cache, the loader pieces and the UEFI settings copies hold. */
+  cacheInfo(): Promise<CacheInfo>;
+  /** Delete the downloads and loader pieces (and the UEFI settings copies when asked); refused while a write runs. */
+  clearCache(o: { nvdata: boolean }): Promise<ClearResult>;
   cancel(): Promise<void>;
   onProgress(cb: (p: JobProgress) => void): () => void;
   getLoader(name: string): Promise<{ url: string } | { error: string }>;

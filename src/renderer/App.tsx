@@ -253,7 +253,7 @@ export function App() {
       if ('checks' in r && r.checks) {
         const c = r.checks;
         const head = c.headBytes ? `${t('result.samples.head', { size: formatBytes(c.headBytes) })} ` : '';
-        text = head + (c.matched === c.samples
+        text = head + (c.samples === 0 ? '' : c.matched === c.samples
           ? t('result.samples.all', { n: c.samples })
           : t('result.samples.some', { m: c.matched, n: c.samples, k: c.filler + c.unsure, filler: c.filler ? t('result.samples.filler', { n: c.filler }) : '' }));
       }
@@ -288,7 +288,7 @@ export function App() {
     const settingsNow = await api.getSettings();
     const job = jobFor(served, extraFiles);
     if (job.kind === 'firmware' || job.kind === 'whole' || job.kind === 'factory' || job.kind === 'upgrade') job.resetAfter = settingsNow.resetAfterMaskrom;
-    const w = new Worker('woa-worker.js', { type: 'module' });
+    const w = new Worker(api.testWorker ?? 'woa-worker.js', { type: 'module' });
     worker.current = w;
     const at = (p: string) => new URL(p, document.baseURI).href;
     w.onmessage = (e: MessageEvent<WoaWorkerEvent>) => {

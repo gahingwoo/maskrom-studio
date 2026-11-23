@@ -4,16 +4,18 @@
 
 在 Rockchip 开发板上安装、恢复系统和 UEFI 固件。一个桌面应用：在电脑上通过 USB，把 Windows 11 23H2 直接装到 Rockchip RK3576 开发板的 eMMC 上，不需要 U 盘；也可以写入、升级开发板的 [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI 固件，或者把开发板恢复为 Armbian 或出厂映像。
 
-以前的版本叫 WoA RK3576 Imager（仓库 gahingwoo/woa-rk3576-imager，GitHub 会自动转到这里）。第一次启动时，旧数据文件夹里的设置、主题和语言、UEFI 设置副本会被复制过来；应用 ID 变了，所以会作为新应用安装，请手动卸载旧的 WoA RK3576 Imager（Linux 的 .deb/.rpm 会自动替换）。旧版本的更新检查找不到新的安装包，需要手动安装一次。
+从早期版本升级：第一次启动时，早期版本数据文件夹里的设置、主题和语言、UEFI 设置副本会被复制过来。应用 ID 变了，所以不会原地更新：请安装本版本后再删除旧应用（Linux 的 .deb/.rpm 会自动替换）。
 
 支持的开发板：立创泰山派 3M（LCKFB TaishanPi 3M）和 ArmSoM CM5-IO（Windows 和固件），Radxa ROCK 4D（只有固件，它没有 eMMC）。
 
 现状：第一个版本，还没有在实际开发板上跑过。测试步骤见 [docs/hardware-test.md](docs/hardware-test.md)（英文）。
 
-<p>
-  <img src="docs/imgs/what-to-write-zh-CN.png" alt="写入内容这一步（立创泰山派 3M）：Windows 11、UEFI 固件（完整映像或保留分区）、保留 Windows 和设置的 UEFI 固件升级、写到 SD 卡的 UEFI 固件、Armbian、自己下载的出厂映像，以及 WinPE 启动 U 盘" width="49%">
-  <img src="docs/imgs/windows-setup-zh-CN.png" alt="Windows 设置这一步的磁盘布局：自己设定 Windows 大小（40 GB），剩下的空间建 exFAT 数据分区，在末尾给 Linux 留 8 GB" width="49%">
-</p>
+| | |
+|---|---|
+| ![写入内容这一步（立创泰山派 3M）：全部任务](docs/imgs/task-zh-CN.png) 写入内容 | ![Windows 设置：自己设定 Windows 大小（40 GB），exFAT 数据分区，给 Linux 留 8 GB](docs/imgs/windows-setup-zh-CN.png) 磁盘布局 |
+| ![设置：更新、下载文件与清除缓存、外观、语言](docs/imgs/settings-zh-CN.png) 设置 | ![关于 Maskrom Studio](docs/imgs/about-zh-CN.png) 关于 |
+
+更多截图（含深色主题）：[docs/screenshots.md](docs/screenshots.md)。
 
 ## 能做什么
 

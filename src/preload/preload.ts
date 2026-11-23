@@ -2,7 +2,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { ImagerApi, JobProgress } from '../shared/ipc';
 
-const info = ipcRenderer.sendSync('app:info') as { platform: string; version: string; dataDir: string };
+const info = ipcRenderer.sendSync('app:info') as { platform: string; version: string; dataDir: string; testWorker?: string };
 
 const on = <T>(channel: string, cb: (v: T) => void) => {
   const h = (_e: unknown, v: T) => cb(v);
@@ -35,6 +35,8 @@ const api: ImagerApi = {
   listDrives: (minSize) => ipcRenderer.invoke('drives:list', minSize),
   writeWinpeStick: (device) => ipcRenderer.invoke('woa:write-stick', device),
   cancel: () => ipcRenderer.invoke('job:cancel'),
+  cacheInfo: () => ipcRenderer.invoke('cache:info'),
+  clearCache: (o) => ipcRenderer.invoke('cache:clear', o),
   onProgress: (cb) => on<JobProgress>('job:progress', cb),
   getLoader: (name) => ipcRenderer.invoke('maskrom:loader', name),
   releaseServed: (token) => ipcRenderer.invoke('woa:release', token),

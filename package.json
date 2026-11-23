@@ -17,6 +17,7 @@
     "icons": "node scripts/icons.mjs",
     "e2e:maskrom": "node scripts/electron-maskrom-e2e.mjs",
     "shots": "node scripts/shots.mjs dev/shots",
+    "shots:readme": "node scripts/readme-shots.mjs docs/imgs",
     "writer": "node scripts/build-writer.mjs",
     "test:webflash": "node --test test/webflash/*.test.js"
   },

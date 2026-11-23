@@ -2,10 +2,11 @@
 // for the names: the shell, step layout, copy blocks, the driver note, and
 // the update and settings dialogs. Offer changes here back to Roxora Imager.
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  Alert, Button, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
+  Alert, Button, Checkbox, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form,
-  FormGroup, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
+  FormGroup, FormHelperText, HelperText, HelperTextItem, List, ListItem, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
   ModalHeader, Page, Progress, ProgressMeasureLocation, Spinner, Stack, StackItem, Switch, Title, ToggleGroup,
   ToggleGroupItem, Toolbar, ToolbarContent, ToolbarGroup, ToolbarItem,
 } from '@patternfly/react-core';
@@ -14,6 +15,7 @@ import { GlobeIcon } from '@patternfly/react-icons/dist/esm/icons/globe-icon';
 import { TimesIcon } from '@patternfly/react-icons/dist/esm/icons/times-icon';
 import { formatBytes } from '../shared/format';
 import type { ImagerApi } from '../shared/ipc';
+import type { CacheInfo } from '../main/cache';
 import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
 import type { Theme } from './theme';
 import { useI18n } from './i18n';
@@ -285,11 +287,23 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
   onUpdate: () => void;
   writing: boolean;
 }) {
-  const { t, lang, setLang } = useI18n();
+  const { t, lang, setLang, msg } = useI18n();
   const [s, setS] = useState<AppSettings | null>(null);
   const [check, setCheck] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
-  useEffect(() => { if (open) { api.getSettings().then(setS); setCheck(null); } }, [open]);
+  const [cache, setCache] = useState<CacheInfo | null>(null);
+  const [clearAsk, setClearAsk] = useState(false);
+  const [alsoNv, setAlsoNv] = useState(false);
+  const [cleared, setCleared] = useState<string | null>(null);
+  useEffect(() => { if (open) { api.getSettings().then(setS); setCheck(null); setCleared(null); api.cacheInfo().then(setCache); } }, [open]);
+  const cacheBytes = cache ? cache.images.bytes + cache.loaders.bytes : 0;
+  const doClear = async () => {
+    const r = await api.clearCache({ nvdata: alsoNv });
+    setClearAsk(false);
+    setAlsoNv(false);
+    setCleared(r.ok ? t('cache.freed', { size: formatBytes(r.freed) }) : msg(r.reason));
+    api.cacheInfo().then(setCache);
+  };
   const set = (patch: Partial<AppSettings>) => {
     setS((cur) => (cur ? { ...cur, ...patch } : cur));
     return api.setSettings(patch);
@@ -302,6 +316,7 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
     if (r?.state === 'newer') onOffer(r.offer);
   };
   return (
+    <>
     <Modal isOpen={open} onClose={onClose} variant="small" aria-labelledby="settings-title">
       <ModalHeader title={t('settings')} labelId="settings-title" />
       <ModalBody>
@@ -326,6 +341,14 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
               </FormGroup>
             <Switch id="set-reset" label={t('settings.reset')} isChecked={s.resetAfterMaskrom}
               onChange={(_e, v) => { set({ resetAfterMaskrom: v }); }} />
+            <FormGroup label={t('cache.label')} fieldId="cache" role="group">
+              <Content component="p">{cache ? t('cache.size', { size: formatBytes(cacheBytes), files: cache.images.files + cache.loaders.files }) : t('cache.looking')}</Content>
+              <Flex><FlexItem>
+                <Button variant="secondary" isDisabled={writing || !cache || (cacheBytes === 0 && cache.nvdata.files === 0)} onClick={() => setClearAsk(true)}>{t('cache.clear')}</Button>
+              </FlexItem></Flex>
+              {writing && <FormHelperText><HelperText><HelperTextItem>{t('cache.writing')}</HelperTextItem></HelperText></FormHelperText>}
+              {cleared && <Content component="p" className="selectable">{cleared}</Content>}
+            </FormGroup>
             <FormGroup label={t('settings.appearance')} fieldId="appearance" role="group">
               <ToggleGroup aria-label={t('settings.appearance')} id="appearance">
                 {(['system', 'light', 'dark'] as Theme[]).map((th) => (
@@ -349,6 +372,27 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
       </ModalBody>
       <ModalFooter><Button variant="primary" onClick={onClose}>{t('close')}</Button></ModalFooter>
     </Modal>
+    {clearAsk && cache && (
+      <Modal isOpen onClose={() => setClearAsk(false)} variant="small" aria-labelledby="clear-title">
+        <ModalHeader title={t('cache.ask.title')} labelId="clear-title" />
+        <ModalBody>
+          <Stack hasGutter>
+            <Content component="p">{t('cache.ask.text')}</Content>
+            <List>
+              <ListItem>{t('cache.ask.images', { size: formatBytes(cache.images.bytes), files: cache.images.files, names: cache.images.names.join(', ') || '-' })}</ListItem>
+              <ListItem>{t('cache.ask.loaders', { size: formatBytes(cache.loaders.bytes), files: cache.loaders.files })}</ListItem>
+            </List>
+            <Checkbox id="clear-nvdata" isChecked={alsoNv} onChange={(_e, v) => setAlsoNv(v)} isDisabled={cache.nvdata.files === 0}
+              label={t('cache.ask.nvdata', { n: cache.nvdata.files })} description={t('cache.ask.nvdata.desc', { path: cache.nvdata.dir })} />
+          </Stack>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="danger" onClick={doClear}>{t('cache.ask.go', { size: formatBytes(cacheBytes + (alsoNv ? cache.nvdata.bytes : 0)) })}</Button>
+          <Button variant="link" onClick={() => setClearAsk(false)}>{t('cancel')}</Button>
+        </ModalFooter>
+      </Modal>
+    )}
+    </>
   );
 }
 
@@ -407,7 +451,8 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
     [t('about.source'), link('https://github.com/gahingwoo/maskrom-studio', 'github.com/gahingwoo/maskrom-studio')],
     [t('about.basedOn'), <>{t('about.basedOn.value')} {link('https://github.com/roxora-os/imager', 'github.com/roxora-os/imager')}</>],
   ];
-  return (
+  // On the document body, as PatternFly's Modal does, so the backdrop covers the masthead too.
+  return createPortal(
     <div className="pf-v6-c-backdrop about-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="pf-v6-l-bullseye">
         <div className="pf-v6-c-about-modal-box" role="dialog" aria-modal="true" aria-labelledby="about-title">
@@ -431,6 +476,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

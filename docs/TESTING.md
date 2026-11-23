@@ -26,9 +26,12 @@ an entry by moving it to "Tested" with the date and what was seen.
   (restore-target-choice): the write and read-back on Linux, Windows and
   macOS hosts; what the boards then do with the card (CM5-IO: only with
   no bootloader on the eMMC; TaishanPi 3M: never by itself).
-- **Rename** (rename-maskrom-studio): an existing WoA RK3576 Imager install
-  updated by hand; settings, theme and language carried over; the .deb
-  replaces woa-rk3576-imager.
+- **Coming from an earlier version** (rename-maskrom-studio): an earlier
+  install updated by hand; settings, theme and language carried over; the
+  .deb replaces the earlier package.
+- **Clear cache** (clear-cache): Settings shows the size, the dialog lists
+  what goes, the UEFI settings backups stay unless ticked, refused while
+  a write runs, the freed size shown.
 - **Windows window** (ui-scroll-select): scrolling with a mouse wheel and a
   touchpad on Windows x64 and arm64, a 1366x768 screen at 125%; no stray
   text selection.
