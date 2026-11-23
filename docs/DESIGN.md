@@ -392,6 +392,24 @@ Enterprise 23H2 arm64; its 23H2 Consumer media is x64 only), UUP dump
 checked), and Microsoft's own ARM64 ISO page, marked unsuitable: it offers
 only the current release (26H2 on that date).
 
+## Writing to an SD card or USB drive instead
+
+Armbian can also go onto an SD card or USB drive in the computer, and the
+release's SD card firmware (`<Board>-sdcard-edk2-<tag>.img`, CM5-IO and
+TaishanPi 3M; the ROCK 4D has none) onto an SD card. That is Roxora
+Imager's removable-drive path, as for the WinPE stick: the drive list
+without the system disk, the elevated helper (authopen on macOS), and a
+read-back compared against the image's SHA-256. The eMMC is not touched.
+A factory update.img stays eMMC-only: it is a MaskROM partition write.
+
+The page says what the boards do with such a card: the CM5-IO's BootROM
+starts the eMMC first whenever it holds a bootloader, so the card starts
+only once the eMMC's bootloader is erased, or through the UEFI firmware
+(a one-shot "Armbian (U-Boot)" entry is planned in edk2-rk3576, branch
+armbian-chainload, not released). The TaishanPi 3M's BootROM never boots
+an SD card (strap eMMC then USB), so a card there needs a bootloader on
+the eMMC that loads it.
+
 ## Upgrading the firmware, keeping Windows and the settings
 
 `src/woa/edk2-image.ts`, `src/woa/upgrade-plan.ts`. The procedure used by

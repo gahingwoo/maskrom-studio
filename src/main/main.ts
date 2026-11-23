@@ -15,7 +15,7 @@ import { planFactory } from '../woa/rkfw';
 import { checkNewImage } from '../woa/upgrade-plan';
 import type { UpgradeImage } from '../shared/ipc';
 import type { ArmbianBranch } from '../woa/armbian-restore';
-import type { ArmbianChoice, FactoryChoice } from '../shared/ipc';
+import type { ArmbianChoice, DriveWriteRequest, FactoryChoice } from '../shared/ipc';
 import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './elevate';
 import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
@@ -135,7 +135,7 @@ if (FAKE_RELEASES) {
   const a = (file: string, size: number) => ({ file, url: `https://example.invalid/${file}`, size, sha256: '0'.repeat(64), sample: false as const });
   firmware = { tag: '0.4.1', url: null, problems: [], images: {
     tspi3m: a('TaishanPi3M-emmc-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-emmc-edk2-0.4.1.img', 33554432), rock4d: a('ROCK4D-spi-edk2-0.4.1.img', 16777216),
-  } };
+  }, sdcard: { tspi3m: a('TaishanPi3M-sdcard-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-sdcard-edk2-0.4.1.img', 33554432) } };
   winpe = { tag: '0.1.1', url: null, problems: [], image: a('woa-rk3576-winpe-0.1.1.img.xz', 352252908) };
 }
 
@@ -159,6 +159,7 @@ ipcMain.handle('woa:releases', async (_e, force: boolean): Promise<Releases> => 
     firmware: firmware ? {
       tag: firmware.tag, url: firmware.url,
       boards: Object.fromEntries(Object.entries(firmware.images).map(([k, v]) => [k, { file: v!.file, size: v!.size }])),
+      sdcard: Object.fromEntries(Object.entries(firmware.sdcard).map(([k, v]) => [k, { file: v!.file, size: v!.size }])),
     } : null,
     winpe: winpe?.image ? { tag: winpe.tag, url: winpe.url, file: winpe.image.file, size: winpe.image.size } : null,
     problems: [...problems, ...(firmware?.problems ?? []), ...(winpe?.problems ?? [])],
@@ -352,28 +353,68 @@ ipcMain.handle('restore:find-armbian', async (_e, board: BoardId, branch: Armbia
   }
 });
 
+/** Armbian's image for the board, downloaded, checked (SHA-256, signature) and decompressed into the cache. */
+async function armbianFile(wc: WebContents, board: BoardId, branch: ArmbianBranch, signal: AbortSignal): Promise<{ path: string; name: string; size: number; sha256: string }> {
+  const a = armbianFound.get(armbianKey(board, branch));
+  if (!a) throw new Error('Look up the Armbian image again.');
+  const progress = (p: JobProgress) => sendProgress(wc, p);
+  const xz = await fetchImage({ file: a.file, url: a.url, size: a.size, sha256: a.sha256, sample: false }, cacheDir(), progress, signal);
+  const bad = await checkArmbianSignature(xz, a.asc, (bytes) => progress({ stage: 'check', bytes, total: a.size }), signal);
+  if (bad) { rmSync(xz, { force: true }); throw new Error(`${bad} The download was deleted.`); }
+  const dir = join(cacheDir(), 'armbian');
+  const name = a.file.replace(/\.xz$/, '');
+  const keep = join(dir, name);
+  try {
+    const [sum, size] = readFileSync(`${keep}.sha256`, 'utf8').trim().split(/\s+/);
+    if (/^[0-9a-f]{64}$/.test(sum) && statSync(keep).size === Number(size)) return { path: keep, name, size: Number(size), sha256: sum };
+  } catch { /* not there yet */ }
+  rmSync(dir, { recursive: true, force: true });
+  const out = await decompress(xz, dir, progress, signal);
+  renameSync(out.path, keep);
+  writeFileSync(`${keep}.sha256`, `${out.sha256} ${out.size}\n`);
+  return { path: keep, name, size: out.size, sha256: out.sha256 };
+}
+
+/** Write an image file to a removable drive of this computer (the Roxora path: elevated helper or authopen), read back and compared. */
+async function writeImageToDrive(wc: WebContents, signal: AbortSignal, img: { path: string; size: number; sha256: string }, device: string): Promise<JobResult> {
+  const out = process.platform === 'darwin'
+    ? await macWrite({
+      signal, image: img.path, device, extractSize: img.size, extractSha256: img.sha256, helperPath: writerPath(RAWDISK),
+      onProgress: (p) => sendProgress(wc, { stage: p.stage, bytes: p.bytes, total: img.size, speed: p.speed }),
+    })
+    : await runHelper({
+      signal,
+      launch: (dir) => helperLaunch({ writerPath: writerPath(), dir, appImage: process.env.APPIMAGE }),
+      args: (socket, token) => ['--socket', socket, '--token', token, '--image', img.path, '--device', device,
+        '--extract-size', String(img.size), '--extract-sha256', img.sha256],
+      onMessage: (m) => { if (m.type === 'progress') sendProgress(wc, { stage: m.stage, bytes: m.bytes, total: img.size, speed: m.speed }); },
+      elevate: sudoPromptElevate,
+    });
+  return out.ok ? { ok: true, sha256: out.sha256 } : { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) };
+}
+
+/** Armbian, or the SD card variant of the firmware, onto an SD card or USB drive of this computer. */
+ipcMain.handle('restore:write-drive', (e, req: DriveWriteRequest) => exclusive(async (signal): Promise<JobResult> => {
+  try {
+    let img: { path: string; size: number; sha256: string };
+    if (req.kind === 'armbian') img = await armbianFile(e.sender, req.board, req.branch, signal);
+    else {
+      const a = firmware?.sdcard[req.board];
+      if (!a) return { ok: false, reason: 'The edk2-rk3576 release has no SD card image for this board.' };
+      const path = await fetchImage(a, cacheDir(), (p) => sendProgress(e.sender, p), signal);
+      img = { path, size: a.size, sha256: a.sha256 };
+    }
+    return await writeImageToDrive(e.sender, signal, img, req.device);
+  } catch (err) {
+    if (signal.aborted) return { ok: false, reason: 'Cancelled.' };
+    return { ok: false, reason: String((err as Error).message ?? err) };
+  }
+}, { ok: false, reason: 'Another write is running.' }));
+
 ipcMain.handle('restore:prepare-armbian', (e, board: BoardId, branch: ArmbianBranch) => exclusive(async (signal) => {
   try {
-    const a = armbianFound.get(armbianKey(board, branch));
-    if (!a) return { error: 'Look up the Armbian image again.' };
-    const progress = (p: JobProgress) => sendProgress(e.sender, p);
-    // The SHA-256 from Armbian's .sha is checked by the download itself, a cached copy included.
-    const xz = await fetchImage({ file: a.file, url: a.url, size: a.size, sha256: a.sha256, sample: false }, cacheDir(), progress, signal);
-    const bad = await checkArmbianSignature(xz, a.asc, (bytes) => progress({ stage: 'check', bytes, total: a.size }), signal);
-    if (bad) { rmSync(xz, { force: true }); return { error: `${bad} The download was deleted.` }; }
-    // One decompressed image at a time; it is about 2 GB.
-    const dir = join(cacheDir(), 'armbian');
-    const name = a.file.replace(/\.xz$/, '');
-    const keep = join(dir, name);
-    try {
-      const [sum, size] = readFileSync(`${keep}.sha256`, 'utf8').trim().split(/\s+/);
-      if (/^[0-9a-f]{64}$/.test(sum) && statSync(keep).size === Number(size)) return serve(keep, name);
-    } catch { /* not there yet */ }
-    rmSync(dir, { recursive: true, force: true });
-    const out = await decompress(xz, dir, progress, signal);
-    renameSync(out.path, keep);
-    writeFileSync(`${keep}.sha256`, `${out.sha256} ${out.size}\n`);
-    return serve(keep, name);
+    const f = await armbianFile(e.sender, board, branch, signal);
+    return serve(f.path, f.name);
   } catch (err) {
     if (signal.aborted) return { error: 'Cancelled.' };
     return { error: String((err as Error).message ?? err) };
@@ -665,20 +706,7 @@ ipcMain.handle('woa:write-stick', (e, device: string) => exclusive(async (signal
   const wc = e.sender;
   try {
     const w = await winpeFile(wc, signal);
-    const out = process.platform === 'darwin'
-      ? await macWrite({
-        signal, image: w.path, device, extractSize: w.size, extractSha256: w.sha256, helperPath: writerPath(RAWDISK),
-        onProgress: (p) => sendProgress(wc, { stage: p.stage, bytes: p.bytes, total: w.size, speed: p.speed }),
-      })
-      : await runHelper({
-        signal,
-        launch: (dir) => helperLaunch({ writerPath: writerPath(), dir, appImage: process.env.APPIMAGE }),
-        args: (socket, token) => ['--socket', socket, '--token', token, '--image', w.path, '--device', device,
-          '--extract-size', String(w.size), '--extract-sha256', w.sha256],
-        onMessage: (m) => { if (m.type === 'progress') sendProgress(wc, { stage: m.stage, bytes: m.bytes, total: w.size, speed: m.speed }); },
-        elevate: sudoPromptElevate,
-      });
-    return out.ok ? { ok: true, sha256: out.sha256 } : { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) };
+    return await writeImageToDrive(wc, signal, w, device);
   } catch (err) {
     if (signal.aborted) return { ok: false, reason: 'Cancelled.' };
     return { ok: false, reason: String((err as Error).message ?? err) };

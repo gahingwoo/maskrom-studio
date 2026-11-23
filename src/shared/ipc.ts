@@ -18,7 +18,7 @@ export type JobResult = { ok: true; sha256: string } | { ok: false; reason: stri
 
 /** The latest edk2-rk3576 and woa-rk3576 releases, as far as they could be read. */
 export interface Releases {
-  firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>> } | null;
+  firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>> } | null;
   winpe: { tag: string; url: string | null; file: string; size: number } | null;
   problems: string[];
 }
@@ -77,6 +77,11 @@ export interface ArmbianChoice {
   /** Date of Armbian's signature. */
   signed: string | null;
 }
+
+/** Writing to an SD card or USB drive of this computer instead of the board's eMMC. */
+export type DriveWriteRequest =
+  | { kind: 'armbian'; board: BoardId; branch: 'vendor' | 'edge'; device: string }
+  | { kind: 'uefi-sd'; board: BoardId; device: string };
 
 /** A factory update.img the user chose, as read on this computer. */
 export interface FactoryChoice {
@@ -160,6 +165,8 @@ export interface ImagerApi {
   findArmbian(board: BoardId, branch: 'vendor' | 'edge'): Promise<ArmbianChoice | { error: string }>;
   /** Download it, check SHA-256 and signature, decompress it, and serve it. */
   prepareArmbian(board: BoardId, branch: 'vendor' | 'edge'): Promise<Served | { error: string }>;
+  /** Write Armbian or the SD card firmware to a drive of this computer (download, check, write, read back). */
+  writeDrive(req: DriveWriteRequest): Promise<JobResult>;
   /** Choose a factory update.img (dialog) and read it. */
   pickFactory(): Promise<FactoryChoice | { error: string } | null>;
   /** Check its MD5 and serve it. */

@@ -190,6 +190,11 @@ const restoreFlow = async (page, shot) => {
   await next(page);
   await page.waitForSelector('text=26.11.0-trunk.137');
   await shot('8-restore-armbian');
+  await page.click('label[for="restore-to-drive"]');
+  await page.waitForSelector('#restore-to-drive:checked');
+  await page.waitForTimeout(400);
+  await shot('8-restore-armbian-drive');
+  await page.click('label[for="restore-to-emmc"]');
   await next(page);
   await page.waitForSelector('.pf-v6-c-wizard__footer');
   await shot('9-restore-review');

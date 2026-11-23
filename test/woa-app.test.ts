@@ -112,6 +112,8 @@ describe('releases', () => {
     const r = firmwareRelease({ tag_name: '0.4.1', assets: names.map((n) => ({ name: n, size: 1, browser_download_url: n })) }, s);
     expect(Object.keys(r.images).sort()).toEqual(['cm5io', 'rock4d', 'tspi3m']);
     expect(r.images.cm5io!.file).toBe('CM5IO-emmc-edk2-0.4.1.img');
+    expect(Object.keys(r.sdcard)).toEqual(['cm5io']);
+    expect(r.sdcard.cm5io!.file).toBe('CM5IO-sdcard-edk2-0.4.1.img');
   });
 });
 

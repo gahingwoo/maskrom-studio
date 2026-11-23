@@ -44,6 +44,8 @@ export interface FirmwareRelease {
   tag: string;
   url: string | null;
   images: Partial<Record<BoardId, ReleaseAsset>>;
+  /** The SD card variant (<Board>-sdcard-edk2-<tag>.img), for the boards whose release has one. */
+  sdcard: Partial<Record<BoardId, ReleaseAsset>>;
   problems: string[];
 }
 
@@ -56,7 +58,16 @@ export function firmwareRelease(rel: GithubRelease, sums: Map<string, string>): 
     const a = asset(rel, sums, name);
     if (typeof a === 'string') problems.push(a); else images[b.id] = a;
   }
-  return { tag: rel.tag_name, url: rel.html_url ?? null, images, problems };
+  const sdcard: FirmwareRelease['sdcard'] = {};
+  for (const b of WOA_BOARDS) {
+    const prefix = b.firmwareAsset.replace('-emmc-edk2-', '-sdcard-edk2-');
+    if (prefix === b.firmwareAsset) continue;
+    const name = rel.assets.map((x) => x.name).find((n) => n.startsWith(prefix) && n.endsWith('.img'));
+    if (!name) continue;
+    const a = asset(rel, sums, name);
+    if (typeof a === 'string') problems.push(a); else sdcard[b.id] = a;
+  }
+  return { tag: rel.tag_name, url: rel.html_url ?? null, images, sdcard, problems };
 }
 
 export interface WinpeRelease {

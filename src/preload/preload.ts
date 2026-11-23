@@ -22,6 +22,7 @@ const api: ImagerApi = {
   findArmbian: (board, branch) => ipcRenderer.invoke('restore:find-armbian', board, branch),
   prepareArmbian: (board, branch) => ipcRenderer.invoke('restore:prepare-armbian', board, branch),
   pickFactory: () => ipcRenderer.invoke('restore:pick-factory'),
+  writeDrive: (req) => ipcRenderer.invoke('restore:write-drive', req),
   prepareFactory: (token) => ipcRenderer.invoke('restore:prepare-factory', token),
   prepareUpgrade: (board, from) => ipcRenderer.invoke('upgrade:prepare', board, from),
   saveNvdata: (board, data) => ipcRenderer.invoke('upgrade:save-nvdata', board, data),

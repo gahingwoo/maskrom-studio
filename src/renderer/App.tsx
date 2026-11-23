@@ -26,7 +26,7 @@ import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
 import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, NOMINAL_EMMC_BYTES, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
 
-type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'stick' | 'armbian' | 'factory';
+type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
 type Dest = 'emmc' | 'sd' | 'nvme';
 type Method = 'stage' | 'host';
@@ -125,6 +125,7 @@ export function App() {
   const [linuxGb, setLinuxGb] = useState('0');
   const [understood, setUnderstood] = useState(false);
   const [branch, setBranch] = useState<ArmbianBranch>('vendor');
+  const [restoreTo, setRestoreTo] = useState<'emmc' | 'drive'>('emmc');
   const [armbian, setArmbian] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
   const [factory, setFactory] = useState<FactoryChoice | null>(null);
   const [factoryError, setFactoryError] = useState<string | null>(null);
@@ -204,6 +205,9 @@ export function App() {
 
   const refreshDrives = (min = 600e6) => { setDrives(null); api.listDrives(min).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
   const onPc = task === 'windows' && dest !== 'emmc';
+  // Written to an SD card or USB drive of this computer, not to the board: Armbian on a card, the SD card firmware.
+  const driveTask = (task === 'armbian' && restoreTo === 'drive') || task === 'uefi-sd';
+  const sdRelease = releases?.firmware && boardId ? releases.firmware.sdcard?.[boardId] : undefined;
   const destOk = !(onPc && api.platform === 'darwin' && method === 'stage');
 
   const chooseWindows = async (pick: () => Promise<WindowsChoice | { error: string } | null>) => {
@@ -328,6 +332,15 @@ export function App() {
   const start = async () => {
     setAsk(false);
     if (!board || !task) return;
+    if (driveTask) {
+      const isArmbian = task === 'armbian';
+      setRun({ title: isArmbian ? t('run.drive.armbian') : t('run.drive.uefi'), log: [], confirm: null, result: null,
+        stages: [{ id: 'write', label: isArmbian ? t('run.drive.armbian.stage') : t('run.drive.uefi.stage'), percent: 0 }] });
+      const r = await withProgress('write', () => api.writeDrive(isArmbian
+        ? { kind: 'armbian', board: board.id, branch, device: stick! } : { kind: 'uefi-sd', board: board.id, device: stick! }));
+      finish(resultOf(r, isArmbian ? t('result.drive.armbian') : t('result.drive.uefi'), [t(`next.drive.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}`)]));
+      return;
+    }
     if (task === 'stick') {
       setRun({ title: t('run.stick'), log: [], confirm: null, result: null, stages: [{ id: 'write', label: t('run.stick.stage'), percent: 0 }] });
       const r = await withProgress('write', () => api.writeWinpeStick(stick!));
@@ -458,6 +471,7 @@ export function App() {
                 if (b.id !== here?.boardId) setVia('maskrom');
                 if (task === 'windows' && !b.windows) setTask(null);
                 if (task === 'uefi-keep' && b.firmwareStorage !== 'emmc') setTask(null);
+                if (task === 'uefi-sd' && !releases?.firmware?.sdcard?.[b.id]) setTask(null);
                 if ((task === 'armbian' || task === 'factory') && !ARMBIAN_RESTORE[b.id]) setTask(null);
                 setFactory(null);
                 setUpgrade(null);
@@ -495,6 +509,11 @@ export function App() {
           {board.firmwareStorage === 'emmc' && (
             <Radio id="task-upgrade" name="task" label={t('task.upgrade')} isChecked={task === 'upgrade'} isDisabled={onBoard}
               onChange={() => setTask('upgrade')} description={onBoard ? t('task.upgrade.here') : t('task.upgrade.desc')} />
+          )}
+          {sdRelease && (
+            <Radio id="task-uefi-sd" name="task" label={t('task.uefiSd')} isChecked={task === 'uefi-sd'} isDisabled={onBoard}
+              onChange={() => { setTask('uefi-sd'); setStick(null); refreshDrives(); }}
+              description={`${t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.uefi`)} ${t('task.release', { tag: releases!.firmware!.tag, file: sdRelease.file })}`} />
           )}
           {ARMBIAN_RESTORE[board.id] && (
             <>
@@ -606,6 +625,16 @@ export function App() {
               <Radio id="branch-edge" name="branch" label={t('restore.edge')} isChecked={branch === 'edge'} onChange={() => setBranch('edge')} description={t('restore.edge.desc')} />
             </FormGroup>
           </Form>
+          <Form onSubmit={(e) => e.preventDefault()}>
+            <FormGroup role="radiogroup" fieldId="restore-to" label={t('restore.to')} isStack>
+              <Radio id="restore-to-emmc" name="restore-to" label={t('restore.to.emmc')} isChecked={restoreTo === 'emmc'} onChange={() => setRestoreTo('emmc')} description={t('restore.to.emmc.desc')} />
+              <Radio id="restore-to-drive" name="restore-to" label={t('restore.to.drive')} isChecked={restoreTo === 'drive'}
+                onChange={() => { setRestoreTo('drive'); setStick(null); refreshDrives(); }} description={t('restore.to.drive.desc')} />
+            </FormGroup>
+          </Form>
+          {restoreTo === 'drive' && (
+            <Alert isInline variant="info" title={t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.title`)}>{t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.armbian`)}</Alert>
+          )}
           {armbian === 'looking' && <Content component="p">{t('restore.looking')}</Content>}
           {armbian && typeof armbian === 'object' && 'error' in armbian && <Alert isInline variant="danger" title={msg(armbian.error)} />}
           {armbianFound && (
@@ -628,6 +657,7 @@ export function App() {
       )}
       {task === 'factory' && (
         <>
+          <Content component="p" className="muted">{t('restore.factory.emmcOnly')}</Content>
           <Content component="p">{t(`restore.factory.${board.id === 'cm5io' ? 'cm5io' : 'tspi3m'}`)}{' '}
             <Button variant="link" isInline component="a" href={factoryLink} target="_blank">{t('restore.factory.where')}</Button></Content>
           <Alert isInline variant="custom" title={t('restore.factory.untested')}>{t('restore.factory.untestedText')}</Alert>
@@ -847,7 +877,7 @@ export function App() {
     </StepPage>
   );
 
-  const maskromCard = board && !onBoard && task !== 'stick' && !onPc && (
+  const maskromCard = board && !onBoard && task !== 'stick' && !driveTask && !onPc && (
     <Card>
       <CardTitle>{t('maskrom.title')}</CardTitle>
       <CardBody>
@@ -900,6 +930,19 @@ export function App() {
       ]);
       if (!upgradeReady) why = t('why.upgrade');
       goLabel = t('go.connect');
+    } else if (driveTask) {
+      const drive = stick ? drives?.find((x) => x.device === stick)?.description ?? stick : null;
+      reviewRows = reviewRows.concat([
+        [t('review.written'), task === 'armbian'
+          ? (armbianFound ? `${t('review.restore.armbian', { version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.drive.written.armbian')}` : t('review.unavailable'))
+          : (sdRelease ? t('review.drive.written.uefi', { tag: releases!.firmware!.tag, file: sdRelease.file }) : t('review.unavailable'))],
+        [t('review.erased'), drive ? t('review.stick.erased', { drive }) : t('review.drive.choose')],
+        [t('review.checked'), t('review.stick.checked')],
+        [t('review.then'), t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.${task === 'armbian' ? 'armbian' : 'uefi'}`)],
+      ]);
+      if (task === 'armbian' && !restoreReady) why = t('why.restore.armbian');
+      else if (!stick) why = t('review.drive.choose');
+      goLabel = t('go.erase');
     } else if (restoreTask) {
       reviewRows = reviewRows.concat([
         [t('review.written'), task === 'armbian'
@@ -949,8 +992,8 @@ export function App() {
           <Button variant="link" isInline onClick={() => refreshDrives(30e9)}>{t('refresh')}</Button>
         </FormGroup>
       )}
-      {task === 'stick' && (
-        <FormGroup role="radiogroup" fieldId="stick" label={t('review.usb')} isStack>
+      {(task === 'stick' || driveTask) && (
+        <FormGroup role="radiogroup" fieldId="stick" label={t(driveTask ? 'review.drive' : 'review.usb')} isStack>
           {drives === null ? <Content component="p">{t('review.usb.looking')}</Content>
             : drives.length === 0 ? <Content component="p">{t('review.usb.none')}</Content>
               : drives.map((x) => (
@@ -1008,10 +1051,10 @@ export function App() {
     ]} />
   ));
 
-  const askTitle = !board || !task ? '' : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
+  const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
     : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
     : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
-  const askText = !board || !task ? '' : restoreTask ? (
+  const askText = !board || !task ? '' : driveTask ? t('ask.drive.text', { drive: drives?.find((x) => x.device === stick)?.description ?? stick ?? '' }) : restoreTask ? (
     <Stack hasGutter>
       <Content component="p">{t('ask.restore.text')}</Content>
       <Checkbox id="ask-understood" label={t('ask.restore.understand')} isChecked={understood} onChange={(_e, v) => setUnderstood(v)} />
@@ -1097,9 +1140,9 @@ export function App() {
         <ModalHeader title={askTitle} labelId="ask-title" />
         <ModalBody>{askText}</ModalBody>
         <ModalFooter>
-          {restoreTask
+          {restoreTask && !driveTask
             ? <Button variant="danger" onClick={() => { setUnderstood(false); start(); }} isDisabled={!understood}>{t('ask.connect')}</Button>
-            : <Button variant={onBoard || task === 'stick' || onPc ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' || onPc ? t('go.erase') : t('ask.connect')}</Button>}
+            : <Button variant={onBoard || task === 'stick' || driveTask || onPc ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' || driveTask || onPc ? t('go.erase') : t('ask.connect')}</Button>}
           <Button variant="link" onClick={() => setAsk(false)}>{t('cancel')}</Button>
         </ModalFooter>
       </Modal>
