@@ -60,10 +60,10 @@ export interface RunHelperOptions {
 export type HelperOutcome = Extract<HelperMessage, { type: 'done' }>;
 
 export async function runHelper(o: RunHelperOptions): Promise<HelperOutcome> {
-  const dir = mkdtempSync(join(tmpdir(), 'woa-rk3576-imager-'));
+  const dir = mkdtempSync(join(tmpdir(), 'maskrom-studio-'));
   const token = randomBytes(16).toString('hex');
   const socketPath = process.platform === 'win32'
-    ? `\\\\.\\pipe\\woa-rk3576-imager-${randomBytes(8).toString('hex')}`
+    ? `\\\\.\\pipe\\maskrom-studio-${randomBytes(8).toString('hex')}`
     : join(dir, 'helper.sock');
   let outcome: HelperOutcome | null = null;
   let peer: Socket | null = null;
@@ -148,7 +148,7 @@ export async function loadSudoPrompt(): Promise<{ exec: Function }> {
 export async function sudoPromptElevate(cmd: string, env: Record<string, string>): Promise<void> {
   const sudo = await loadSudoPrompt();
   await new Promise<void>((resolve, reject) => {
-    sudo.exec(cmd, { name: 'WoA RK3576 Imager', env }, (err: Error | undefined) => {
+    sudo.exec(cmd, { name: 'Maskrom Studio', env }, (err: Error | undefined) => {
       if (err) reject(err); else resolve();
     });
   });

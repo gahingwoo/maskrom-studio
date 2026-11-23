@@ -42,7 +42,7 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
   ];
   const certs = trustedCerts(catalogs);
   const ini: Record<string, string | number> = {
-    tool: `WoA RK3576 Imager ${o.appVersion}`,
+    tool: `Maskrom Studio ${o.appVersion}`,
     mode: o.mode,
     target: o.target,
     source: o.source.path,

@@ -36,7 +36,7 @@ describe('the Homebrew commands', () => {
   it('refresh the taps, then upgrade the cask', () => {
     expect(brewSteps('/opt/homebrew/bin/brew')).toEqual({
       update: ['/opt/homebrew/bin/brew', 'update', '--quiet'],
-      upgrade: ['/opt/homebrew/bin/brew', 'upgrade', '--cask', 'woa-rk3576-imager'],
+      upgrade: ['/opt/homebrew/bin/brew', 'upgrade', '--cask', 'maskrom-studio'],
     });
   });
   it('run with brew on the PATH and without overriding the cleanup', () => {
@@ -68,9 +68,9 @@ describe('upgrading through Homebrew', () => {
   it('runs both commands as they are, no sudo, and streams their output', async () => {
     const t = setup({});
     expect(await t.go()).toEqual({ ok: true });
-    expect(t.calls).toEqual([['/opt/homebrew/bin/brew', 'update', '--quiet'], ['/opt/homebrew/bin/brew', 'upgrade', '--cask', 'woa-rk3576-imager']]);
+    expect(t.calls).toEqual([['/opt/homebrew/bin/brew', 'update', '--quiet'], ['/opt/homebrew/bin/brew', 'upgrade', '--cask', 'maskrom-studio']]);
     expect(t.stages).toEqual(['update', 'upgrade']);
-    expect(t.log()).toBe('$ brew update --quiet\noutput of update\n$ brew upgrade --cask woa-rk3576-imager\noutput of upgrade\n');
+    expect(t.log()).toBe('$ brew update --quiet\noutput of update\n$ brew upgrade --cask maskrom-studio\noutput of upgrade\n');
   });
   it('does not upgrade when refreshing the taps failed', async () => {
     const t = setup({ update: 1 });
@@ -125,7 +125,7 @@ function bundle(dir: string, name: string, version: string): string {
   const app = join(dir, name);
   mkdirSync(join(app, 'Contents', 'MacOS'), { recursive: true });
   writeFileSync(join(app, 'Contents', 'Info.plist'), `version ${version}`);
-  writeFileSync(join(app, 'Contents', 'MacOS', 'WoA RK3576 Imager'), `binary ${version}`);
+  writeFileSync(join(app, 'Contents', 'MacOS', 'Maskrom Studio'), `binary ${version}`);
   return app;
 }
 const versionAt = (app: string) => readFileSync(join(app, 'Contents', 'Info.plist'), 'utf8');
@@ -136,24 +136,24 @@ function scene() {
   const dmg = join(root, 'dmg');
   const tmp = join(root, 'tmp');
   for (const d of [apps, home, dmg, tmp]) mkdirSync(d);
-  bundle(dmg, 'WoA RK3576 Imager.app', 'new');
+  bundle(dmg, 'Maskrom Studio.app', 'new');
   writeFileSync(join(dmg, '.background.png'), 'x');
-  return { root, apps, home, dmg, tmp, app: bundle(apps, 'WoA RK3576 Imager.app', 'old') };
+  return { root, apps, home, dmg, tmp, app: bundle(apps, 'Maskrom Studio.app', 'old') };
 }
 
 describe('where the new app goes', () => {
   it('is over the running one when its folder can be written', () => {
-    expect(swapTarget('/Applications/WoA RK3576 Imager.app', '/Users/u', () => true)).toBe('/Applications/WoA RK3576 Imager.app');
+    expect(swapTarget('/Applications/Maskrom Studio.app', '/Users/u', () => true)).toBe('/Applications/Maskrom Studio.app');
   });
   it('is ~/Applications when it cannot', () => {
     const s = scene();
-    expect(swapTarget(s.app, s.home, (d) => d !== s.apps)).toBe(join(s.home, 'Applications', 'WoA RK3576 Imager.app'));
+    expect(swapTarget(s.app, s.home, (d) => d !== s.apps)).toBe(join(s.home, 'Applications', 'Maskrom Studio.app'));
     expect(existsSync(join(s.home, 'Applications'))).toBe(true);
   });
   it('is nowhere when neither can be written, or the app runs translocated', () => {
     const s = scene();
     expect(() => swapTarget(s.app, s.home, () => false)).toThrow(NotInPlace);
-    expect(() => swapTarget('/private/var/folders/ab/T/AppTranslocation/1234/d/WoA RK3576 Imager.app', '/Users/u', () => true)).toThrow(NotInPlace);
+    expect(() => swapTarget('/private/var/folders/ab/T/AppTranslocation/1234/d/Maskrom Studio.app', '/Users/u', () => true)).toThrow(NotInPlace);
   });
 });
 
@@ -165,11 +165,11 @@ describe('swapping the app for the one in the DMG', () => {
     expect(at).toBe(s.app);
     expect(versionAt(s.app)).toBe('version new');
     expect(versionAt(oldName(s.app))).toBe('version old');
-    expect(readdirSync(s.apps).sort()).toEqual(['.WoA RK3576 Imager.app.old', 'WoA RK3576 Imager.app']);
+    expect(readdirSync(s.apps).sort()).toEqual(['.Maskrom Studio.app.old', 'Maskrom Studio.app']);
     expect(readdirSync(s.tmp)).toEqual([]);
     expect(mac.calls).toEqual(['hdiutil attach', 'ditto', 'xattr -dr', 'hdiutil detach']);
     removeOldBundle(s.app);
-    expect(readdirSync(s.apps)).toEqual(['WoA RK3576 Imager.app']);
+    expect(readdirSync(s.apps)).toEqual(['Maskrom Studio.app']);
   });
   it('mounts read-only and out of sight, and removes the quarantine mark from the new copy only', async () => {
     const s = scene();
@@ -179,20 +179,20 @@ describe('swapping the app for the one in the DMG', () => {
     await swapAppFromDmg({ dmg: '/x/new.dmg', appPath: s.app, home: s.home, run, tmp: s.tmp });
     expect(seen[0].slice(0, 5)).toEqual(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-readonly', '-noautoopen']);
     expect(seen[0].at(-1)).toBe('/x/new.dmg');
-    expect(seen.find((c) => c[0] === '/usr/bin/xattr')).toEqual(['/usr/bin/xattr', '-dr', 'com.apple.quarantine', join(s.apps, '.WoA RK3576 Imager.app.update')]);
+    expect(seen.find((c) => c[0] === '/usr/bin/xattr')).toEqual(['/usr/bin/xattr', '-dr', 'com.apple.quarantine', join(s.apps, '.Maskrom Studio.app.update')]);
   });
   it('installs into ~/Applications when the app folder cannot be written, leaving the old app alone', async () => {
     const s = scene();
     const mac = fakeMac(s.dmg);
     const at = await swapAppFromDmg({ dmg: '/x/new.dmg', appPath: s.app, home: s.home, run: mac.run, tmp: s.tmp, canWrite: (d) => d !== s.apps });
-    expect(at).toBe(join(s.home, 'Applications', 'WoA RK3576 Imager.app'));
+    expect(at).toBe(join(s.home, 'Applications', 'Maskrom Studio.app'));
     expect(versionAt(at)).toBe('version new');
     expect(versionAt(s.app)).toBe('version old');
-    expect(readdirSync(s.apps)).toEqual(['WoA RK3576 Imager.app']);
+    expect(readdirSync(s.apps)).toEqual(['Maskrom Studio.app']);
   });
   const unchanged = (s: ReturnType<typeof scene>) => {
     expect(versionAt(s.app)).toBe('version old');
-    expect(readdirSync(s.apps)).toEqual(['WoA RK3576 Imager.app']);
+    expect(readdirSync(s.apps)).toEqual(['Maskrom Studio.app']);
     expect(readdirSync(s.tmp)).toEqual([]);
   };
   it('leaves the old app untouched when the DMG cannot be opened', async () => {
@@ -211,10 +211,10 @@ describe('swapping the app for the one in the DMG', () => {
   });
   it('refuses a DMG without an app, or with an incomplete one', async () => {
     const s = scene();
-    rmSync(join(s.dmg, 'WoA RK3576 Imager.app'), { recursive: true });
+    rmSync(join(s.dmg, 'Maskrom Studio.app'), { recursive: true });
     await expect(swapAppFromDmg({ dmg: '/x/new.dmg', appPath: s.app, home: s.home, run: fakeMac(s.dmg).run, tmp: s.tmp })).rejects.toThrow('The DMG holds no app.');
     unchanged(s);
-    mkdirSync(join(s.dmg, 'WoA RK3576 Imager.app', 'Contents'), { recursive: true });
+    mkdirSync(join(s.dmg, 'Maskrom Studio.app', 'Contents'), { recursive: true });
     await expect(swapAppFromDmg({ dmg: '/x/new.dmg', appPath: s.app, home: s.home, run: fakeMac(s.dmg).run, tmp: s.tmp })).rejects.toThrow('not complete');
     unchanged(s);
   });

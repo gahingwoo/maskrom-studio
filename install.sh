@@ -1,6 +1,6 @@
 #!/bin/sh
-# Install the latest WoA RK3576 Imager:
-#   curl -fsSL https://raw.githubusercontent.com/gahingwoo/woa-rk3576-imager/main/install.sh | sh
+# Install the latest Maskrom Studio:
+#   curl -fsSL https://raw.githubusercontent.com/gahingwoo/maskrom-studio/main/install.sh | sh
 #
 # Adapted from gahingwoo/RKDevelopTool-GUI's install.sh. It picks the
 # package for the system:
@@ -23,7 +23,7 @@
 # INSTALL_DIR overrides where the .app or AppImage goes.
 set -eu
 
-REPO="gahingwoo/woa-rk3576-imager"
+REPO="gahingwoo/maskrom-studio"
 # releases/latest is the newest normal release (GitHub leaves pre-releases
 # and drafts out of it); the list has the betas too, newest first.
 API="https://api.github.com/repos/$REPO/releases"
@@ -133,23 +133,23 @@ elif [ "$kind" = deb ] || [ "$kind" = rpm ]; then
   else
     $as_root zypper --non-interactive install --allow-unsigned-rpm "$tmp/$name"
   fi
-  say "Installed. Start it from your applications menu or run: woa-rk3576-imager"
+  say "Installed. Start it from your applications menu or run: maskrom-studio"
 else
   dest=${INSTALL_DIR:-$HOME/.local/bin}
   mkdir -p "$dest"
-  install -m 755 "$tmp/$name" "$dest/woa-rk3576-imager.AppImage"
+  install -m 755 "$tmp/$name" "$dest/maskrom-studio.AppImage"
   apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
   mkdir -p "$apps"
-  cat > "$apps/woa-rk3576-imager.desktop" <<DESKTOP
+  cat > "$apps/maskrom-studio.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=WoA RK3576 Imager
+Name=Maskrom Studio
 Comment=Install Windows on RK3576 boards over USB and write their UEFI firmware
-Exec=$dest/woa-rk3576-imager.AppImage
+Exec=$dest/maskrom-studio.AppImage
 Categories=Utility;
 Terminal=false
 DESKTOP
-  say "Installed $dest/woa-rk3576-imager.AppImage (also in your applications menu)."
+  say "Installed $dest/maskrom-studio.AppImage (also in your applications menu)."
   say "For Maskrom writing without root, add the udev rule the app shows on its Destination page."
   command -v fusermount >/dev/null 2>&1 || say "Note: AppImages need FUSE 2 (e.g. sudo apt install libfuse2)."
 fi

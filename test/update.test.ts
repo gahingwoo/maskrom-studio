@@ -5,16 +5,16 @@ import {
 } from '../src/shared/update';
 
 const asset = (name: string, digest: string | null = `sha256:${'a'.repeat(64)}`): ReleaseAsset =>
-  ({ name, size: 1000, browser_download_url: `https://github.com/gahingwoo/woa-rk3576-imager/releases/download/v1/${name}`, digest });
+  ({ name, size: 1000, browser_download_url: `https://github.com/gahingwoo/maskrom-studio/releases/download/v1/${name}`, digest });
 const assetsOf = (v: string) => [
-  asset(`woa-rk3576-imager-${v}-1.aarch64.rpm`), asset(`woa-rk3576-imager-${v}-1.x86_64.rpm`),
-  asset(`woa-rk3576-imager-${v}-linux-arm64.AppImage`), asset(`woa-rk3576-imager-${v}-linux-x86_64.AppImage`),
-  asset(`woa-rk3576-imager-${v}-macos-arm64.dmg`), asset(`woa-rk3576-imager-${v}-macos-x86_64.dmg`),
-  asset(`woa-rk3576-imager-${v}-windows-x64-setup.exe`), asset(`woa-rk3576-imager-${v}-windows-x64.zip`),
-  asset(`woa-rk3576-imager_${v}_amd64.deb`), asset(`woa-rk3576-imager_${v}_arm64.deb`), asset('SHA256SUMS'),
+  asset(`maskrom-studio-${v}-1.aarch64.rpm`), asset(`maskrom-studio-${v}-1.x86_64.rpm`),
+  asset(`maskrom-studio-${v}-linux-arm64.AppImage`), asset(`maskrom-studio-${v}-linux-x86_64.AppImage`),
+  asset(`maskrom-studio-${v}-macos-arm64.dmg`), asset(`maskrom-studio-${v}-macos-x86_64.dmg`),
+  asset(`maskrom-studio-${v}-windows-x64-setup.exe`), asset(`maskrom-studio-${v}-windows-x64.zip`),
+  asset(`maskrom-studio_${v}_amd64.deb`), asset(`maskrom-studio_${v}_arm64.deb`), asset('SHA256SUMS'),
 ];
 const rel = (v: string, over: Partial<AppRelease> = {}): AppRelease => ({
-  tag_name: `v${v}`, html_url: `https://github.com/gahingwoo/woa-rk3576-imager/releases/tag/v${v}`,
+  tag_name: `v${v}`, html_url: `https://github.com/gahingwoo/maskrom-studio/releases/tag/v${v}`,
   body: `\n- Fix: something\n  that broke.\n- More.\n`, assets: assetsOf(v), ...over,
 });
 
@@ -70,8 +70,8 @@ describe('what a check says', () => {
   it('offers a newer normal release with its file and the first line of its notes', () => {
     const r = judgeReleases('0.1.3', [rel('0.1.4'), rel('0.1.3', { prerelease: true })], o);
     expect(r).toEqual({ state: 'newer', offer: {
-      version: '0.1.4', url: 'https://github.com/gahingwoo/woa-rk3576-imager/releases/tag/v0.1.4', beta: false,
-      notes: 'Fix: something that broke.', kind: 'appimage', asset: { name: 'woa-rk3576-imager-0.1.4-linux-x86_64.AppImage', size: 1000 },
+      version: '0.1.4', url: 'https://github.com/gahingwoo/maskrom-studio/releases/tag/v0.1.4', beta: false,
+      notes: 'Fix: something that broke.', kind: 'appimage', asset: { name: 'maskrom-studio-0.1.4-linux-x86_64.AppImage', size: 1000 },
     } });
   });
   it('says the newest version is installed', () => {
@@ -100,7 +100,7 @@ describe('what a check says', () => {
   it('still says a newer version is out for a copy apt updates, with no file to download', () => {
     const r = judgeReleases('0.1.9', [rel('0.1.10'), rel('0.1.9')], { beta: false, kind: 'apt', arch: 'arm64' });
     expect(r).toEqual({ state: 'newer', offer: {
-      version: '0.1.10', url: 'https://github.com/gahingwoo/woa-rk3576-imager/releases/tag/v0.1.10', beta: false,
+      version: '0.1.10', url: 'https://github.com/gahingwoo/maskrom-studio/releases/tag/v0.1.10', beta: false,
       notes: 'Fix: something that broke.', kind: 'apt', asset: null,
     } });
   });
@@ -114,7 +114,7 @@ describe('what a check says', () => {
 
 describe('how this copy was installed', () => {
   it('follows the platform, the AppImage variable and the package databases', () => {
-    expect(installKind({ platform: 'linux', packaged: true, appImage: '/home/u/.local/bin/woa-rk3576-imager.AppImage' })).toBe('appimage');
+    expect(installKind({ platform: 'linux', packaged: true, appImage: '/home/u/.local/bin/maskrom-studio.AppImage' })).toBe('appimage');
     expect(installKind({ platform: 'linux', packaged: true, dpkg: true })).toBe('deb');
     expect(installKind({ platform: 'linux', packaged: true, rpm: true })).toBe('rpm');
     expect(installKind({ platform: 'linux', packaged: true, dpkg: true, rpm: true })).toBe('deb');
@@ -136,7 +136,7 @@ describe('how this copy was installed', () => {
   it('reads from apt-cache policy whether a repository carries the package', () => {
     // A Roxora system: installed from Roxora's repository, which also has an older version.
     const roxora = [
-      'woa-rk3576-imager:',
+      'maskrom-studio:',
       '  Installed: 0.1.9',
       '  Candidate: 0.1.9',
       '  Version table:',
@@ -150,7 +150,7 @@ describe('how this copy was installed', () => {
     expect(aptRepoCarries(roxora)).toBe(true);
     // The .deb from the release page, installed with apt install ./file.deb.
     const byHand = [
-      'woa-rk3576-imager:',
+      'maskrom-studio:',
       '  Installed: 0.1.9',
       '  Candidate: 0.1.9',
       '  Version table:',
@@ -165,28 +165,28 @@ describe('how this copy was installed', () => {
     expect(aptRepoCarries(roxora.replace(/ {8}500 /g, '        -10 '))).toBe(true);
     // apt-cache missing, or a package apt does not know.
     expect(aptRepoCarries('')).toBe(false);
-    expect(aptRepoCarries('N: Unable to locate package woa-rk3576-imager\n')).toBe(false);
+    expect(aptRepoCarries('N: Unable to locate package maskrom-studio\n')).toBe(false);
   });
   it('knows a Homebrew cask by the Caskroom', () => {
     const links: Record<string, string> = {
-      '/opt/homebrew/Caskroom/woa-rk3576-imager/0.1.4/WoA RK3576 Imager.app': '/Applications/WoA RK3576 Imager.app',
+      '/opt/homebrew/Caskroom/maskrom-studio/0.1.4/Maskrom Studio.app': '/Applications/Maskrom Studio.app',
     };
     const fs = {
       realpath: (p: string) => links[p] ?? p,
       readdir: (p: string) => {
-        if (p === '/opt/homebrew/Caskroom/woa-rk3576-imager') return ['.metadata', '0.1.4'];
-        if (p === '/opt/homebrew/Caskroom/woa-rk3576-imager/0.1.4') return ['WoA RK3576 Imager.app'];
+        if (p === '/opt/homebrew/Caskroom/maskrom-studio') return ['.metadata', '0.1.4'];
+        if (p === '/opt/homebrew/Caskroom/maskrom-studio/0.1.4') return ['Maskrom Studio.app'];
         throw new Error('ENOENT');
       },
     };
     // Homebrew today: the app is in /Applications, a link to it in the Caskroom.
-    expect(brewCaskOwns('/Applications/WoA RK3576 Imager.app', fs)).toBe(true);
+    expect(brewCaskOwns('/Applications/Maskrom Studio.app', fs)).toBe(true);
     // Another copy on the same Mac is not the cask's.
-    expect(brewCaskOwns('/Users/u/Downloads/WoA RK3576 Imager.app', fs)).toBe(false);
+    expect(brewCaskOwns('/Users/u/Downloads/Maskrom Studio.app', fs)).toBe(false);
     // The app itself inside a Caskroom.
     const none = { realpath: (p: string) => p, readdir: () => { throw new Error('ENOENT'); } };
-    expect(brewCaskOwns('/usr/local/Caskroom/woa-rk3576-imager/0.1.4/WoA RK3576 Imager.app', none)).toBe(true);
-    expect(brewCaskOwns('/Applications/WoA RK3576 Imager.app', none)).toBe(false);
+    expect(brewCaskOwns('/usr/local/Caskroom/maskrom-studio/0.1.4/Maskrom Studio.app', none)).toBe(true);
+    expect(brewCaskOwns('/Applications/Maskrom Studio.app', none)).toBe(false);
   });
 });
 
@@ -194,15 +194,15 @@ describe('the file for this install', () => {
   const a = assetsOf('0.1.4');
   it('is chosen by kind and CPU', () => {
     const name = (kind: Parameters<typeof pickAsset>[1], arch: string) => pickAsset(a, kind, arch)?.name ?? null;
-    expect(name('dmg', 'arm64')).toBe('woa-rk3576-imager-0.1.4-macos-arm64.dmg');
-    expect(name('dmg', 'x64')).toBe('woa-rk3576-imager-0.1.4-macos-x86_64.dmg');
-    expect(name('windows', 'x64')).toBe('woa-rk3576-imager-0.1.4-windows-x64-setup.exe');
-    expect(name('appimage', 'x64')).toBe('woa-rk3576-imager-0.1.4-linux-x86_64.AppImage');
-    expect(name('appimage', 'arm64')).toBe('woa-rk3576-imager-0.1.4-linux-arm64.AppImage');
-    expect(name('deb', 'x64')).toBe('woa-rk3576-imager_0.1.4_amd64.deb');
-    expect(name('deb', 'arm64')).toBe('woa-rk3576-imager_0.1.4_arm64.deb');
-    expect(name('rpm', 'x64')).toBe('woa-rk3576-imager-0.1.4-1.x86_64.rpm');
-    expect(name('rpm', 'arm64')).toBe('woa-rk3576-imager-0.1.4-1.aarch64.rpm');
+    expect(name('dmg', 'arm64')).toBe('maskrom-studio-0.1.4-macos-arm64.dmg');
+    expect(name('dmg', 'x64')).toBe('maskrom-studio-0.1.4-macos-x86_64.dmg');
+    expect(name('windows', 'x64')).toBe('maskrom-studio-0.1.4-windows-x64-setup.exe');
+    expect(name('appimage', 'x64')).toBe('maskrom-studio-0.1.4-linux-x86_64.AppImage');
+    expect(name('appimage', 'arm64')).toBe('maskrom-studio-0.1.4-linux-arm64.AppImage');
+    expect(name('deb', 'x64')).toBe('maskrom-studio_0.1.4_amd64.deb');
+    expect(name('deb', 'arm64')).toBe('maskrom-studio_0.1.4_arm64.deb');
+    expect(name('rpm', 'x64')).toBe('maskrom-studio-0.1.4-1.x86_64.rpm');
+    expect(name('rpm', 'arm64')).toBe('maskrom-studio-0.1.4-1.aarch64.rpm');
   });
   it('is nothing for Homebrew, apt, an unknown install, another CPU or a release without it', () => {
     expect(pickAsset(a, 'brew', 'arm64')).toBeNull();

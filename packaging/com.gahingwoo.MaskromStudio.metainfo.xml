@@ -1,33 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.gahingwoo.woa_rk3576_imager</id>
+  <id>com.gahingwoo.MaskromStudio</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-2.0-only</project_license>
-  <name>WoA RK3576 Imager</name>
-  <summary>Install Windows on RK3576 boards over USB and write their UEFI firmware</summary>
-  <developer id="io.github.gahingwoo">
+  <name>Maskrom Studio</name>
+  <summary>Install and restore systems and UEFI firmware on Rockchip boards</summary>
+  <developer id="com.gahingwoo">
     <name>Ga Hing Woo</name>
   </developer>
   <description>
-    <p>WoA RK3576 Imager installs Windows 11 23H2 on the eMMC of Rockchip
+    <p>Maskrom Studio installs Windows 11 23H2 on the eMMC of Rockchip
       RK3576 boards (LCKFB TaishanPi 3M, ArmSoM CM5-IO) from a computer over
       USB, without a USB stick: it writes the woa-rk3576 WinPE and your
       Windows image to the eMMC in Maskrom mode, and the board installs
       Windows from there by itself.</p>
-    <p>It also writes the edk2-rk3576 UEFI firmware, over Maskrom or, when it
-      runs on the board itself under Linux, directly.</p>
+    <p>It also writes and upgrades the edk2-rk3576 UEFI firmware (keeping
+      Windows and the saved settings), and puts the board back to Armbian
+      or to a factory image you downloaded. Earlier versions were called
+      WoA RK3576 Imager.</p>
   </description>
-  <launchable type="desktop-id">io.github.gahingwoo.woa_rk3576_imager.desktop</launchable>
-  <icon type="stock">io.github.gahingwoo.woa_rk3576_imager</icon>
+  <launchable type="desktop-id">com.gahingwoo.MaskromStudio.desktop</launchable>
+  <icon type="stock">com.gahingwoo.MaskromStudio</icon>
   <categories>
     <category>Utility</category>
   </categories>
   <provides>
-    <binary>woa-rk3576-imager</binary>
+    <binary>maskrom-studio</binary>
     <modalias>usb:v2207p*</modalias>
   </provides>
-  <url type="homepage">https://github.com/gahingwoo/woa-rk3576-imager</url>
-  <url type="bugtracker">https://github.com/gahingwoo/woa-rk3576-imager/issues</url>
+  <url type="homepage">https://github.com/gahingwoo/maskrom-studio</url>
+  <url type="bugtracker">https://github.com/gahingwoo/maskrom-studio/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
     <release version="0.1.0" date="2026-11-21">

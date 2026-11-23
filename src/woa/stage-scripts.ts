@@ -25,7 +25,7 @@
 
 export const LAUNCHER = String.raw`@echo off
 rem ---------------------------------------------------------------------------
-rem WoA RK3576 Imager, staged install. This file replaces woa-debug\collect.cmd
+rem Maskrom Studio, staged install. This file replaces woa-debug\collect.cmd
 rem on the imager's staging copy of the woa-rk3576 WinPE volume, which
 rem startnet.cmd calls with this volume's letter. It finds the staging volume
 rem (the one with woa-stage.ini), copies the install script to the RAM disk
@@ -37,7 +37,7 @@ if "%PE%"=="" set PE=%~d0
 set STAGE=
 for %%d in (C D E F G H I J K L M N O P Q R S T U V W Y Z) do if not defined STAGE if exist "%%d:\woa-stage.ini" set STAGE=%%d:
 if not defined STAGE (
-  echo WoA RK3576 Imager: no volume has woa-stage.ini. Nothing to install.
+  echo Maskrom Studio: no volume has woa-stage.ini. Nothing to install.
   goto :eof
 )
 mkdir X:\woa-stage 2>nul
@@ -46,7 +46,7 @@ copy /y "%STAGE%\woa-stage.ini" X:\woa-stage\woa-stage.ini >nul || goto :nocopy
 call X:\woa-stage\woa-stage.cmd %PE% %STAGE%
 goto :eof
 :nocopy
-echo WoA RK3576 Imager: could not copy the install script from %STAGE% to X:.
+echo Maskrom Studio: could not copy the install script from %STAGE% to X:.
 `;
 
 /**
@@ -127,7 +127,7 @@ if exist "%STAGE%\openssh\sshd.exe" (
 export const INSTALL = String.raw`@echo off
 rem ---------------------------------------------------------------------------
 rem woa-stage.cmd - install Windows onto the eMMC this WinPE was staged on.
-rem Written by WoA RK3576 Imager; adapted from woa-rk3576's
+rem Written by Maskrom Studio; adapted from woa-rk3576's
 rem tools/woa-deploy/deploy-windows.cmd (see the comments there for why each
 rem step is needed). Run from X:\woa-stage\ by the launcher, with
 rem   %1  the staged WinPE volume (drivers in woa-drivers\)
@@ -141,7 +141,7 @@ set PE=%~1
 set STAGE=%~2
 set LOG=X:\woa-stage\woa-stage.log
 set INI=X:\woa-stage\woa-stage.ini
-echo WoA RK3576 Imager staged install, %DATE% %TIME% > "%LOG%"
+echo Maskrom Studio staged install, %DATE% %TIME% > "%LOG%"
 
 for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%INI%") do set "W_%%a=%%b"
 for %%k in (target disk_guid disk_bytes fw_offset fw_size boot_offset data_offset windows_offset_kb image index build) do (
@@ -154,7 +154,7 @@ set DRIVERS=%PE%\woa-drivers
 set WIM=%STAGE%\%W_image%
 echo.
 echo ======================================================================
-echo  WoA RK3576 Imager: installing %W_edition%
+echo  Maskrom Studio: installing %W_edition%
 echo  ^(build %W_build%, index %W_index%^) onto this board's eMMC.
 echo  The firmware partition is kept. Close this window or press Ctrl+C
 echo  within 15 seconds to stop; nothing has been changed yet.
@@ -363,7 +363,7 @@ if exist W:\Windows copy /y "%LOG%" W:\Windows\Logs\woa-stage.log >nul 2>&1
 echo.
 echo The staging partitions are still on the eMMC: restarting the board runs
 echo this install again. To stop for good, write the firmware with "whole
-echo image" from WoA RK3576 Imager or flash.gahingwoo.com.
+echo image" from Maskrom Studio or flash.gahingwoo.com.
 :end
 endlocal
 `;
@@ -387,7 +387,7 @@ set STAGE=%HERE%
 set DRIVERS=%HERE%\woa-drivers
 set LOG=%HERE%\host-build.log
 set INI=%HERE%\host-build.ini
-echo WoA RK3576 Imager host build, %DATE% %TIME% > "%LOG%"
+echo Maskrom Studio host build, %DATE% %TIME% > "%LOG%"
 for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%INI%") do set "W_%%a=%%b"
 for %%k in (mode target source source_kind index build) do (
   if not defined W_%%k (

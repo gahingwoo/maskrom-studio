@@ -152,7 +152,7 @@ export async function runWrite(a: HelperArgs, send: (m: HelperMessage) => void):
 }
 
 export async function main(argv: string[]): Promise<number> {
-  // WoA RK3576 Imager: writing the board this runs on (helper/board-write.ts).
+  // Maskrom Studio: writing the board this runs on (helper/board-write.ts).
   if (argv.includes('--job')) return boardMain(argv);
   let args: HelperArgs;
   try {

@@ -49,8 +49,8 @@ describe('Range requests', () => {
 describe('starting the writer', () => {
   it('quotes arguments for sh', () => {
     expect(quote("/tmp/it's here", 'linux')).toBe("'/tmp/it'\\''s here'");
-    expect(commandLine({ exec: '/opt/WoA RK3576 Imager/writer', env: {} }, ['--device', '/dev/sdb'], 'linux'))
-      .toBe("'/opt/WoA RK3576 Imager/writer' '--device' '/dev/sdb'");
+    expect(commandLine({ exec: '/opt/Maskrom Studio/writer', env: {} }, ['--device', '/dev/sdb'], 'linux'))
+      .toBe("'/opt/Maskrom Studio/writer' '--device' '/dev/sdb'");
   });
   it('quotes for cmd and refuses what cmd cannot take', () => {
     expect(quote('\\\\.\\PhysicalDrive1', 'win32')).toBe('"\\\\.\\PhysicalDrive1"');
@@ -117,11 +117,34 @@ describe('sudo-prompt on Node.js without util.isObject', () => {
       // A command starting with "sudo" is refused right after the argument
       // checks, before any password prompt.
       const err = await new Promise<Error | undefined>((resolve) => {
-        sudo.exec('sudo true', { name: 'WoA RK3576 Imager', env: { A: '1' } }, resolve);
+        sudo.exec('sudo true', { name: 'Maskrom Studio', env: { A: '1' } }, resolve);
       });
       expect(String(err)).toMatch(/should not be prefixed with "sudo"/);
     } finally {
       Object.assign(util, saved);
     }
+  });
+});
+
+import { migrateOldData } from '../src/main/migrate';
+describe('data from the old name', () => {
+  it('copies the settings, the page\'s choices and the settings backups once, and nothing that is already there', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const appData = mkdtempSync(join(tmpdir(), 'appdata-'));
+    const old = join(appData, 'WoA RK3576 Imager');
+    mkdirSync(join(old, 'Local Storage'), { recursive: true });
+    mkdirSync(join(old, 'images'), { recursive: true });
+    writeFileSync(join(old, 'settings.json'), '{"updateCheck":false}');
+    writeFileSync(join(old, 'Local Storage', 'x'), 'theme');
+    writeFileSync(join(old, 'images', 'big.img'), 'cache');
+    const now = join(appData, 'Maskrom Studio');
+    expect(migrateOldData(appData, now)).toEqual(['settings.json', 'Local Storage']);
+    expect(readFileSync(join(now, 'settings.json'), 'utf8')).toBe('{"updateCheck":false}');
+    expect(existsSync(join(now, 'images'))).toBe(false);
+    writeFileSync(join(old, 'settings.json'), '{"changed":true}');
+    expect(migrateOldData(appData, now)).toEqual([]);
+    expect(readFileSync(join(now, 'settings.json'), 'utf8')).toBe('{"updateCheck":false}');
   });
 });

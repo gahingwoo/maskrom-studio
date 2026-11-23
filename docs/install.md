@@ -1,11 +1,11 @@
-# Installing WoA RK3576 Imager
+# Installing Maskrom Studio
 
 Get the package for your system from the
-[releases](https://github.com/gahingwoo/woa-rk3576-imager/releases), or on macOS and
+[releases](https://github.com/gahingwoo/maskrom-studio/releases), or on macOS and
 Linux run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gahingwoo/woa-rk3576-imager/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gahingwoo/maskrom-studio/main/install.sh | sh
 ```
 
 The script picks the package for the system and checks the download against
@@ -14,7 +14,7 @@ To get the newest beta version instead (a pre-release on GitHub, such as
 0.1.5-beta.1), run it with `BETA=1`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gahingwoo/woa-rk3576-imager/main/install.sh | BETA=1 sh
+curl -fsSL https://raw.githubusercontent.com/gahingwoo/maskrom-studio/main/install.sh | BETA=1 sh
 ```
 
 While no normal release exists yet, the script installs the newest beta and
@@ -31,7 +31,7 @@ the first time.
 
 ## Windows
 
-1. Run `woa-rk3576-imager-<version>-windows-x64-setup.exe`.
+1. Run `maskrom-studio-<version>-windows-x64-setup.exe`.
 2. Windows SmartScreen says "Windows protected your PC". Click
    **More info**, then **Run anyway**.
 
@@ -51,7 +51,7 @@ itself (with libwdi, which Zadig is built on) has not been tested yet.
 
 ## macOS
 
-Open the DMG and drag WoA RK3576 Imager to Applications. On first launch macOS
+Open the DMG and drag Maskrom Studio to Applications. On first launch macOS
 may say the app cannot be opened, because it is not notarized:
 
 - macOS 15 and later: open the app once, click Done, then System Settings,
@@ -62,10 +62,10 @@ macOS needs no driver for Maskrom writing.
 
 Writing an SD card or USB drive asks for an administrator's password (or
 Touch ID) once per write, in the dialog of macOS itself. The dialog carries
-the sentence "WoA RK3576 Imager will erase ... and write the image to it." with
+the sentence "Maskrom Studio will erase ... and write the image to it." with
 the name of the drive. The right you grant is for that one drive
 (`sys.openfile.readwrite./dev/rdiskN`): Apple's `/usr/libexec/authopen`
-opens it, and no part of WoA RK3576 Imager runs as root. Full Disk Access is not
+opens it, and no part of Maskrom Studio runs as root. Full Disk Access is not
 needed, and the app does not ask for it. If macOS offers to initialise or
 eject the drive when the write is done, choose Ignore or Eject.
 
@@ -78,7 +78,7 @@ eject the drive when the write is done, choose Ignore or Eject.
   rule once:
 
   ```sh
-  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/70-woa-rk3576-imager.rules
+  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/70-maskrom-studio.rules
   sudo udevadm control --reload-rules && sudo udevadm trigger
   ```
 
@@ -95,7 +95,7 @@ finds `sources\install.wim` inside it and never copies the file.
 
 ## Updates
 
-The app asks GitHub for the list of WoA RK3576 Imager releases when it starts,
+The app asks GitHub for the list of Maskrom Studio releases when it starts,
 at most once a day. When a newer version is out, a notice above the steps
 names it, with the first line of its release notes, a link to the notes and
 an **Update** button. Closing the notice hides that version; Settings still
@@ -117,9 +117,9 @@ cancelled. What happens then depends on how the app was installed:
 
 | Installed as | Update |
 | --- | --- |
-| macOS, Homebrew cask | The app runs Homebrew for you, as your user: `brew update`, then `brew upgrade --cask woa-rk3576-imager`. Its output is in the dialog. Then **Restart now**. If Homebrew is not found or fails, the dialog shows its error and the command to copy. Homebrew only has a new version once its tap lists it, which can be a little after the release. |
+| macOS, Homebrew cask | The app runs Homebrew for you, as your user: `brew update`, then `brew upgrade --cask maskrom-studio`. Its output is in the dialog. Then **Restart now**. If Homebrew is not found or fails, the dialog shows its error and the command to copy. Homebrew only has a new version once its tap lists it, which can be a little after the release. |
 | macOS, DMG or install.sh | The DMG for this Mac's CPU goes to the Downloads folder, is mounted out of sight, and its app is copied in place of the running one (into `~/Applications` if the app's folder cannot be written). Then **Restart now**. The old app is kept until the new one is in place. If that is not possible the DMG is opened and you drag the app yourself. |
-| Windows, installer | The setup program is downloaded and started, and WoA RK3576 Imager closes so that it can be replaced. |
+| Windows, installer | The setup program is downloaded and started, and Maskrom Studio closes so that it can be replaced. |
 | Linux, AppImage | The new AppImage is downloaded into the same folder and put in place of the old file in one step. Restart the app. |
 | Linux, .deb or .rpm | The package is downloaded and installed with apt-get, dnf or zypper through pkexec, which asks for your password. If that is not possible the app shows the command to run in a terminal. Restart the app. |
 | Windows zip, an unpacked folder | Not updated by the app: the notice links to the release page. |

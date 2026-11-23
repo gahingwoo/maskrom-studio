@@ -1,4 +1,4 @@
-// Render resources/icons/woa-rk3576-imager.svg into the PNG sizes, the .ico
+// Render resources/icons/maskrom-studio.svg into the PNG sizes, the .ico
 // and the .icns that scripts/icons.mjs lays out for the packagers. Run once
 // after changing the SVG; the results are committed.
 //   node scripts/make-icons.mjs
@@ -6,11 +6,11 @@ import { Resvg } from '@resvg/resvg-js';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const SRC = 'resources/icons';
-const svg = readFileSync(`${SRC}/woa-rk3576-imager.svg`, 'utf8');
+const svg = readFileSync(`${SRC}/maskrom-studio.svg`, 'utf8');
 const png = (size) => Buffer.from(new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng());
 const sizes = [16, 24, 32, 48, 64, 128, 256, 512];
 const pngs = Object.fromEntries([...sizes, 1024].map((s) => [s, png(s)]));
-for (const s of sizes) writeFileSync(`${SRC}/png/woa-rk3576-imager-${s}.png`, pngs[s]);
+for (const s of sizes) writeFileSync(`${SRC}/png/maskrom-studio-${s}.png`, pngs[s]);
 
 // .ico with PNG entries (Windows Vista and later read them).
 const icoSizes = [16, 24, 32, 48, 64, 128, 256];
@@ -24,7 +24,7 @@ icoSizes.forEach((s, i) => {
   header.writeUInt32LE(pngs[s].length, e + 8); header.writeUInt32LE(offset, e + 12);
   offset += pngs[s].length;
 });
-writeFileSync(`${SRC}/woa-rk3576-imager.ico`, Buffer.concat([header, ...icoSizes.map((s) => pngs[s])]));
+writeFileSync(`${SRC}/maskrom-studio.ico`, Buffer.concat([header, ...icoSizes.map((s) => pngs[s])]));
 
 // .icns with PNG entries: ic07 128, ic08 256, ic09 512, ic10 1024.
 const parts = [['ic07', 128], ['ic08', 256], ['ic09', 512], ['ic10', 1024]].map(([t, s]) => {
@@ -33,5 +33,5 @@ const parts = [['ic07', 128], ['ic08', 256], ['ic09', 512], ['ic10', 1024]].map(
 });
 const body = Buffer.concat(parts);
 const top = Buffer.alloc(8); top.write('icns', 0, 'ascii'); top.writeUInt32BE(body.length + 8, 4);
-writeFileSync(`${SRC}/woa-rk3576-imager.icns`, Buffer.concat([top, body]));
+writeFileSync(`${SRC}/maskrom-studio.icns`, Buffer.concat([top, body]));
 console.log('icons written to', SRC);

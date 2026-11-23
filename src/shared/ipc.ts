@@ -143,6 +143,8 @@ export type BoardJobRequest =
 export interface ImagerApi {
   platform: string;
   version: string;
+  /** The app's data folder (settings, caches, the settings backups). */
+  dataDir: string;
   releases(force?: boolean): Promise<Releases>;
   /** Download the board's firmware from the release, checked, and serve it to the Maskrom worker. */
   prepareFirmware(board: BoardId): Promise<Served | { error: string }>;

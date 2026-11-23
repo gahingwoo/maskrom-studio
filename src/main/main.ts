@@ -21,6 +21,7 @@ import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './el
 import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
 import { ensureLoader } from './loader-cache';
 import { handleProtocol, ORIGIN, registerScheme } from './protocol';
+import { migrateOldData } from './migrate';
 import { macWrite } from './mac-write';
 import { loadSettings, saveSettings } from './settings';
 import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restartApp } from './updater';
@@ -43,6 +44,8 @@ import { inflateRawSync } from 'node:zlib';
 import { readdirSync } from 'node:fs';
 
 registerScheme();
+// Before anything reads the settings: carry them over from the old name's folder.
+migrateOldData(app.getPath('appData'), app.getPath('userData'));
 
 // For screenshots and tests: do not show the window.
 const HIDDEN = process.env.WOA_IMAGER_HIDDEN === '1';
@@ -54,13 +57,13 @@ const resourcesDir = join(appDir, 'resources');
 const cacheDir = () => join(app.getPath('userData'), 'images');
 const loaderDir = () => join(app.getPath('userData'), 'loaders');
 
-const WRITER = process.platform === 'win32' ? 'woa-rk3576-imager-writer.exe' : 'woa-rk3576-imager-writer';
-const RAWDISK = 'woa-rk3576-imager-rawdisk';
+const WRITER = process.platform === 'win32' ? 'maskrom-studio-writer.exe' : 'maskrom-studio-writer';
+const RAWDISK = 'maskrom-studio-rawdisk';
 function writerPath(name = WRITER): string {
   return app.isPackaged ? join(process.resourcesPath, 'writer', name) : join(appDir, 'build-res', 'writer', name);
 }
 
-const OWN_LINKS = /^https:\/\/(github\.com\/gahingwoo\/|flash\.gahingwoo\.com\/|edk2\.gahingwoo\.com\/|zadig\.akeo\.ie\/|www\.armbian\.com\/boards\/|wiki\.lckfb\.com\/|docs\.armsom\.org\/)/;
+const OWN_LINKS = /^https:\/\/(github\.com\/gahingwoo\/|flash\.gahingwoo\.com\/|edk2\.gahingwoo\.com\/|zadig\.akeo\.ie\/|www\.armbian\.com\/boards\/|wiki\.lckfb\.com\/|docs\.armsom\.org\/|gahingwoo\.com$|gahingwoo\.com\/|github\.com\/roxora-os\/imager)/;
 /** Links the page may open in the browser: ours, and the listed places to get Windows. */
 const LINKS = { test: (url: string) => OWN_LINKS.test(url) || isWindowsSourceUrl(url) };
 
@@ -84,8 +87,8 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1100, height: 780, minWidth: 720, minHeight: 560,
     show: false,
-    title: 'WoA RK3576 Imager',
-    icon: join(resourcesDir, 'icons', 'png', 'woa-rk3576-imager-256.png'),
+    title: 'Maskrom Studio',
+    icon: join(resourcesDir, 'icons', 'png', 'maskrom-studio-256.png'),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1b1d21' : '#f0f0f0',
     autoHideMenuBar: true,
     webPreferences: {
@@ -544,7 +547,7 @@ ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (
     try {
       const sudo = await loadSudoPrompt();
       await new Promise<void>((resolve, reject) => {
-        sudo.exec(`cmd.exe /c ""${join(dir, 'host-build.cmd')}" > "${consoleFile}" 2>&1"`, { name: 'WoA RK3576 Imager' },
+        sudo.exec(`cmd.exe /c ""${join(dir, 'host-build.cmd')}" > "${consoleFile}" 2>&1"`, { name: 'Maskrom Studio' },
           (err: Error | undefined) => (err ? reject(err) : resolve()));
       }).catch(() => { /* the log says what happened */ });
     } finally {
@@ -636,7 +639,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
     if (signal.aborted) return { ok: false, reason: 'Cancelled. Nothing was written.' };
     return { ok: false, reason: String((err as Error).message ?? err) };
   }
-  const dir = mkdtempSync(join(tmpdir(), 'woa-rk3576-imager-job-'));
+  const dir = mkdtempSync(join(tmpdir(), 'maskrom-studio-job-'));
   const jobFile = join(dir, 'job.json');
   writeFileSync(jobFile, JSON.stringify(bj), { mode: 0o600 });
   try {
@@ -723,7 +726,7 @@ ipcMain.handle('open-external', (_e, url: string) => {
   if (LINKS.test(url)) return shell.openExternal(url);
 });
 ipcMain.on('app:info', (e) => {
-  e.returnValue = { platform: process.platform, version: app.getVersion() };
+  e.returnValue = { platform: process.platform, version: app.getVersion(), dataDir: app.getPath('userData') };
 });
 ipcMain.on('theme', (_e, t: 'light' | 'dark') => { nativeTheme.themeSource = t; });
 

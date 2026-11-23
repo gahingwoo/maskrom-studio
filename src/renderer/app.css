@@ -37,3 +37,37 @@ html, body, #root { height: 100%; }
 .setup-form { max-width: 44rem; }
 /* Long ISO file names in the places to get Windows wrap instead of widening the page. */
 .sources { overflow-wrap: anywhere; }
+
+/* About Maskrom Studio: PatternFly's about modal box, as gahingwoo.com's
+   "About this site" lays it out (its site.css, adapted). */
+.about-backdrop .pf-v6-c-about-modal-box {
+  --pf-v6-c-about-modal-box--BackgroundImage: url("../../node_modules/@patternfly/patternfly/assets/images/pf-background.svg");
+  --pf-v6-c-about-modal-box--BackgroundPosition: bottom right;
+  --pf-v6-c-about-modal-box--Height: auto;
+  --pf-v6-c-about-modal-box--lg--Height: auto;
+  border-radius: var(--pf-t--global--border--radius--large);
+  width: min(64rem, calc(100vw - 2 * var(--pf-t--global--spacer--lg)));
+  max-height: calc(100dvh - 2 * var(--pf-t--global--spacer--lg));
+  overflow: auto;
+}
+.about-backdrop .pf-v6-c-description-list {
+  --pf-v6-c-description-list--m-horizontal__term--width: 10rem;
+  --pf-v6-c-description-list--RowGap: var(--pf-t--global--spacer--md);
+}
+.about-backdrop .pf-v6-c-description-list__description a { overflow-wrap: anywhere; }
+.about-backdrop { z-index: 1000; }
+.about-list { margin: 0; padding-left: 1.1rem; }
+.about-list li + li { margin-top: var(--pf-t--global--spacer--xs); }
+.credit-badge { display: block; width: 11.25rem; height: auto; }
+.credit-badge__mark { fill: #9472db; }
+.credit-badge__label, .credit-badge__name { font-family: var(--pf-t--global--font--family--mono); }
+.credit-badge__label { font-size: 20px; font-weight: 500; letter-spacing: 0.5px; fill: var(--pf-t--global--text--color--subtle); }
+.credit-badge__name { font-size: 38px; font-weight: 800; letter-spacing: -0.5px; fill: var(--pf-t--global--text--color--regular); }
+html.pf-v6-theme-dark .credit-badge__mark { fill: #8b73c9; }
+html.pf-v6-theme-dark .credit-badge__name { fill: var(--pf-t--global--text--color--subtle); }
+html.pf-v6-theme-dark .credit-badge__label { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
+.link-button {
+  padding: 0; border: 0; background: none; font: inherit; color: var(--pf-t--global--text--color--link--default); cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 0.2em;
+}
+.link-button:hover { text-decoration-style: solid; }

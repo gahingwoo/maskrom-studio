@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Maskrom Studio
+Comment=Install and restore systems and UEFI firmware on Rockchip boards
+Exec=maskrom-studio %U
+Icon=com.gahingwoo.MaskromStudio
+Categories=Utility;
+Keywords=SD card;image;flash;maskrom;eMMC;
+Terminal=false
+# What Electron sets from package.json desktopName: the Wayland app_id and
+# the X11 WM_CLASS are both com.gahingwoo.MaskromStudio.
+StartupWMClass=com.gahingwoo.MaskromStudio

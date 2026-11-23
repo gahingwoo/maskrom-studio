@@ -103,7 +103,7 @@ export function trustedCerts(catalogs: Uint8Array[]): TrustedCert[] {
 
 /** cmd lines that add the certificates to the offline SOFTWARE hive loaded at HKLM\WOAOFF. */
 export function certsCmd(certs: TrustedCert[]): string {
-  const lines = ['@echo off', 'rem Written by WoA RK3576 Imager: trust the drivers\' test certificates (Root, TrustedPublisher).'];
+  const lines = ['@echo off', 'rem Written by Maskrom Studio: trust the drivers\' test certificates (Root, TrustedPublisher).'];
   for (const c of certs) {
     const hex = bytesToHex(c.blob).toUpperCase();
     for (const store of ['ROOT', 'TrustedPublisher']) {

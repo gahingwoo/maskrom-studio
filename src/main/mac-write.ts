@@ -4,7 +4,7 @@
 // has granted the right sys.openfile.readwrite./dev/rdiskN in the system's
 // password dialog (Raspberry Pi Imager and Armbian Imager write the same
 // way). Nothing of the imager runs as root, and the app needs no Full Disk
-// Access: the small helper woa-rk3576-imager-rawdisk (src/helper/macos/rawdisk.c)
+// Access: the small helper maskrom-studio-rawdisk (src/helper/macos/rawdisk.c)
 // asks for the right, has authopen open the disk and receives the open file
 // descriptor. This module, in the app's main process:
 //
@@ -26,7 +26,7 @@ import { isOfferedTarget, type DriveInfo } from '../shared/targets';
 import type { HelperOutcome } from './elevate';
 import { openImage, type ImageSource } from './image-source';
 
-/** Exit statuses of woa-rk3576-imager-rawdisk (rawdisk.c). */
+/** Exit statuses of maskrom-studio-rawdisk (rawdisk.c). */
 export const RAWDISK_EXIT = { ok: 0, args: 2, auth: 3, open: 4, write: 5, read: 6, input: 7, small: 8 } as const;
 
 export const MISMATCH = 'The drive does not read back what the release contains. Do not use it; try another card or drive.';
@@ -43,7 +43,7 @@ export function promptText(device: string, description: string): string {
   // Printable ASCII only, and short: the text comes from the drive itself.
   const name = description.replace(/[^\x20-\x7e]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
   const disk = device.replace('/dev/', '');
-  return `WoA RK3576 Imager will erase ${name ? `${name} (${disk})` : disk} and write the image to it.`;
+  return `Maskrom Studio will erase ${name ? `${name} (${disk})` : disk} and write the image to it.`;
 }
 
 export function rawdiskArgs(device: string, size: number, description: string): string[] {
@@ -133,7 +133,7 @@ export interface MacWriteOptions {
   device: string;
   extractSize: number;
   extractSha256: string;
-  /** woa-rk3576-imager-rawdisk. */
+  /** maskrom-studio-rawdisk. */
   helperPath: string;
   onProgress: (p: { stage: 'write' | 'verify'; bytes: number; speed: number }) => void;
   signal?: AbortSignal;

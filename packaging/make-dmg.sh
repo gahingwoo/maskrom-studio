@@ -3,7 +3,7 @@
 # background with first-launch instructions, and a note about Gatekeeper.
 # From gahingwoo/RKDevelopTool-GUI packaging/make-dmg.sh; the background is
 # rendered from packaging/dmg/background.svg instead of with Qt.
-#   packaging/make-dmg.sh "dist/mac-arm64/WoA RK3576 Imager.app" dist/woa-rk3576-imager-0.1.0-macos-arm64.dmg
+#   packaging/make-dmg.sh "dist/mac-arm64/Maskrom Studio.app" dist/maskrom-studio-0.1.0-macos-arm64.dmg
 set -euo pipefail
 APP="$1"; DMG="$2"
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -17,7 +17,7 @@ tiffutil -cathidpicheck "$WORK/background.png" "$WORK/background@2x.png" -out "$
 
 rm -f "$DMG"
 if create-dmg \
-    --volname "WoA RK3576 Imager" \
+    --volname "Maskrom Studio" \
     --background "$WORK/background.tiff" \
     --window-size 660 500 \
     --icon-size 104 \
@@ -40,4 +40,4 @@ ditto "$APP" "$STAGE/$(basename "$APP")"
 ln -s /Applications "$STAGE/Applications"
 cp "$NOTE" "$STAGE/"
 rm -f "$DMG"
-hdiutil create -volname "WoA RK3576 Imager" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+hdiutil create -volname "Maskrom Studio" -srcfolder "$STAGE" -ov -format UDZO "$DMG"

@@ -1,4 +1,4 @@
-// The WoA RK3576 Imager page: one wizard (board, what to write, the Windows
+// The Maskrom Studio page: one wizard (board, what to write, the Windows
 // image, how Windows comes out, review), then the write itself in place of
 // the wizard. Every text goes through useI18n() (messages.ts).
 import { useEffect, useRef, useState } from 'react';
@@ -19,7 +19,7 @@ import type { WebflashTarget } from '../web/webflash/boards';
 import type { WoaJob, WoaWorkerEvent, WoaWorkerRequest } from '../woa/woa-worker';
 import type { RegionResult, RegionStage } from '../woa/maskrom-regions';
 import { accountProblem, DEFAULT_SETUP, OPENSSH, sshKeyProblem, type Account, type SetupOptions } from '../woa/setup-files';
-import { api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal } from './common';
+import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal } from './common';
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
@@ -126,6 +126,7 @@ export function App() {
   const [keepSettings, setKeepSettings] = useState(true);
   const [run, setRun] = useState<Run | null>(null);
   const [settings, setSettings] = useState(false);
+  const [about, setAbout] = useState(false);
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
   const [updating, setUpdating] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(() => { try { return localStorage.getItem('updateDismissed'); } catch { return null; } });
@@ -1026,7 +1027,9 @@ export function App() {
         </ModalFooter>
       </Modal>
       <SettingsModal open={settings} onClose={() => setSettings(false)} theme={theme} setTheme={setTheme}
-        onOffer={(o) => setOffer(o)} onUpdate={() => { setSettings(false); setUpdating(true); }} writing={!!run && !run.result} />
+        onOffer={(o) => setOffer(o)} onUpdate={() => { setSettings(false); setUpdating(true); }} writing={!!run && !run.result}
+        onAbout={() => { setSettings(false); setAbout(true); }} />
+      <AboutModal open={about} onClose={() => setAbout(false)} />
       {updating && <UpdateModal offer={offer} onClose={() => setUpdating(false)} />}
     </Shell>
   );

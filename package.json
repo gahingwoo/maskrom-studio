@@ -1,14 +1,14 @@
 {
-  "name": "woa-rk3576-imager",
-  "productName": "WoA RK3576 Imager",
+  "name": "maskrom-studio",
+  "productName": "Maskrom Studio",
   "version": "0.1.0",
-  "description": "Install Windows 11 on Rockchip RK3576 boards over USB, without a USB stick, and write their edk2-rk3576 UEFI firmware.",
-  "homepage": "https://github.com/gahingwoo/woa-rk3576-imager",
+  "description": "Install and restore systems and UEFI firmware on Rockchip boards.",
+  "homepage": "https://github.com/gahingwoo/maskrom-studio",
   "license": "GPL-2.0-only",
   "author": "Ga Hing Woo <gahing@gahingwoo.com>",
   "private": true,
   "main": "build/main/main.js",
-  "desktopName": "io.github.gahingwoo.woa_rk3576_imager.desktop",
+  "desktopName": "com.gahingwoo.MaskromStudio.desktop",
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron .",
@@ -46,9 +46,9 @@
     "vitest": "4.0.8"
   },
   "build": {
-    "appId": "io.github.gahingwoo.woa-rk3576-imager",
-    "productName": "WoA RK3576 Imager",
-    "executableName": "woa-rk3576-imager",
+    "appId": "com.gahingwoo.MaskromStudio",
+    "productName": "Maskrom Studio",
+    "executableName": "maskrom-studio",
     "directories": {
       "output": "dist",
       "buildResources": "build-res"
@@ -69,7 +69,7 @@
       "**/*.node"
     ],
     "npmRebuild": false,
-    "artifactName": "woa-rk3576-imager-${version}-${os}-${arch}.${ext}",
+    "artifactName": "maskrom-studio-${version}-${os}-${arch}.${ext}",
     "linux": {
       "target": [
         "dir",
@@ -98,7 +98,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "woa-rk3576-imager-${version}-windows-${arch}-setup.${ext}"
+      "artifactName": "maskrom-studio-${version}-windows-${arch}-setup.${ext}"
     },
     "publish": null,
     "extraResources": [

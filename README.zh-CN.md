@@ -1,8 +1,10 @@
-# WoA RK3576 Imager
+# Maskrom Studio
 
 [English](README.md)
 
-一个桌面应用：在电脑上通过 USB，把 Windows 11 23H2 直接装到 Rockchip RK3576 开发板的 eMMC 上，不需要 U 盘；也可以写入开发板的 [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI 固件。
+在 Rockchip 开发板上安装、恢复系统和 UEFI 固件。一个桌面应用：在电脑上通过 USB，把 Windows 11 23H2 直接装到 Rockchip RK3576 开发板的 eMMC 上，不需要 U 盘；也可以写入、升级开发板的 [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI 固件，或者把开发板恢复为 Armbian 或出厂映像。
+
+以前的版本叫 WoA RK3576 Imager（仓库 gahingwoo/woa-rk3576-imager，GitHub 会自动转到这里）。第一次启动时，旧数据文件夹里的设置、主题和语言、UEFI 设置副本会被复制过来；应用 ID 变了，所以会作为新应用安装，请手动卸载旧的 WoA RK3576 Imager（Linux 的 .deb/.rpm 会自动替换）。旧版本的更新检查找不到新的安装包，需要手动安装一次。
 
 支持的开发板：立创泰山派 3M（LCKFB TaishanPi 3M）和 ArmSoM CM5-IO（Windows 和固件），Radxa ROCK 4D（只有固件，它没有 eMMC）。
 
@@ -70,7 +72,7 @@ RK3576 是 ARMv8.0，无法运行 Windows 11 24H2 及更新版本。版本号高
 
 ## 安装本应用
 
-发布后，各平台的安装包（Windows x64，macOS，Linux 的 AppImage、.deb、.rpm，x86_64 和 arm64）会放在 [Releases](https://github.com/gahingwoo/woa-rk3576-imager/releases) 页面。
+发布后，各平台的安装包（Windows x64，macOS，Linux 的 AppImage、.deb、.rpm，x86_64 和 arm64）会放在 [Releases](https://github.com/gahingwoo/maskrom-studio/releases) 页面。
 
 - Windows：MaskROM 写入需要 WinUSB 驱动。开发板进入 MaskROM 后，用 [Zadig](https://zadig.akeo.ie/) 为 ID 为 2207 的设备安装 WinUSB，一台电脑只需装一次。
 - Linux：.deb 和 .rpm 自带 udev 规则；用 AppImage 时，需要按应用里的提示添加一次 udev 规则。

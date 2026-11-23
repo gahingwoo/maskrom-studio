@@ -11,7 +11,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { AppRelease, InstallKind } from '../shared/update';
 
-export const APP_REPO = 'gahingwoo/woa-rk3576-imager';
+export const APP_REPO = 'gahingwoo/maskrom-studio';
 /** Ten is enough to find the newest normal release behind a few betas. */
 export const RELEASES_API = `https://api.github.com/repos/${APP_REPO}/releases?per_page=10`;
 /** Release files are only ever downloaded from here. */
@@ -20,7 +20,7 @@ export const DOWNLOAD_PREFIX = `https://github.com/${APP_REPO}/releases/download
 export type Fetch = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<Response>;
 
 export async function fetchReleases(fetchFn: Fetch, api = RELEASES_API): Promise<AppRelease[]> {
-  const r = await fetchFn(api, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'woa-rk3576-imager' } });
+  const r = await fetchFn(api, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'maskrom-studio' } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const list = await r.json();
   if (!Array.isArray(list)) throw new Error('not a list of releases');

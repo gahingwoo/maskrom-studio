@@ -32,7 +32,7 @@ await build({ entryPoints: ['src/main/local-image.ts'], bundle: true, platform: 
   external: ['etcher-sdk'], outfile: join(root, 'build/e2e/local-image.cjs'), logLevel: 'warning' });
 const { describeLocal, measureFile } = createRequire(import.meta.url)(join(root, 'build/e2e/local-image.cjs'));
 
-const writerPath = join(root, 'build-res/writer/woa-rk3576-imager-writer');
+const writerPath = join(root, 'build-res/writer/maskrom-studio-writer');
 const BIG = { maxBuffer: 256 * 1024 * 1024 };
 const sh = (cmd, args) => execFileSync(cmd, args, BIG).toString().trim();
 let failures = 0;

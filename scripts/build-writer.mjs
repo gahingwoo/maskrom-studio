@@ -1,6 +1,6 @@
 // Build what writes SD cards and USB drives, into build-res/writer/.
 //
-// macOS: woa-rk3576-imager-rawdisk, a small C program that has Apple's authopen
+// macOS: maskrom-studio-rawdisk, a small C program that has Apple's authopen
 // open the raw disk (src/helper/macos/rawdisk.c, src/main/mac-write.ts),
 // for both CPUs in one file. The etcher-sdk writer below is not used there.
 //
@@ -20,8 +20,8 @@ if (process.platform === 'darwin') {
   mkdirSync('build-res/writer', { recursive: true });
   execFileSync('cc', ['-O2', '-Wall', '-Wextra', '-Werror', '-arch', 'arm64', '-arch', 'x86_64',
     '-mmacosx-version-min=11.0', '-framework', 'Security',
-    '-o', 'build-res/writer/woa-rk3576-imager-rawdisk', 'src/helper/macos/rawdisk.c'], { stdio: 'inherit' });
-  console.log('writer: build-res/writer/woa-rk3576-imager-rawdisk (arm64 and x86_64)');
+    '-o', 'build-res/writer/maskrom-studio-rawdisk', 'src/helper/macos/rawdisk.c'], { stdio: 'inherit' });
+  console.log('writer: build-res/writer/maskrom-studio-rawdisk (arm64 and x86_64)');
   process.exit(0);
 }
 
@@ -47,7 +47,7 @@ const stub = {
     const filter = new RegExp(`^(${stubbed.map((m) => m.replace(/[/.]/g, '\\$&')).join('|')})$`);
     b.onResolve({ filter }, (a) => ({ path: a.path, namespace: 'stub' }));
     b.onLoad({ filter: /.*/, namespace: 'stub' }, (a) => ({
-      contents: `throw new Error(${JSON.stringify(`${a.path} is not included in the WoA RK3576 Imager writer`)});`, loader: 'js',
+      contents: `throw new Error(${JSON.stringify(`${a.path} is not included in the Maskrom Studio writer`)});`, loader: 'js',
     }));
   },
 };
@@ -58,6 +58,6 @@ await build({
 rmSync('build-res/writer', { recursive: true, force: true });
 mkdirSync('build-res/writer', { recursive: true });
 execFileSync('npx', ['pkg', 'build/writer/writer.js', '-c', 'packaging/pkg-writer.json', '--no-bytecode', '--public',
-  '--public-packages', '*', '--target', target, '--output', `build-res/writer/woa-rk3576-imager-writer${exe}`],
+  '--public-packages', '*', '--target', target, '--output', `build-res/writer/maskrom-studio-writer${exe}`],
 { stdio: ['ignore', 'inherit', 'inherit'], shell: process.platform === 'win32' });
-console.log(`writer: build-res/writer/woa-rk3576-imager-writer${exe} (${target})`);
+console.log(`writer: build-res/writer/maskrom-studio-writer${exe} (${target})`);

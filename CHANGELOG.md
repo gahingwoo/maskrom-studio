@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+Renamed to Maskrom Studio ("Install and restore systems and UEFI firmware
+on Rockchip boards"); the repository is gahingwoo/maskrom-studio and the
+app id com.gahingwoo.MaskromStudio. Settings are carried over from the old
+data folder on the first start (README, "Coming from WoA RK3576 Imager").
+
+- Windows image vetting: architecture and build from the image, what was
+  found shown, and where to get 23H2 ARM64.
+- Armbian or a factory update.img onto the whole eMMC.
+- Firmware upgrade that keeps Windows and the UEFI settings.
+- About Maskrom Studio.
+
+## Before the rename
+
 First version of WoA RK3576 Imager, forked from Roxora Imager 0.1.10 (its
 changelog is in the git history before this fork).
 

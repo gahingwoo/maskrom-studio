@@ -116,7 +116,7 @@ export function winpeVolume(winpe: ByteSource): ByteSource {
 }
 
 export function stageIni(f: Record<string, string | number>): string {
-  const lines = ['# WoA RK3576 Imager staged install. Read by woa-stage.cmd on the board.'];
+  const lines = ['# Maskrom Studio staged install. Read by woa-stage.cmd on the board.'];
   for (const [k, v] of Object.entries(f)) {
     const s = String(v);
     if (/[\r\n=%!^&|<>"]/.test(s)) throw new StageError(`a value for ${k} has a character the install script cannot take`);
@@ -199,7 +199,7 @@ export function planStage(o: StageInput): StagePlan {
     ...extras.filter((e) => setup.ssh || !e.path.startsWith('openssh/')).map((e) => ({ name: e.path, source: bytesSource(e.data) })),
   ];
   const iniFor = (bootFirst: number, dataFirst: number) => stageIni({
-    tool: `WoA RK3576 Imager ${o.appVersion}`,
+    tool: `Maskrom Studio ${o.appVersion}`,
     board: o.board.id,
     disk_guid: diskGuid,
     disk_bytes: o.diskBytes,

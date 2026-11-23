@@ -112,7 +112,7 @@ export class NotInPlace extends Error {}
 export interface DmgSwap {
   /** The checked DMG. */
   dmg: string;
-  /** The running app bundle, /Applications/WoA RK3576 Imager.app. */
+  /** The running app bundle, /Applications/Maskrom Studio.app. */
   appPath: string;
   home: string;
   run?: Run;
@@ -160,7 +160,7 @@ export async function swapAppFromDmg(o: DmgSwap): Promise<string> {
   const dir = dirname(target);
   const name = basename(target);
   const fresh = newName(dir, name);
-  const mnt = mkdtempSync(join(o.tmp ?? tmpdir(), 'woa-rk3576-imager-dmg-'));
+  const mnt = mkdtempSync(join(o.tmp ?? tmpdir(), 'maskrom-studio-dmg-'));
   const must = async (cmd: string, args: string[], what: string) => {
     log(`$ ${basename(cmd)} ${args.join(' ')}\n`);
     const r = await runner(cmd, args, { onOutput: log });

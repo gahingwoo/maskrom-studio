@@ -1,5 +1,5 @@
-// A small translation helper, written to be shared between WoA RK3576
-// Imager and Roxora Imager (neither had one): no dependencies, no React.
+// A small translation helper, written to be shared between Maskrom Studio
+// and Roxora Imager (neither had one): no dependencies, no React.
 //
 // A dictionary maps a key to its text in each language, side by side, so a
 // missing translation shows in review and in test/i18n.test.ts. Text may

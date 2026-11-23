@@ -101,6 +101,24 @@ const factory = join(tmp, 'update.img');
   writeFileSync(factory, out);
 }
 
+// About Maskrom Studio, from Settings.
+for (const [w, h, tag] of [[1100, 780, 'd'], [720, 640, 'm']]) {
+  for (const theme of ['light', 'dark']) {
+    await session(tag, w, h, theme, base, async (page, shot) => {
+      await page.click('.pf-v6-c-masthead button:has-text("Settings")');
+      await page.click('button.link-button');
+      await page.waitForSelector('#about-title');
+      await shot('12-about');
+    });
+  }
+}
+await session('d', 1100, 780, 'light', base, async (page, shot) => {
+  await page.click('.pf-v6-c-masthead button:has-text("设置")');
+  await page.click('button.link-button');
+  await page.waitForSelector('#about-title');
+  await shot('12-about');
+}, 'zh-CN');
+
 // An edk2-rk3576 eMMC image for the upgrade: 32 MiB, a FIT at sector 16384 with edk2 and nvdata, a build stamp.
 const firmwareImg = join(tmp, 'TaishanPi3M-emmc-edk2-0.4.2.img');
 {

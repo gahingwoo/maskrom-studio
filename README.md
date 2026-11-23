@@ -1,13 +1,18 @@
-# WoA RK3576 Imager
+# Maskrom Studio
 
 [简体中文](README.zh-CN.md)
 
-<img src="resources/icons/woa-rk3576-imager.svg" alt="WoA RK3576 Imager icon: a storage chip with an arrow writing into it" width="96" height="96">
+<img src="resources/icons/maskrom-studio.svg" alt="Maskrom Studio icon: a storage chip with an arrow writing into it" width="96" height="96">
 
-A desktop app that puts Windows 11 23H2 on the eMMC of a Rockchip RK3576
-board straight from a PC over USB, with no USB stick, and writes the
-boards' [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI
-firmware.
+Install and restore systems and UEFI firmware on Rockchip boards: a
+desktop app that puts Windows 11 23H2 on the eMMC of a Rockchip RK3576
+board straight from a PC over USB, with no USB stick, writes and upgrades
+the boards' [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI
+firmware, and puts a board back to Armbian or a factory image.
+
+Earlier versions were called WoA RK3576 Imager (repository
+gahingwoo/woa-rk3576-imager, which GitHub now redirects here). See
+[Coming from WoA RK3576 Imager](#coming-from-woa-rk3576-imager).
 
 Boards: LCKFB TaishanPi 3M and ArmSoM CM5-IO (Windows and firmware), Radxa
 ROCK 4D (firmware only; it has no eMMC).
@@ -79,11 +84,29 @@ media, the Consumer one is x64 only) and
 [UUP dump](https://uupdump.net/known.php?q=22631+arm64), which builds the
 ISO on your computer from Microsoft's update servers.
 
+## Coming from WoA RK3576 Imager
+
+- Settings, the theme and language, and saved UEFI settings copies are
+  copied from the old data folder (`WoA RK3576 Imager` next to the new
+  `Maskrom Studio` one) on the first start; the old download cache is
+  left where it is and can be deleted.
+- The app id is now `com.gahingwoo.MaskromStudio` (was
+  `io.github.gahingwoo.woa-rk3576-imager`), so it installs as a new app:
+  - Windows: uninstall "WoA RK3576 Imager" from Settings, Apps.
+  - macOS: delete `WoA RK3576 Imager.app`; Homebrew: `brew uninstall
+    --cask woa-rk3576-imager`, then install `maskrom-studio`.
+  - Linux .deb/.rpm: the `maskrom-studio` package replaces and conflicts
+    with `woa-rk3576-imager`, so installing it removes the old one. An
+    AppImage from install.sh: delete `~/.local/bin/woa-rk3576-imager.AppImage`
+    and its menu entry.
+- The old app's update check looks for files named `woa-rk3576-imager-*`
+  and will not find the new ones: install Maskrom Studio by hand once.
+
 ## Install
 
 Packages for Windows (x64), macOS and Linux (AppImage, .deb, .rpm; x86_64
 and arm64) go on the
-[releases](https://github.com/gahingwoo/woa-rk3576-imager/releases) page
+[releases](https://github.com/gahingwoo/maskrom-studio/releases) page
 once there is a release. What each system asks on first start, and the
 drivers for Maskrom (WinUSB through Zadig on Windows, a udev rule on Linux):
 [docs/install.md](docs/install.md).

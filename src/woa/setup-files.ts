@@ -113,7 +113,7 @@ ${kb ? `      <InputLocale>${xml(kb)}</InputLocale>\n` : ''}${a.locale ? `      
 ` : ''}    </component>
 ` : '';
   return `<?xml version="1.0" encoding="utf-8"?>
-<!-- Written by WoA RK3576 Imager. SetupComplete.cmd deletes this file when setup is done. -->
+<!-- Written by Maskrom Studio. SetupComplete.cmd deletes this file when setup is done. -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
 ${specialize}  <settings pass="oobeSystem">
 ${intl}    ${COMPONENT('Microsoft-Windows-Shell-Setup')}
@@ -156,9 +156,9 @@ ${a.timeZone ? `      <TimeZone>${xml(a.timeZone)}</TimeZone>\n` : ''}      <Use
 export function setupComplete(o: SetupOptions): string {
   const l: string[] = [
     '@echo off',
-    'rem Written by WoA RK3576 Imager. Windows runs this once, as SYSTEM, when setup is done.',
+    'rem Written by Maskrom Studio. Windows runs this once, as SYSTEM, when setup is done.',
     'set LOG=%WINDIR%\\Logs\\woa-setupcomplete.log',
-    'echo WoA RK3576 Imager first start, %DATE% %TIME% > "%LOG%"',
+    'echo Maskrom Studio first start, %DATE% %TIME% > "%LOG%"',
   ];
   if (o.ssh) {
     l.push(

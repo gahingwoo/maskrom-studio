@@ -1,8 +1,8 @@
 /*
- * woa-rk3576-imager-rawdisk: write an image to a raw disk on macOS and read it
+ * maskrom-studio-rawdisk: write an image to a raw disk on macOS and read it
  * back, without running as root.
  *
- *   woa-rk3576-imager-rawdisk /dev/rdiskN SIZE [PROMPT]
+ *   maskrom-studio-rawdisk /dev/rdiskN SIZE [PROMPT]
  *
  * stdin   SIZE bytes of image data
  * stdout  the same SIZE bytes, read back from the disk after writing
@@ -27,7 +27,7 @@
  * 4 the disk could not be opened, 5 write error, 6 read error, 7 the image
  * data ended early, 8 the disk is smaller than the image.
  *
- * Written for WoA RK3576 Imager; GPL-2.0-only like the rest of it.
+ * Written for Maskrom Studio; GPL-2.0-only like the rest of it.
  */
 
 #include <Security/Authorization.h>

@@ -51,7 +51,7 @@ screen; the serial line stays quiet (WinPE does not use it).
 
 On the screen, in WinPE:
 
-1. "WoA RK3576 Imager: installing <edition>" and a 15 second pause.
+1. "Maskrom Studio: installing <edition>" and a 15 second pause.
 2. "eMMC: disk N. Firmware partition found at sector 64; it is kept."
 3. "Creating the Windows partitions." then "Applying the image" (20 to 40
    minutes on the eMMC).

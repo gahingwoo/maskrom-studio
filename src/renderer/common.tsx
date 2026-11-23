@@ -1,7 +1,7 @@
 // Pieces of the page that came from Roxora Imager's App.tsx unchanged but
 // for the names: the shell, step layout, copy blocks, the driver note, and
 // the update and settings dialogs. Offer changes here back to Roxora Imager.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Button, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form,
@@ -11,6 +11,7 @@ import {
 } from '@patternfly/react-core';
 import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon';
 import { GlobeIcon } from '@patternfly/react-icons/dist/esm/icons/globe-icon';
+import { TimesIcon } from '@patternfly/react-icons/dist/esm/icons/times-icon';
 import { formatBytes } from '../shared/format';
 import type { ImagerApi } from '../shared/ipc';
 import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
@@ -37,7 +38,7 @@ export function Shell({ children, onSettings }: { children: React.ReactNode; onS
         <MastheadBrand>
           <MastheadLogo component="span" className="brand">
             <img src="resources/woa-mark.svg" alt="" className="brand-mark" />
-            <span className="brand-name">WoA RK3576 Imager</span>
+            <span className="brand-name">Maskrom Studio</span>
           </MastheadLogo>
         </MastheadBrand>
       </MastheadMain>
@@ -130,7 +131,7 @@ export function DriversNote() {
     return (
       <>
         <Content component="p">{t('drivers.linux')}</Content>
-        <CopyBlock text={'echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"\' | sudo tee /etc/udev/rules.d/70-woa-rk3576-imager.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger'} />
+        <CopyBlock text={'echo \'SUBSYSTEM=="usb", ATTR{idVendor}=="2207", TAG+="uaccess"\' | sudo tee /etc/udev/rules.d/70-maskrom-studio.rules\nsudo udevadm control --reload-rules && sudo udevadm trigger'} />
       </>
     );
   }
@@ -218,7 +219,7 @@ export function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onC
           {brew && !canInstall && (
             <>
               <Content component="p">{t('update.brewManual')}</Content>
-              <CopyBlock text="brew upgrade --cask woa-rk3576-imager" />
+              <CopyBlock text="brew upgrade --cask maskrom-studio" />
             </>
           )}
           {apt && (
@@ -274,8 +275,10 @@ function checkWords(c: UpdateCheck, t: T): string {
 
 type AppSettings = { updateCheck: boolean; betaUpdates?: boolean; resetAfterMaskrom: boolean };
 
-export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdate, writing }: {
+export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdate, writing, onAbout }: {
   open: boolean; onClose: () => void; theme: Theme; setTheme: (t: Theme) => void;
+  /** Open About Maskrom Studio. */
+  onAbout?: () => void;
   /** A check found a newer version. */
   onOffer: (o: UpdateOffer) => void;
   /** The user wants it. */
@@ -339,11 +342,8 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
             </FormGroup>
             <DescriptionList isCompact isHorizontal>
               <DescriptionListGroup><DescriptionListTerm>{t('settings.version')}</DescriptionListTerm><DescriptionListDescription>{api.version}</DescriptionListDescription></DescriptionListGroup>
-              <DescriptionListGroup><DescriptionListTerm>{t('settings.license')}</DescriptionListTerm><DescriptionListDescription>GPL-2.0</DescriptionListDescription></DescriptionListGroup>
-              <DescriptionListGroup><DescriptionListTerm>{t('settings.source')}</DescriptionListTerm><DescriptionListDescription>
-                <Button variant="link" isInline component="a" href="https://github.com/gahingwoo/woa-rk3576-imager" target="_blank">github.com/gahingwoo/woa-rk3576-imager</Button>
-              </DescriptionListDescription></DescriptionListGroup>
             </DescriptionList>
+            {onAbout && <Content component="p"><button className="link-button" type="button" onClick={onAbout}>{t('about.open')}</button></Content>}
           </Form>
         )}
       </ModalBody>
@@ -352,3 +352,104 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
   );
 }
 
+
+declare const __BUILD_COMMIT__: string;
+declare const __BUILD_DATE__: string;
+declare const __PATTERNFLY_VERSION__: string;
+const BUILD = {
+  commit: typeof __BUILD_COMMIT__ === 'string' ? __BUILD_COMMIT__ : 'unknown',
+  date: typeof __BUILD_DATE__ === 'string' ? __BUILD_DATE__ : '',
+  patternfly: typeof __PATTERNFLY_VERSION__ === 'string' ? __PATTERNFLY_VERSION__ : '',
+};
+
+/** The "Engineered by gahingwoo" badge, as gahingwoo.com's About this site has it. */
+function CreditBadge() {
+  return (
+    <svg className="credit-badge" viewBox="14 0 346 110" role="img" aria-label="Engineered by gahingwoo">
+      <g className="credit-badge__mark" transform="translate(14,19) scale(0.257143)">
+        <rect x="0" y="0" width="350" height="70" />
+        <rect x="70" y="70" width="70" height="70" />
+        <rect x="210" y="70" width="70" height="70" />
+        <rect x="0" y="210" width="350" height="70" />
+      </g>
+      <text className="credit-badge__label" x="124" y="48">Engineered by</text>
+      <text className="credit-badge__name" x="123" y="88">gahingwoo</text>
+    </svg>
+  );
+}
+
+/**
+ * About Maskrom Studio: PatternFly's about modal box with the facts of this
+ * build, laid out as gahingwoo.com's "About this site". Every row has to be
+ * true for the build that shows it.
+ */
+export function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const close = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    close.current?.focus();
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [open, onClose]);
+  if (!open) return null;
+  const sep = api.platform === 'win32' ? '\\' : '/';
+  const at = (p: string) => `${api.dataDir}${sep}${p}`;
+  const link = (href: string, text: string) => <a href={href} target="_blank" rel="noreferrer">{text}</a>;
+  const rows: Array<[string, React.ReactNode]> = [
+    [t('about.version'), t('about.version.value', { version: api.version, commit: BUILD.commit, date: BUILD.date })],
+    [t('about.design'), `PatternFly ${BUILD.patternfly}`],
+    [t('about.network'), (
+      <ul className="about-list">
+        <li>{t('about.network.releases')}</li>
+        <li>{t('about.network.loader')}</li>
+        <li>{t('about.network.armbian')}</li>
+        <li>{t('about.network.openssh')}</li>
+        <li>{t('about.network.update')}</li>
+        <li>{t('about.network.links')}</li>
+        <li>{t('about.network.none')}</li>
+      </ul>
+    )],
+    [t('about.kept'), (
+      <ul className="about-list">
+        <li>{t('about.kept.settings', { path: at('settings.json') })}</li>
+        <li>{t('about.kept.nvdata', { path: at('nvdata-backups') })}</li>
+        <li>{t('about.kept.images', { path: at('images') })}</li>
+        <li>{t('about.kept.loaders', { path: at('loaders') })}</li>
+      </ul>
+    )],
+    [t('about.images'), t('about.images.value')],
+    [t('about.boards'), t('about.boards.value')],
+    [t('about.licence'), t('about.licence.value')],
+    [t('about.madeBy'), link('https://gahingwoo.com', 'Ga Hing Woo (Jiaxing Hu)')],
+    [t('about.source'), link('https://github.com/gahingwoo/maskrom-studio', 'github.com/gahingwoo/maskrom-studio')],
+    [t('about.basedOn'), <>{t('about.basedOn.value')} {link('https://github.com/roxora-os/imager', 'github.com/roxora-os/imager')}</>],
+  ];
+  return (
+    <div className="pf-v6-c-backdrop about-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pf-v6-l-bullseye">
+        <div className="pf-v6-c-about-modal-box" role="dialog" aria-modal="true" aria-labelledby="about-title">
+          <div className="pf-v6-c-about-modal-box__brand"><CreditBadge /></div>
+          <div className="pf-v6-c-about-modal-box__close">
+            <Button ref={close} variant="plain" aria-label={t('about.close')} icon={<TimesIcon />} onClick={onClose} />
+          </div>
+          <div className="pf-v6-c-about-modal-box__header">
+            <h1 className="pf-v6-c-title pf-m-4xl" id="about-title">{t('about.title')}</h1>
+          </div>
+          <div className="pf-v6-c-about-modal-box__content">
+            <dl className="pf-v6-c-description-list pf-m-horizontal">
+              {rows.map(([k, v]) => (
+                <div className="pf-v6-c-description-list__group" key={k}>
+                  <dt className="pf-v6-c-description-list__term"><span className="pf-v6-c-description-list__text">{k}</span></dt>
+                  <dd className="pf-v6-c-description-list__description"><div className="pf-v6-c-description-list__text">{v}</div></dd>
+                </div>
+              ))}
+            </dl>
+            <p className="pf-v6-c-about-modal-box__strapline">{t('about.strapline')}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

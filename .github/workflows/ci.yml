@@ -72,7 +72,7 @@ jobs:
       # Built as in release.yml, so this is the helper the DMG ships.
       - name: Raw disk helper (C, opens the disk through authopen)
         run: npm run writer
-      - run: file build-res/writer/woa-rk3576-imager-rawdisk
+      - run: file build-res/writer/maskrom-studio-rawdisk
       - run: command -v xz || brew install xz
       - name: Write, read back, refuse the system disk, cancel
         run: node test/e2e/sd-ramdisk-mac.mjs

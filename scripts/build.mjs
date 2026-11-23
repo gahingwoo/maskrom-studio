@@ -2,7 +2,15 @@
 // the page and the Maskrom worker (browser, ES modules), and the WASM
 // rkdeveloptool from vendor/rkdeveloptool-wasm/ (scripts/build-wasm.sh).
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+
+// For the About dialog: the commit this is built from (CI's, else git's), the
+// build date (UTC), and the PatternFly that is bundled.
+const git = (...a) => { try { return execFileSync('git', a, { encoding: 'utf8' }).trim(); } catch { return ''; } };
+const commit = (process.env.GITHUB_SHA ?? git('rev-parse', 'HEAD')).slice(0, 7) || 'unknown';
+const built = new Date().toISOString().slice(0, 10);
+const patternfly = JSON.parse(readFileSync('node_modules/@patternfly/patternfly/package.json', 'utf8')).version;
 
 const prod = process.env.NODE_ENV === 'production';
 rmSync('build', { recursive: true, force: true });
@@ -20,7 +28,10 @@ await build({
   ...web, entryPoints: { app: 'src/renderer/main.tsx' }, outdir: 'build/renderer',
   loader: { '.woff2': 'file', '.woff': 'file', '.ttf': 'file', '.svg': 'file', '.png': 'file', '.jpg': 'file' },
   assetNames: 'assets/[name]-[hash]', jsx: 'automatic',
-  define: { 'process.env.NODE_ENV': JSON.stringify(prod ? 'production' : 'development') },
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(prod ? 'production' : 'development'),
+    __BUILD_COMMIT__: JSON.stringify(commit), __BUILD_DATE__: JSON.stringify(built), __PATTERNFLY_VERSION__: JSON.stringify(patternfly),
+  },
 });
 await build({ ...web, entryPoints: { 'maskrom-worker': 'src/maskrom/worker.ts' }, outdir: 'build/renderer' });
 await build({ ...web, entryPoints: { 'woa-worker': 'src/woa/woa-worker.ts' }, outdir: 'build/renderer' });

@@ -20,12 +20,12 @@ describe('macOS device names', () => {
   });
   it('builds the helper arguments: raw device, size, prompt', () => {
     expect(rawdiskArgs('/dev/disk4', 1000, 'Generic STORAGE DEVICE'))
-      .toEqual(['/dev/rdisk4', '1000', 'WoA RK3576 Imager will erase Generic STORAGE DEVICE (disk4) and write the image to it.']);
+      .toEqual(['/dev/rdisk4', '1000', 'Maskrom Studio will erase Generic STORAGE DEVICE (disk4) and write the image to it.']);
     expect(() => rawdiskArgs('/dev/disk4', 0, '')).toThrow();
     expect(() => rawdiskArgs('/dev/disk4', 1.5, '')).toThrow();
   });
   it('keeps the prompt short and plain whatever the drive calls itself', () => {
-    expect(promptText('/dev/disk4', '')).toBe('WoA RK3576 Imager will erase disk4 and write the image to it.');
+    expect(promptText('/dev/disk4', '')).toBe('Maskrom Studio will erase disk4 and write the image to it.');
     const p = promptText('/dev/disk4', `Evil\n‮drive\0 ${'x'.repeat(200)}`);
     expect(p).toMatch(/^[\x20-\x7e]+$/);
     expect(p.length).toBeLessThan(130);
@@ -79,7 +79,7 @@ describe('the image stream', () => {
   });
 });
 
-// A stand-in for woa-rk3576-imager-rawdisk with the same arguments, streams and
+// A stand-in for maskrom-studio-rawdisk with the same arguments, streams and
 // exit statuses; its "disk" is a file.
 const work = mkdtempSync(join(tmpdir(), 'mac-write-test-'));
 afterAll(() => rmSync(work, { recursive: true, force: true }));
@@ -140,7 +140,7 @@ describe('writing through the rawdisk helper', () => {
     const r = await write('');
     expect(r.out).toEqual({ type: 'done', ok: true, sha256: sha });
     expect(r.unmounted).toEqual(['/dev/disk4']);
-    expect(r.started).toEqual(['/dev/rdisk4', String(data.length), 'WoA RK3576 Imager will erase Generic STORAGE DEVICE (disk4) and write the image to it.']);
+    expect(r.started).toEqual(['/dev/rdisk4', String(data.length), 'Maskrom Studio will erase Generic STORAGE DEVICE (disk4) and write the image to it.']);
     expect(r.progress).toEqual(['write', 'verify']);
     expect(Buffer.compare(readFileSync(disk), data)).toBe(0);
   });
