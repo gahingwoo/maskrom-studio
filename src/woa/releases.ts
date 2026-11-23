@@ -6,6 +6,7 @@
 
 import type { BoardId } from './boards';
 import { WOA_BOARDS } from './boards';
+import { pickRelease, type Channel } from '../shared/channel';
 
 export const FIRMWARE_REPO = 'gahingwoo/edk2-rk3576';
 export const WINPE_REPO = 'gahingwoo/woa-rk3576';
@@ -19,7 +20,7 @@ export interface ReleaseAsset {
 }
 
 export interface GithubAsset { name: string; size: number; browser_download_url: string; digest?: string | null }
-export interface GithubRelease { tag_name: string; name?: string; draft?: boolean; prerelease?: boolean; html_url?: string; assets: GithubAsset[] }
+export interface GithubRelease { tag_name: string; name?: string; body?: string | null; draft?: boolean; prerelease?: boolean; html_url?: string; target_commitish?: string; assets: GithubAsset[] }
 
 export function parseSums(text: string): Map<string, string> {
   const out = new Map<string, string>();
@@ -89,15 +90,17 @@ export function winpeRelease(rel: GithubRelease, sums: Map<string, string>): Win
 export type Fetch = (url: string, init?: { headers?: Record<string, string> }) => Promise<Response>;
 
 /** The latest release of `repo` and its SHA256SUMS.txt. */
-export async function latestRelease(repo: string, fetchFn: Fetch): Promise<{ rel: GithubRelease; sums: Map<string, string> }> {
-  const r = await fetchFn(`https://api.github.com/repos/${repo}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
+/** The release of `repo` that `channel` means (channel.ts), with its SHA256SUMS. */
+export async function tierRelease(repo: string, channel: Channel, fetchFn: Fetch): Promise<{ rel: GithubRelease; sums: Map<string, string> }> {
+  const r = await fetchFn(`https://api.github.com/repos/${repo}/releases?per_page=50`, { headers: { Accept: 'application/vnd.github+json' } });
   if (!r.ok) throw new Error(`GitHub answered ${r.status} for the ${repo} releases`);
-  const rel = await r.json() as GithubRelease;
-  const sumsAsset = rel.assets.find((a) => a.name === 'SHA256SUMS.txt');
+  const rel = pickRelease(await r.json() as GithubRelease[], channel);
+  if (!rel) throw new Error(channel === 'ci' ? `${repo} has no CI build release (tag ci)` : `${repo} has no ${channel} release`);
+  const sumsAsset = rel.assets.find((a) => a.name === 'SHA256SUMS.txt' || a.name === 'SHA256SUMS');
   let sums = new Map<string, string>();
   if (sumsAsset) {
     const s = await fetchFn(sumsAsset.browser_download_url);
-    if (!s.ok) throw new Error(`Downloading SHA256SUMS.txt of ${repo} ${rel.tag_name} failed: HTTP ${s.status}`);
+    if (!s.ok) throw new Error(`Downloading ${sumsAsset.name} of ${repo} ${rel.tag_name} failed: HTTP ${s.status}`);
     sums = parseSums(await s.text());
   }
   return { rel, sums };

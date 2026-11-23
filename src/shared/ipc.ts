@@ -19,10 +19,13 @@ export type JobResult = { ok: true; sha256: string } | { ok: false; reason: stri
 
 /** The latest edk2-rk3576 and woa-rk3576 releases, as far as they could be read. */
 export interface Releases {
-  firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>> } | null;
-  winpe: { tag: string; url: string | null; file: string; size: number } | null;
+  firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>>; tier: ReleaseTier } | null;
+  winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier } | null;
   problems: string[];
 }
+
+/** Which tier a release came from: asked for, used (CI falls back to Prerelease where there is no CI release), its label and commit. */
+export interface ReleaseTier { asked: 'stable' | 'prerelease' | 'ci'; used: 'stable' | 'prerelease' | 'ci'; label: string; commit: string | null }
 
 /** A file the main process serves to the Maskrom worker (app://local/file/<token>). */
 export interface Served {
@@ -203,8 +206,8 @@ export interface ImagerApi {
   releaseServed(token: string): Promise<void>;
   onUsbChoice(cb: (choices: { deviceId: string; productName?: string; productId: number }[]) => void): () => void;
   answerUsbChoice(deviceId: string): void;
-  getSettings(): Promise<{ updateCheck: boolean; betaUpdates?: boolean; resetAfterMaskrom: boolean }>;
-  setSettings(s: { updateCheck?: boolean; betaUpdates?: boolean; resetAfterMaskrom?: boolean }): Promise<void>;
+  getSettings(): Promise<{ updateCheck: boolean; appChannel: 'stable' | 'prerelease' | 'ci'; firmwareChannel: 'stable' | 'prerelease' | 'ci'; resetAfterMaskrom: boolean }>;
+  setSettings(s: { updateCheck?: boolean; appChannel?: 'stable' | 'prerelease' | 'ci'; firmwareChannel?: 'stable' | 'prerelease' | 'ci'; resetAfterMaskrom?: boolean }): Promise<void>;
   checkUpdate(force: boolean): Promise<UpdateCheck | null>;
   installUpdate?(): Promise<UpdateResult>;
   cancelUpdate?(): Promise<void>;

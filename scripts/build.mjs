@@ -18,7 +18,8 @@ rmSync('build', { recursive: true, force: true });
 // Native modules and those that load them stay in node_modules.
 const external = ['electron', 'drivelist', 'etcher-sdk', '@balena/sudo-prompt'];
 
-const node = { bundle: true, platform: 'node', target: 'node22', format: 'cjs', external, sourcemap: !prod, logLevel: 'warning' };
+const node = { bundle: true, platform: 'node', target: 'node22', format: 'cjs', external, sourcemap: !prod, logLevel: 'warning',
+  define: { __BUILD_COMMIT__: JSON.stringify(commit) } };
 await build({ ...node, entryPoints: ['src/main/main.ts'], outfile: 'build/main/main.js' });
 await build({ ...node, entryPoints: ['src/preload/preload.ts'], outfile: 'build/preload/preload.js' });
 await build({ ...node, entryPoints: ['src/helper/write-helper.ts'], outfile: 'build/helper/write-helper.js' });

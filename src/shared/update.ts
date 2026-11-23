@@ -51,6 +51,7 @@ export interface ReleaseAsset {
 
 export interface AppRelease {
   tag_name: string;
+  name?: string | null;
   html_url: string;
   draft?: boolean;
   /** On GitHub a pre-release of Maskrom Studio is a beta version. */
@@ -176,13 +177,13 @@ export function pickAsset(assets: ReleaseAsset[] | undefined, kind: InstallKind,
   const a64 = arch === 'arm64';
   const pattern: Partial<Record<InstallKind, RegExp>> = {
     dmg: a64 ? /-macos-arm64\.dmg$/ : /-macos-x86_64\.dmg$/,
-    windows: /-windows-x64-setup\.exe$/,
+    windows: a64 ? /-windows-arm64-setup\.exe$/ : /-windows-x64-setup\.exe$/,
     appimage: a64 ? /-linux-arm64\.AppImage$/ : /-linux-x86_64\.AppImage$/,
     deb: a64 ? /_arm64\.deb$/ : /_amd64\.deb$/,
     rpm: a64 ? /\.aarch64\.rpm$/ : /\.x86_64\.rpm$/,
   };
   const re = pattern[kind];
-  if (!re || (arch !== 'x64' && arch !== 'arm64') || (kind === 'windows' && a64)) return null;
+  if (!re || (arch !== 'x64' && arch !== 'arm64')) return null;
   return (assets ?? []).find((a) => typeof a?.name === 'string' && re.test(a.name) && !/[\\/]/.test(a.name)) ?? null;
 }
 
@@ -235,3 +236,24 @@ export type UpdateResult =
   | { ok: true; message: string; restart: boolean }
   /** `command`: what the user can run instead. */
   | { ok: false; reason: string; command?: string };
+
+/**
+ * What a release list means for the running copy in a tier (channel.ts).
+ * Stable and Prerelease compare versions, the rolling "ci" release left out;
+ * CI offers the ci release when it was built from another commit than this
+ * copy (`commit`, the build's).
+ */
+export function judgeChannel(current: string, commit: string, list: AppRelease[], o: { channel: 'stable' | 'prerelease' | 'ci'; kind: InstallKind; arch: string }): UpdateCheck {
+  if (o.channel !== 'ci') return judgeReleases(current, list.filter((r) => r?.tag_name !== 'ci'), { beta: o.channel === 'prerelease', kind: o.kind, arch: o.arch });
+  const ci = list.find((r) => r && !r.draft && r.tag_name === 'ci');
+  const built = ci ? (/\bCI build ([0-9a-f]{7,40})\b/i.exec(ci.name ?? '')?.[1] ?? /\bBuilt from ([0-9a-f]{7,40})\b/i.exec(ci.body ?? '')?.[1] ?? null) : null;
+  const same = !!built && !!commit && commit !== 'unknown' && (built.startsWith(commit) || commit.startsWith(built));
+  if (ci && built && !same) {
+    const asset = pickAsset(ci.assets, o.kind, o.arch);
+    return { state: 'newer', offer: {
+      version: `CI build ${built.slice(0, 7)}`, url: ci.html_url, beta: true, notes: whatsNew(ci.body), kind: o.kind,
+      asset: asset ? { name: asset.name, size: asset.size } : null,
+    } };
+  }
+  return { state: 'current', version: current, beta: true, newerBeta: null };
+}

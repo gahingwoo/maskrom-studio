@@ -29,7 +29,8 @@ import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restar
 import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
 import { boardHere, NO_MTD_HELP } from './board-here';
 import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './windows-image';
-import { firmwareRelease, FIRMWARE_REPO, latestRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type WinpeRelease } from '../woa/releases';
+import { firmwareRelease, FIRMWARE_REPO, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
+import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
 import { fileSource, type BoardJob } from '../helper/board-write';
 import { hostBuildFiles } from '../woa/host-build';
@@ -129,6 +130,26 @@ async function exclusive<T>(fn: (signal: AbortSignal) => Promise<T>, busy: T): P
 
 let firmware: FirmwareRelease | null = null;
 let winpe: WinpeRelease | null = null;
+/** What the page is told about each: the tier asked for, the tier used, the release's label and commit. */
+interface Tier { asked: Channel; used: Channel; label: string; commit: string | null }
+let firmwareTier: Tier | null = null;
+let winpeTier: Tier | null = null;
+
+/**
+ * The release of `repo` for `channel`. A repository without a CI release yet
+ * falls back to its Prerelease tier, and says so (used !== asked).
+ */
+async function tiered(repo: string, channel: Channel, fetchFn: (url: string, init?: { headers?: Record<string, string> }) => Promise<Response>):
+  Promise<{ rel: GithubRelease; sums: Map<string, string>; tier: Tier }> {
+  let used = channel;
+  let got;
+  try { got = await tierRelease(repo, channel, fetchFn); } catch (e) {
+    if (channel !== 'ci' || !/no CI build release/.test((e as Error).message)) throw e;
+    used = 'prerelease';
+    got = await tierRelease(repo, used, fetchFn);
+  }
+  return { ...got, tier: { asked: channel, used, label: releaseLabel(got.rel), commit: got.rel.tag_name === 'ci' ? ciCommit(got.rel) : null } };
+}
 
 // Unpackaged builds only, for the screenshots: made-up releases, no network.
 const FAKE_RELEASES = !app.isPackaged && process.env.WOA_IMAGER_FAKE_RELEASES === '1';
@@ -138,31 +159,37 @@ if (FAKE_RELEASES) {
     tspi3m: a('TaishanPi3M-emmc-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-emmc-edk2-0.4.1.img', 33554432), rock4d: a('ROCK4D-spi-edk2-0.4.1.img', 16777216),
   }, sdcard: { tspi3m: a('TaishanPi3M-sdcard-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-sdcard-edk2-0.4.1.img', 33554432) } };
   winpe = { tag: '0.1.1', url: null, problems: [], image: a('woa-rk3576-winpe-0.1.1.img.xz', 352252908) };
+  firmwareTier = { asked: 'stable', used: 'stable', label: '0.4.1', commit: null };
+  winpeTier = { asked: 'stable', used: 'stable', label: '0.1.1', commit: null };
 }
 
 ipcMain.handle('woa:releases', async (_e, force: boolean): Promise<Releases> => {
   const problems: string[] = [];
   if (FAKE_RELEASES) force = false;
   const fetchFn = (url: string, init?: { headers?: Record<string, string> }) => net.fetch(url, init);
-  if (!firmware || force) {
+  const channel = loadSettings().firmwareChannel;
+  if (!firmware || force || firmwareTier?.asked !== channel) {
     try {
-      const { rel, sums } = await latestRelease(FIRMWARE_REPO, fetchFn);
+      const { rel, sums, tier } = await tiered(FIRMWARE_REPO, channel, fetchFn);
       firmware = firmwareRelease(rel, sums);
-    } catch (e) { problems.push(`edk2-rk3576: ${(e as Error).message}`); }
+      firmwareTier = tier;
+    } catch (e) { problems.push(`edk2-rk3576: ${(e as Error).message}`); firmware = null; firmwareTier = null; }
   }
-  if (!winpe || force) {
+  if (!winpe || force || winpeTier?.asked !== channel) {
     try {
-      const { rel, sums } = await latestRelease(WINPE_REPO, fetchFn);
+      const { rel, sums, tier } = await tiered(WINPE_REPO, channel, fetchFn);
       winpe = winpeRelease(rel, sums);
-    } catch (e) { problems.push(`woa-rk3576: ${(e as Error).message}`); }
+      winpeTier = tier;
+    } catch (e) { problems.push(`woa-rk3576: ${(e as Error).message}`); winpe = null; winpeTier = null; }
   }
   return {
     firmware: firmware ? {
       tag: firmware.tag, url: firmware.url,
       boards: Object.fromEntries(Object.entries(firmware.images).map(([k, v]) => [k, { file: v!.file, size: v!.size }])),
       sdcard: Object.fromEntries(Object.entries(firmware.sdcard).map(([k, v]) => [k, { file: v!.file, size: v!.size }])),
+      tier: firmwareTier!,
     } : null,
-    winpe: winpe?.image ? { tag: winpe.tag, url: winpe.url, file: winpe.image.file, size: winpe.image.size } : null,
+    winpe: winpe?.image ? { tag: winpe.tag, url: winpe.url, file: winpe.image.file, size: winpe.image.size, tier: winpeTier! } : null,
     problems: [...problems, ...(firmware?.problems ?? []), ...(winpe?.problems ?? [])],
   };
 });
@@ -753,14 +780,16 @@ ipcMain.handle('cache:clear', (_e, o: { nvdata: boolean }) => {
 
 ipcMain.handle('settings:get', () => {
   const s = loadSettings();
-  return { updateCheck: s.updateCheck, betaUpdates: s.betaUpdates, resetAfterMaskrom: s.resetAfterMaskrom };
+  return { updateCheck: s.updateCheck, appChannel: s.appChannel, firmwareChannel: s.firmwareChannel, resetAfterMaskrom: s.resetAfterMaskrom };
 });
-ipcMain.handle('settings:set', (_e, patch: { updateCheck?: boolean; betaUpdates?: boolean; resetAfterMaskrom?: boolean }) => {
+ipcMain.handle('settings:set', (_e, patch: { updateCheck?: boolean; appChannel?: unknown; firmwareChannel?: unknown; resetAfterMaskrom?: boolean }) => {
   const s = loadSettings();
   saveSettings({
     ...s,
     ...(typeof patch.updateCheck === 'boolean' ? { updateCheck: patch.updateCheck } : {}),
-    ...(typeof patch.betaUpdates === 'boolean' ? { betaUpdates: patch.betaUpdates } : {}),
+    // A new tier for the app: the last check's offer was for the old one.
+    ...(isChannel(patch.appChannel) ? { appChannel: patch.appChannel, lastUpdateCheck: 0, knownRelease: null } : {}),
+    ...(isChannel(patch.firmwareChannel) ? { firmwareChannel: patch.firmwareChannel } : {}),
     ...(typeof patch.resetAfterMaskrom === 'boolean' ? { resetAfterMaskrom: patch.resetAfterMaskrom } : {}),
   });
 });

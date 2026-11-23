@@ -38,4 +38,8 @@ an entry by moving it to "Tested" with the date and what was seen.
 - **Windows arm64 package** (win-arm64-natives): drive list, SD card write
   and MaskROM on Windows on Arm.
 
+- **Release tiers** (release-tiers): Settings, firmware and WinPE on
+  Prerelease (0.3.0-tspi3m.1 era releases) and CI once edk2-rk3576 has a
+  `ci` release; the app updating itself from the `ci` release on each OS.
+
 ## Tested

@@ -16,6 +16,7 @@ import { TimesIcon } from '@patternfly/react-icons/dist/esm/icons/times-icon';
 import { formatBytes } from '../shared/format';
 import type { ImagerApi } from '../shared/ipc';
 import type { CacheInfo } from '../main/cache';
+import { CHANNELS, type Channel } from '../shared/channel';
 import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } from '../shared/update';
 import type { Theme } from './theme';
 import { useI18n } from './i18n';
@@ -275,9 +276,11 @@ function checkWords(c: UpdateCheck, t: T): string {
   return c.beta ? t('update.betaCurrent', { version: c.version }) : t('update.current', { version: c.version });
 }
 
-type AppSettings = { updateCheck: boolean; betaUpdates?: boolean; resetAfterMaskrom: boolean };
+type AppSettings = { updateCheck: boolean; appChannel: Channel; firmwareChannel: Channel; resetAfterMaskrom: boolean };
 
-export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdate, writing, onAbout }: {
+export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdate, writing, onAbout, onFirmwareChannel }: {
+  /** The firmware tier changed: the releases are read again. */
+  onFirmwareChannel?: () => void;
   open: boolean; onClose: () => void; theme: Theme; setTheme: (t: Theme) => void;
   /** Open About Maskrom Studio. */
   onAbout?: () => void;
@@ -326,8 +329,8 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
                 <Stack hasGutter id="updates">
                   <Switch id="set-update" label={t('settings.updateCheck')} isChecked={s.updateCheck}
                     onChange={(_e, v) => { set({ updateCheck: v }); }} />
-                  <Switch id="set-beta" label={t('settings.beta')} isChecked={s.betaUpdates === true}
-                    onChange={(_e, v) => { set({ betaUpdates: v }).then(checkNow); }} />
+                  <ChannelPicker id="app-channel" label={t('settings.appChannel')} value={s.appChannel}
+                    onChange={(c) => { set({ appChannel: c }).then(checkNow); }} />
                   <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
                     <FlexItem flex={{ default: 'flexNone' }}>
                       <Button variant="secondary" onClick={checkNow} isLoading={checking} isDisabled={checking}>{t('settings.checkNow')}</Button>
@@ -339,6 +342,11 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
                   </Flex>
                 </Stack>
               </FormGroup>
+            <FormGroup label={t('settings.fwChannel')} fieldId="fw-channel" role="group">
+              <ChannelPicker id="fw-channel" label={t('settings.fwChannel')} value={s.firmwareChannel}
+                onChange={(c) => { set({ firmwareChannel: c }).then(() => onFirmwareChannel?.()); }} />
+              <FormHelperText><HelperText><HelperTextItem>{t('settings.fwChannel.help')}</HelperTextItem></HelperText></FormHelperText>
+            </FormGroup>
             <Switch id="set-reset" label={t('settings.reset')} isChecked={s.resetAfterMaskrom}
               onChange={(_e, v) => { set({ resetAfterMaskrom: v }); }} />
             <FormGroup label={t('cache.label')} fieldId="cache" role="group">
@@ -478,5 +486,19 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** Stable / Prerelease / CI, with what the chosen one means. */
+function ChannelPicker({ id, label, value, onChange }: { id: string; label: string; value: Channel; onChange: (c: Channel) => void }) {
+  const { t } = useI18n();
+  return (
+    <Stack hasGutter>
+      <ToggleGroup aria-label={label} id={id}>
+        {CHANNELS.map((c) => <ToggleGroupItem key={c} text={t(`tier.${c}`)} isSelected={value === c} onChange={() => onChange(c)} />)}
+      </ToggleGroup>
+      {value === 'prerelease' && <Alert isInline isPlain variant="warning" title={t('tier.prerelease.desc')} />}
+      {value === 'ci' && <Alert isInline isPlain variant="custom" title={t('tier.ci.desc')} />}
+    </Stack>
   );
 }

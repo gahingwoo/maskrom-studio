@@ -11,7 +11,7 @@ import {
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import { formatBytes } from '../shared/format';
-import type { ArmbianChoice, FactoryChoice, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { ArmbianChoice, FactoryChoice, ReleaseTier, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
 import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WoaBoard } from '../woa/boards';
@@ -180,6 +180,21 @@ export function App() {
     return t(key) || s;
   });
   const checkText = (e: EditionInfo): string | null => (e.check.level === 'ok' ? null : t(`win.check.${e.check.code}`, e.check.vars));
+  // The tier a release came from (Settings): nothing for Stable, a word for the others.
+  const tierWord = (tr: ReleaseTier) => (tr.used === 'stable' ? '' : ` (${t(`tier.${tr.used}`)})`);
+  const tierNotice = (() => {
+    const list = [releases?.firmware && { repo: 'edk2-rk3576', tier: releases.firmware.tier }, releases?.winpe && { repo: 'woa-rk3576', tier: releases.winpe.tier }]
+      .filter((x): x is { repo: string; tier: ReleaseTier } => !!x && (x.tier.used !== 'stable' || x.tier.asked !== 'stable'));
+    if (list.length === 0) return null;
+    const ci = list.some((x) => x.tier.used === 'ci');
+    return (
+      <Alert isInline variant={ci ? 'custom' : 'warning'} title={t(ci ? 'tier.ci.title' : 'tier.prerelease.title')}>
+        <List>{list.map((x) => (
+          <ListItem key={x.repo}>{t(x.tier.asked !== x.tier.used ? 'tier.fallback' : `tier.${x.tier.used}.item`, { repo: x.repo, label: x.tier.label, commit: x.tier.commit ?? '' })}</ListItem>
+        ))}</List>
+      </Alert>
+    );
+  })();
   const errorText = (e: string) => (/^[a-z]+\.[a-z.]+$/.test(e) ? t(e) : msg(e));
 
   // The disk after the install (windows-layout.ts). Sizes are typed in GB (GiB); the preview uses the
@@ -410,7 +425,7 @@ export function App() {
     if (task === 'windows') {
       const ed = edition!;
       setRun({ title: t('run.staging'), log: [], confirm: null, result: null, stages: [
-        { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tag ?? '' }), percent: null },
+        { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
         { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
         ...(ssh || drivers ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
         { id: 'board', label: t('run.board'), percent: null },
@@ -431,7 +446,7 @@ export function App() {
       return;
     }
     setRun({ title: t('run.firmware'), log: [], confirm: null, result: null, stages: [
-      { id: 'fw', label: t('run.fw', { tag: releases?.firmware?.tag ?? '' }), percent: null },
+      { id: 'fw', label: t('run.fw', { tag: releases?.firmware?.tier.label ?? '' }), percent: null },
       { id: 'board', label: t('run.board'), percent: null },
       { id: 'write', label: t('run.writeTo', { storage: storageWord(board, task) }), percent: 0 },
       { id: 'check', label: t('run.check'), percent: null },
@@ -497,6 +512,7 @@ export function App() {
           <List>{releases.problems.map((p) => <ListItem key={p}>{msg(p)}</ListItem>)}</List>
         </Alert>
       )}
+      {tierNotice}
       <Form onSubmit={(e) => e.preventDefault()}>
         <FormGroup role="radiogroup" fieldId="task" label={t('task.label')} isStack>
           <Radio id="task-windows" name="task" label={t('task.windows.any')} isChecked={task === 'windows'} isDisabled={onBoard && !board.windows}
@@ -504,7 +520,7 @@ export function App() {
           {firmwareTargets(board).map((tg) => (
             <Radio key={tg.id} id={`task-${tg.id}`} name="task" label={fwText(board, tg, 'label')} isChecked={task === tg.id}
               onChange={() => setTask(tg.id as Task)}
-              description={`${fwText(board, tg, 'note')} ${fwRelease ? t('task.release', { tag: releases!.firmware!.tag, file: fwRelease.file }) : ''}`.trim()} />
+              description={`${fwText(board, tg, 'note')} ${fwRelease ? t('task.release', { tag: releases!.firmware!.tier.label, file: fwRelease.file }) : ''}`.trim()} />
           ))}
           {board.firmwareStorage === 'emmc' && (
             <Radio id="task-upgrade" name="task" label={t('task.upgrade')} isChecked={task === 'upgrade'} isDisabled={onBoard}
@@ -513,7 +529,7 @@ export function App() {
           {sdRelease && (
             <Radio id="task-uefi-sd" name="task" label={t('task.uefiSd')} isChecked={task === 'uefi-sd'} isDisabled={onBoard}
               onChange={() => { setTask('uefi-sd'); setStick(null); refreshDrives(); }}
-              description={`${t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.uefi`)} ${t('task.release', { tag: releases!.firmware!.tag, file: sdRelease.file })}`} />
+              description={`${t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.uefi`)} ${t('task.release', { tag: releases!.firmware!.tier.label, file: sdRelease.file })}`} />
           )}
           {ARMBIAN_RESTORE[board.id] && (
             <>
@@ -594,7 +610,7 @@ export function App() {
               </DescriptionList>
             )}
             <Flex spaceItems={{ default: 'spaceItemsMd' }}>
-              <FlexItem><Button variant="secondary" isDisabled={upgrade === 'loading' || !fwRelease} onClick={() => loadUpgrade('release')}>{t('upgrade.useRelease', { tag: releases?.firmware?.tag ?? '' })}</Button></FlexItem>
+              <FlexItem><Button variant="secondary" isDisabled={upgrade === 'loading' || !fwRelease} onClick={() => loadUpgrade('release')}>{t('upgrade.useRelease', { tag: releases?.firmware?.tier.label ?? '' })}</Button></FlexItem>
               <FlexItem><Button variant="secondary" isDisabled={upgrade === 'loading'} onClick={() => loadUpgrade('file')}>{t('upgrade.useFile')}</Button></FlexItem>
             </Flex>
             <Switch id="keep-settings" label={t('upgrade.keep')} isChecked={keepSettings} onChange={(_e, v) => setKeepSettings(v)} />
@@ -898,7 +914,7 @@ export function App() {
     if (task === 'windows') {
       reviewRows = reviewRows.concat(([
         [t('review.windows'), edition ? t('review.windows.value', { edition: edition.name, build: `${edition.build}${edition.spBuild ? `.${edition.spBuild}` : ''}`, file: windows!.fileName }) : t('review.notChosen')],
-        [t('review.winpe'), releases?.winpe ? `woa-rk3576 ${releases.winpe.tag} (${releases.winpe.file})` : t('review.unavailable')],
+        [t('review.winpe'), releases?.winpe ? `woa-rk3576 ${releases.winpe.tier.label} (${releases.winpe.file})${tierWord(releases.winpe.tier)}` : t('review.unavailable')],
         [t('review.setup'), skip ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
         [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
@@ -935,7 +951,7 @@ export function App() {
       reviewRows = reviewRows.concat([
         [t('review.written'), task === 'armbian'
           ? (armbianFound ? `${t('review.restore.armbian', { version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.drive.written.armbian')}` : t('review.unavailable'))
-          : (sdRelease ? t('review.drive.written.uefi', { tag: releases!.firmware!.tag, file: sdRelease.file }) : t('review.unavailable'))],
+          : (sdRelease ? t('review.drive.written.uefi', { tag: releases!.firmware!.tier.label, file: sdRelease.file }) : t('review.unavailable'))],
         [t('review.erased'), drive ? t('review.stick.erased', { drive }) : t('review.drive.choose')],
         [t('review.checked'), t('review.stick.checked')],
         [t('review.then'), t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.${task === 'armbian' ? 'armbian' : 'uefi'}`)],
@@ -956,7 +972,7 @@ export function App() {
       goLabel = t('go.connect');
     } else if (task === 'stick') {
       reviewRows = reviewRows.concat([
-        [t('review.written'), releases?.winpe ? t('review.stick.written', { tag: releases.winpe.tag, file: releases.winpe.file }) : t('review.unavailable')],
+        [t('review.written'), releases?.winpe ? t('review.stick.written', { tag: releases.winpe.tier.label, file: releases.winpe.file }) : t('review.unavailable')],
         [t('review.erased'), stick ? t('review.stick.erased', { drive: drives?.find((x) => x.device === stick)?.description ?? stick }) : t('review.stick.choose')],
         [t('review.checked'), t('review.stick.checked')],
       ]);
@@ -965,7 +981,7 @@ export function App() {
     } else {
       const tg = firmwareTargets(board).find((x) => x.id === task)!;
       reviewRows = reviewRows.concat([
-        [t('review.firmware'), fwRelease ? `edk2-rk3576 ${releases!.firmware!.tag}, ${fwRelease.file}` : t('review.unavailable')],
+        [t('review.firmware'), fwRelease ? `edk2-rk3576 ${releases!.firmware!.tier.label}, ${fwRelease.file}${tierWord(releases!.firmware!.tier)}` : t('review.unavailable')],
         [t('review.written'), tg.slice ? t('review.fw.slice', { a: tg.slice[0], b: tg.slice[1], lba: tg.lba }) : t('review.fw.whole', { lba: tg.lba })],
         [t('review.erased'), fwText(board, tg, 'erases')],
         [t('review.checked'), onBoard ? t('review.checked.fw.here') : t('review.checked.fw.maskrom')],
@@ -1148,7 +1164,7 @@ export function App() {
       </Modal>
       <SettingsModal open={settings} onClose={() => setSettings(false)} theme={theme} setTheme={setTheme}
         onOffer={(o) => setOffer(o)} onUpdate={() => { setSettings(false); setUpdating(true); }} writing={!!run && !run.result}
-        onAbout={() => { setSettings(false); setAbout(true); }} />
+        onAbout={() => { setSettings(false); setAbout(true); }} onFirmwareChannel={() => api.releases(true).then(setReleases)} />
       <AboutModal open={about} onClose={() => setAbout(false)} />
       {updating && <UpdateModal offer={offer} onClose={() => setUpdating(false)} />}
     </Shell>
