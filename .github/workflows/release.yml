@@ -302,6 +302,10 @@ jobs:
           npm install -g node-gyp@13.1.0
           GYP="$(npm root -g)/node-gyp/bin/node-gyp.js"
           node "$GYP" --version
+          # lzma-native ships liblzma.dll for x64 and x86 only: an arm64 one from vcpkg.
+          /c/vcpkg/vcpkg.exe install liblzma:arm64-windows
+          ls /c/vcpkg/installed/arm64-windows/bin/
+          node scripts/lzma-native-win-arm64.mjs "$(ls /c/vcpkg/installed/arm64-windows/bin/*lzma*.dll | head -1)"
           for d in drivelist mountutils lzma-native @ronomon/direct-io; do
             echo "::group::$d"
             (cd "node_modules/$d" && node "$GYP" rebuild --arch=arm64)
