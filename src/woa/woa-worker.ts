@@ -19,6 +19,9 @@ import { readVhd } from './vhd';
 import { extentSource, type Extent } from './udf';
 import type { ByteSource } from './pieces';
 import type { SetupOptions } from './setup-files';
+import { planFactoryRegions, planWhole } from './restore-plan';
+import { readUpdateImage } from './rkfw';
+import { TRUSTED_READ_BYTES } from './maskrom-regions';
 
 export interface FileRef { url: string; size: number }
 
@@ -30,7 +33,11 @@ export type WoaJob =
       setup: SetupOptions; extras: Array<{ path: string; data: Uint8Array }> }
   | { kind: 'firmware'; boardId: string; targetId: string; image: FileRef; spotCheck: boolean; resetAfter: boolean }
   /** A finished Windows built on a Windows PC into a VHD (host-build.ts), for the eMMC. */
-  | { kind: 'vhd'; boardId: string; vhd: FileRef; spotCheck: boolean; resetAfter: boolean };
+  | { kind: 'vhd'; boardId: string; vhd: FileRef; spotCheck: boolean; resetAfter: boolean }
+  /** A whole-disk image (Armbian) from sector 0: replaces everything on the eMMC. */
+  | { kind: 'whole'; boardId: string; image: FileRef; label: string; resetAfter: boolean }
+  /** A factory update.img: its partition table, loader and partitions. */
+  | { kind: 'factory'; boardId: string; image: FileRef; resetAfter: boolean };
 
 export type WoaWorkerRequest =
   | { type: 'woa-start'; moduleUrl: string; wasmUrl: string; loaderUrl: string; job: WoaJob; reconnectTimeout?: number }
@@ -137,6 +144,33 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
             if (e instanceof StageError) return { stop: e.message };
             throw e;
           }
+        },
+        confirm,
+      }, hooks);
+    } else if (job.kind === 'whole') {
+      const image = xhrSource(job.image.url, job.image.size);
+      result = await writeRegions(runner, {
+        loader, readHead: false, spotCheck: true, resetAfter: job.resetAfter, checkHeadBytes: TRUSTED_READ_BYTES,
+        ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
+        plan: async (p) => planWhole(image, job.label, p.capacity),
+        confirm,
+      }, hooks);
+    } else if (job.kind === 'factory') {
+      const file = xhrSource(job.image.url, job.image.size);
+      const pkg = readUpdateImage(file);
+      const before: NonNullable<Parameters<typeof writeRegions>[1]['before']> = [];
+      result = await writeRegions(runner, {
+        loader, readHead: false, spotCheck: true, resetAfter: job.resetAfter, checkHeadBytes: TRUSTED_READ_BYTES, before,
+        ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
+        plan: async (p) => {
+          const r = planFactoryRegions(file, pkg, p.capacity);
+          if ('stop' in r) return r;
+          // As RKDevTool's "Upgrade Firmware": the partition table from parameter.txt, then the loader, then the partitions.
+          before.push(
+            { what: 'Writing the partition table', files: [{ name: 'parameter.txt', data: r.parameter }], args: ([f]) => ['gpt', f] },
+            { what: 'Writing the boot loader', files: [{ name: 'MiniLoaderAll.bin', data: r.loader }], args: ([f]) => ['ul', f] },
+          );
+          return { regions: r.regions, summary: r.summary };
         },
         confirm,
       }, hooks);

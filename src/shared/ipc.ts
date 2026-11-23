@@ -64,6 +64,37 @@ export interface WindowsChoice {
   editions: EditionInfo[];
 }
 
+/** Armbian's current minimal image for a board and kernel branch, as its .sha, .asc and file name say. */
+export interface ArmbianChoice {
+  branch: 'vendor' | 'edge';
+  file: string;
+  /** Compressed (.img.xz) size. */
+  size: number;
+  version: string;
+  kernel: string;
+  distro: string;
+  variant: string;
+  /** Date of Armbian's signature. */
+  signed: string | null;
+}
+
+/** A factory update.img the user chose, as read on this computer. */
+export interface FactoryChoice {
+  token: string;
+  fileName: string;
+  size: number;
+  chip: string;
+  loaderChip: string | null;
+  model: string;
+  manufacturer: string;
+  version: string;
+  released: string;
+  hasMd5: boolean;
+  partitions: Array<{ name: string; lba: number | null; bytes: number; sparse: boolean }>;
+  /** Why it cannot be written to this board, or null. */
+  refuse: string | null;
+}
+
 export interface DriverFolder { token: string; name: string; files: number; bytes: number; infs: number }
 
 export interface BoardHereInfo {
@@ -112,6 +143,14 @@ export interface ImagerApi {
   dropWindows(file: File): Promise<WindowsChoice | { error: string }>;
   /** Read the whole image once for its SHA-256, which the board checks again. */
   hashWindows(token: string): Promise<{ sha256: string } | { error: string }>;
+  /** Armbian's current image for the board: name, kernel, date (only its .sha and .asc are downloaded). */
+  findArmbian(board: BoardId, branch: 'vendor' | 'edge'): Promise<ArmbianChoice | { error: string }>;
+  /** Download it, check SHA-256 and signature, decompress it, and serve it. */
+  prepareArmbian(board: BoardId, branch: 'vendor' | 'edge'): Promise<Served | { error: string }>;
+  /** Choose a factory update.img (dialog) and read it. */
+  pickFactory(): Promise<FactoryChoice | { error: string } | null>;
+  /** Check its MD5 and serve it. */
+  prepareFactory(token: string): Promise<Served | { error: string }>;
   /** Serve the chosen Windows file to the Maskrom worker. */
   serveWindows(token: string): Promise<Served | { error: string }>;
   /** Choose a folder of extra driver packages (wddm-mali-g52, gt9271, ...). Errors are translation keys or messages. */

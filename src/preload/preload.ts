@@ -19,6 +19,10 @@ const api: ImagerApi = {
   // Only the preload script can tell where a dropped file is.
   dropWindows: (file) => ipcRenderer.invoke('woa:drop-windows', webUtils.getPathForFile(file)),
   hashWindows: (token) => ipcRenderer.invoke('woa:hash-windows', token),
+  findArmbian: (board, branch) => ipcRenderer.invoke('restore:find-armbian', board, branch),
+  prepareArmbian: (board, branch) => ipcRenderer.invoke('restore:prepare-armbian', board, branch),
+  pickFactory: () => ipcRenderer.invoke('restore:pick-factory'),
+  prepareFactory: (token) => ipcRenderer.invoke('restore:prepare-factory', token),
   serveWindows: (token) => ipcRenderer.invoke('woa:serve-windows', token),
   boardHere: () => ipcRenderer.invoke('woa:board-here'),
   pickDrivers: () => ipcRenderer.invoke('woa:pick-drivers'),

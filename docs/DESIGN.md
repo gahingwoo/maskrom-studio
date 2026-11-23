@@ -364,6 +364,69 @@ Enterprise 23H2 arm64; its 23H2 Consumer media is x64 only), UUP dump
 checked), and Microsoft's own ARM64 ISO page, marked unsuitable: it offers
 only the current release (26H2 on that date).
 
+## Putting the board back: Armbian or a factory image
+
+Both replace everything on the eMMC (Windows, the UEFI firmware and its
+saved settings), over MaskROM only: from the board itself they would
+overwrite the system that is running. Going back to Windows is the
+existing flow (UEFI firmware "whole image", then Windows).
+
+**Armbian** (`src/woa/armbian-restore.ts`, `src/main/restore.ts`). Both
+boards are official Armbian boards (lckfb-taishanpi-3m, armsom-cm5-io)
+with vendor and edge images. The app asks Armbian's redirector,
+`https://dl.armbian.com/<board>/Trixie_<vendor|edge>_minimal`, for the
+image's `.sha` and `.asc` (the redirector serves both next to the image)
+and for its size with a HEAD request; the redirect target (GitHub
+releases of armbian/community, or the mirror Armbian picks for the user's
+region) is not trusted for anything. The file name in the `.sha` gives
+the Armbian version, kernel and distribution, and must be the board's and
+the branch's. The download is checked against the `.sha`'s SHA-256 as it
+arrives (release-download.ts, also for a cached copy), then against the
+detached OpenPGP signature with Igor Pecovnik's key
+DF00FAF1C577104B50BF1D0093D6889F9F0E78D5, pinned in the source
+(`src/shared/openpgp.ts`: v4 RSA signatures over binary data, no gpg
+needed; tested against the real trunk.137 image on 2026-11-23). A copy
+that fails is deleted. It is then decompressed into the cache (one image
+kept) and written from sector 0 with its own U-Boot; the last 33 sectors
+of the eMMC (the old GPT backup) are zeroed so no tool finds a stale table.
+The minimal (command line) image is used: it is the smallest, and the
+desktop can be added from Armbian's own tools.
+
+**Factory image** (`src/woa/rkfw.ts`). The app does not download vendor
+images: LCKFB ships them through a cloud drive, ArmSoM through its
+documentation site, and redistribution is not ours to decide. The user
+chooses an `update.img`: the RKFW header (chip field "6753" = RK3576, as
+in rk3576_spl_loader.bin), the loader inside it (RKBOOT, its chip too),
+the RKAF archive and its parameter.txt are read, and the package is
+refused for another chip, a part larger than its partition, or a part
+reaching past the file. The MD5 the packer appends is checked before
+writing. The rkdeveloptool built here (jjm2473/rktool-webusb) has no `uf`
+(UpgradeFirmware) command, so the write does what RKDevTool's "Upgrade
+Firmware" does, step by step: `gpt parameter.txt` (the partition table),
+`ul` with the package's loader (the IDBlock at sector 64), then `wl` of
+each partition image at the sector parameter.txt gives it (wl expands
+sparse images itself). This path has not been run on a board yet; the
+page says so.
+
+**Checks.** The whole first 32 MiB of what was written is read back and
+compared (`checkHeadBytes` in maskrom-regions.ts); past 32 MiB only
+samples are read, and a sample that comes back as 0xCC filler or differs
+is reported, not counted as a failure, because this loader's reads past
+32 MiB are not trustworthy. Nothing claims a full read-back.
+
+## Shared with Roxora Imager
+
+Written without the board list, to be offered to roxora-os/imager:
+`src/shared/openpgp.ts` (detached signature check),
+`src/woa/rkfw.ts` (update.img reader and plan),
+the `before` and `checkHeadBytes` options of `src/woa/maskrom-regions.ts`
+(Roxora's maskrom/sequence.ts would need the same two hooks), and
+`planWhole` in `src/woa/restore-plan.ts` (a whole-disk image with the old
+GPT backup cleared). The streaming download with SHA-256 and the xz
+decompression are already Roxora's (release-download.ts, images.ts).
+Not shared: the Armbian board list and key (`armbian-restore.ts`), the
+image vetting policy for Windows, and the page.
+
 ## Languages
 
 The page is in English and Simplified Chinese, following the system

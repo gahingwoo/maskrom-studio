@@ -46,6 +46,13 @@ Status: first version, not yet run on hardware. See
 - **On the board itself.** Run the app under Linux on the board (booted
   from an SD card or USB drive) and it writes that board's eMMC or SPI NOR
   directly, no second computer.
+- **Back to Linux.** Armbian's own image for the TaishanPi 3M or CM5-IO
+  (vendor or mainline kernel), downloaded from Armbian, checked against
+  its SHA-256 and Armbian's OpenPGP signature, and written over the whole
+  eMMC; or a factory `update.img` you downloaded from the board maker
+  (the app reads it, refuses one for another chip, and writes it as
+  RKDevTool's "Upgrade Firmware" does; not yet run on a board). Both
+  replace Windows and the UEFI firmware.
 - **The WinPE stick.** woa-rk3576's WinPE image on a USB drive, for the
   procedure in woa-rk3576's
   [INSTALL.md](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/INSTALL.md).

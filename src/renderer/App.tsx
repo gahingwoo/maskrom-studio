@@ -11,7 +11,7 @@ import {
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import { formatBytes } from '../shared/format';
-import type { BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { ArmbianChoice, FactoryChoice, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
 import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WoaBoard } from '../woa/boards';
@@ -22,9 +22,10 @@ import { accountProblem, DEFAULT_SETUP, OPENSSH, sshKeyProblem, type Account, ty
 import { api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal } from './common';
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
+import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
 import { applyTheme, readTheme, type Theme } from './theme';
 
-type Task = 'windows' | 'uefi' | 'uefi-keep' | 'stick';
+type Task = 'windows' | 'uefi' | 'uefi-keep' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
 type Dest = 'emmc' | 'sd' | 'nvme';
 type Method = 'stage' | 'host';
@@ -38,10 +39,12 @@ interface Run {
   title: string;
   stages: Stage[];
   log: string[];
-  confirm: StageSummary | FirmwareSummary | null;
+  confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | null;
   result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[] } | null;
 }
 interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }> }
+interface WholeSummary { kind: 'whole'; label: string; capacity: number | null; bytes: number; clearsBackupGpt: boolean }
+interface FactorySummary { kind: 'factory'; capacity: number | null; chip: string; model: string; version: string; partitions: Array<{ name: string; lba: number; bytes: number }>; skipped: string[]; bytes: number }
 interface FirmwareSummary { kind: 'firmware'; board: string; target: string; lba: number; bytes: number; capacity: number | null; dropped: Array<{ name: string; bytes: number }>; erases: string }
 
 const EMPTY_ACCOUNT: Account = { user: '', password: '', computerName: '', locale: '', keyboard: '', timeZone: '', autoLogonAlways: false };
@@ -112,6 +115,11 @@ export function App() {
   const [method, setMethod] = useState<Method>('stage');
   const [disk, setDisk] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
+  const [understood, setUnderstood] = useState(false);
+  const [branch, setBranch] = useState<ArmbianBranch>('vendor');
+  const [armbian, setArmbian] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
+  const [factory, setFactory] = useState<FactoryChoice | null>(null);
+  const [factoryError, setFactoryError] = useState<string | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const [settings, setSettings] = useState(false);
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
@@ -135,6 +143,14 @@ export function App() {
   }, []);
 
   const board = boardId ? woaBoard(boardId)! : null;
+  const restoreTask = task === 'armbian' || task === 'factory';
+  useEffect(() => {
+    if (task !== 'armbian' || !boardId || !ARMBIAN_RESTORE[boardId]) return;
+    let live = true;
+    setArmbian('looking');
+    api.findArmbian(boardId, branch).then((r) => { if (live) setArmbian(r); });
+    return () => { live = false; };
+  }, [task, boardId, branch]);
   const onBoard = via === 'here' && !!here?.boardId && here.boardId === boardId;
   const edition = windows?.editions.find((e) => e.index === index) ?? null;
   const fwRelease = releases?.firmware && boardId ? releases.firmware.boards[boardId] : undefined;
@@ -205,9 +221,10 @@ export function App() {
       let text: string | undefined;
       if ('checks' in r && r.checks) {
         const c = r.checks;
-        text = c.matched === c.samples
+        const head = c.headBytes ? `${t('result.samples.head', { size: formatBytes(c.headBytes) })} ` : '';
+        text = head + (c.matched === c.samples
           ? t('result.samples.all', { n: c.samples })
-          : t('result.samples.some', { m: c.matched, n: c.samples, k: c.filler + c.unsure, filler: c.filler ? t('result.samples.filler', { n: c.filler }) : '' });
+          : t('result.samples.some', { m: c.matched, n: c.samples, k: c.filler + c.unsure, filler: c.filler ? t('result.samples.filler', { n: c.filler }) : '' }));
       }
       return { ok: true, title: okTitle, ...(text ? { text } : {}), ...(next ? { next } : {}) };
     }
@@ -239,7 +256,7 @@ export function App() {
     if ('error' in loader) { finish({ ok: false, title: t('result.loader'), detail: loader.error }); return; }
     const settingsNow = await api.getSettings();
     const job = jobFor(served, extraFiles);
-    if (job.kind === 'firmware') job.resetAfter = settingsNow.resetAfterMaskrom;
+    if (job.kind === 'firmware' || job.kind === 'whole' || job.kind === 'factory') job.resetAfter = settingsNow.resetAfterMaskrom;
     const w = new Worker('woa-worker.js', { type: 'module' });
     worker.current = w;
     const at = (p: string) => new URL(p, document.baseURI).href;
@@ -254,11 +271,12 @@ export function App() {
       } else if (m.type === 'progress') {
         setStage('write', { percent: Math.min(100, Math.floor((m.done * 100) / Math.max(1, m.total))), note: t('run.of', { done: formatBytes(m.done), total: formatBytes(m.total) }) });
       } else if (m.type === 'planned') {
-        update((r) => ({ ...r, confirm: m.summary as StageSummary | FirmwareSummary }));
+        update((r) => ({ ...r, confirm: m.summary as Run['confirm'] }));
       } else if (m.type === 'result') {
         w.terminate();
         worker.current = null;
-        finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc') : t('result.firmware'),
+        finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
+          : job.kind === 'whole' ? t('result.restore.armbian') : job.kind === 'factory' ? t('result.restore.factory') : t('result.firmware'),
           job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined));
         if (m.result.ok) update((r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, percent: 100 })) }));
       }
@@ -302,6 +320,21 @@ export function App() {
       setRun({ title: t('run.stagingDisk'), log: [], confirm: null, result: null, stages: [{ id: 'write', label: t('run.stagingDisk.stage'), percent: 0 }] });
       const r = await withProgress('write', () => api.writeBoard({ kind: 'stage-disk', ...req, target: dest as 'sd' | 'nvme', device: disk! }));
       finish(resultOf(r, t('result.stagedDisk'), [t(`next.disk.${dest}`), t('next.disk.boot'), ...STAGE_NEXT.slice(1)]));
+      return;
+    }
+    if (restoreTask) {
+      const isArmbian = task === 'armbian';
+      const what = isArmbian && armbian && typeof armbian === 'object' && 'file' in armbian ? armbian.file : factory?.fileName ?? '';
+      setRun({ title: t('run.restore', { what }), log: [], confirm: null, result: null, stages: [
+        { id: 'img', label: isArmbian ? t('run.restore.armbian') : t('run.restore.factory'), percent: null },
+        { id: 'board', label: t('run.board'), percent: null },
+        { id: 'write', label: t('run.writeTo', { storage: t('storage.emmc') }), percent: 0 },
+        { id: 'check', label: t('run.check'), percent: null },
+      ] });
+      await startMaskrom((sv) => (isArmbian
+        ? { kind: 'whole', boardId: board.id, image: { url: sv.img.url, size: sv.img.size }, label: 'The Armbian image', resetAfter: true }
+        : { kind: 'factory', boardId: board.id, image: { url: sv.img.url, size: sv.img.size }, resetAfter: true }),
+      [{ id: 'img', get: () => (isArmbian ? api.prepareArmbian(board.id, branch) : api.prepareFactory(factory!.token)) }], null);
       return;
     }
     if (onBoard) {
@@ -381,6 +414,8 @@ export function App() {
                 if (b.id !== here?.boardId) setVia('maskrom');
                 if (task === 'windows' && !b.windows) setTask(null);
                 if (task === 'uefi-keep' && b.firmwareStorage !== 'emmc') setTask(null);
+                if ((task === 'armbian' || task === 'factory') && !ARMBIAN_RESTORE[b.id]) setTask(null);
+                setFactory(null);
               }} />
           ))}
         </FormGroup>
@@ -411,6 +446,14 @@ export function App() {
               onChange={() => setTask(tg.id as Task)}
               description={`${fwText(board, tg, 'note')} ${fwRelease ? t('task.release', { tag: releases!.firmware!.tag, file: fwRelease.file }) : ''}`.trim()} />
           ))}
+          {ARMBIAN_RESTORE[board.id] && (
+            <>
+              <Radio id="task-armbian" name="task" label={t('task.armbian')} isChecked={task === 'armbian'} isDisabled={onBoard}
+                onChange={() => setTask('armbian')} description={onBoard ? t('task.restore.here') : t('task.armbian.desc')} />
+              <Radio id="task-factory" name="task" label={t('task.factory')} isChecked={task === 'factory'} isDisabled={onBoard}
+                onChange={() => setTask('factory')} description={onBoard ? t('task.restore.here') : t('task.factory.desc')} />
+            </>
+          )}
           {board.windows && (
             <Radio id="task-stick" name="task" label={t('task.stick')} isChecked={task === 'stick'} isDisabled={onBoard}
               onChange={() => { setTask('stick'); refreshDrives(); }} description={t('task.stick.desc')} />
@@ -445,6 +488,74 @@ export function App() {
       )}
     </StepPage>
   );
+
+  const armbianFound = armbian && typeof armbian === 'object' && 'file' in armbian ? armbian : null;
+  const factoryLink = board?.id === 'cm5io' ? 'https://docs.armsom.org/armsom-cm5-io'
+    : lang === 'en' ? 'https://wiki.lckfb.com/en/tspi-3-rk3576/img-download/finished-image.html' : 'https://wiki.lckfb.com/zh-hans/tspi-3-rk3576/img-download/finished-image.html';
+  const chooseFactory = async () => {
+    setFactoryError(null);
+    const r = await api.pickFactory();
+    if (!r) return;
+    if ('error' in r) { setFactory(null); setFactoryError(errorText(r.error)); return; }
+    setFactory(r);
+  };
+  const restoreStep = board && (
+    <StepPage title={t('step.restore')} lead={t('restore.lead')}>
+      {task === 'armbian' && (
+        <>
+          <Form onSubmit={(e) => e.preventDefault()}>
+            <FormGroup role="radiogroup" fieldId="branch" label={t('restore.branch')} isStack>
+              <Radio id="branch-vendor" name="branch" label={t('restore.vendor')} isChecked={branch === 'vendor'} onChange={() => setBranch('vendor')} description={t('restore.vendor.desc')} />
+              <Radio id="branch-edge" name="branch" label={t('restore.edge')} isChecked={branch === 'edge'} onChange={() => setBranch('edge')} description={t('restore.edge.desc')} />
+            </FormGroup>
+          </Form>
+          {armbian === 'looking' && <Content component="p">{t('restore.looking')}</Content>}
+          {armbian && typeof armbian === 'object' && 'error' in armbian && <Alert isInline variant="danger" title={msg(armbian.error)} />}
+          {armbianFound && (
+            <DescriptionList isCompact isHorizontal aria-label={t('restore.found')}>
+              {([
+                [t('restore.file'), armbianFound.file],
+                [t('restore.version'), armbianFound.version],
+                [t('restore.kernel'), `${armbianFound.kernel} (${armbianFound.branch})`],
+                [t('restore.distro'), `Debian ${armbianFound.distro}, ${armbianFound.variant}`],
+                [t('restore.signed'), armbianFound.signed ?? '?'],
+                [t('restore.download'), formatBytes(armbianFound.size)],
+              ] as Array<[string, string]>).map(([k, v]) => (
+                <DescriptionListGroup key={k}><DescriptionListTerm>{k}</DescriptionListTerm><DescriptionListDescription>{v}</DescriptionListDescription></DescriptionListGroup>
+              ))}
+            </DescriptionList>
+          )}
+          <Content component="p">{t('restore.checks')}</Content>
+          <Content component="p"><Button variant="link" isInline component="a" href={ARMBIAN_RESTORE[board.id]!.page} target="_blank">{t('restore.armbianPage')}</Button></Content>
+        </>
+      )}
+      {task === 'factory' && (
+        <>
+          <Content component="p">{t(`restore.factory.${board.id === 'cm5io' ? 'cm5io' : 'tspi3m'}`)}{' '}
+            <Button variant="link" isInline component="a" href={factoryLink} target="_blank">{t('restore.factory.where')}</Button></Content>
+          <Alert isInline variant="custom" title={t('restore.factory.untested')}>{t('restore.factory.untestedText')}</Alert>
+          <Flex><FlexItem><Button variant="secondary" onClick={chooseFactory}>{t('restore.factory.choose')}</Button></FlexItem></Flex>
+          {factoryError && <Alert isInline variant="danger" title={factoryError} />}
+          {factory && (
+            <DescriptionList isCompact isHorizontal aria-label={t('restore.factory.choose')}>
+              {([
+                [t('restore.file'), `${factory.fileName}, ${formatBytes(factory.size)}`],
+                [t('restore.factory.chip'), factory.loaderChip && factory.loaderChip !== factory.chip ? `${factory.chip} (loader ${factory.loaderChip})` : factory.chip],
+                [t('restore.factory.model'), [factory.manufacturer, factory.model].filter(Boolean).join(' ') || '?'],
+                [t('restore.factory.version'), `${factory.version}, ${factory.released}`],
+                [t('restore.factory.parts'), factory.partitions.map((p) => `${p.name} (${formatBytes(p.bytes)})`).join(', ')],
+                [t('restore.factory.md5'), factory.hasMd5 ? t('restore.factory.md5.yes') : t('restore.factory.md5.no')],
+              ] as Array<[string, string]>).map(([k, v]) => (
+                <DescriptionListGroup key={k}><DescriptionListTerm>{k}</DescriptionListTerm><DescriptionListDescription>{v}</DescriptionListDescription></DescriptionListGroup>
+              ))}
+            </DescriptionList>
+          )}
+          {factory?.refuse && <Alert isInline variant="danger" title={t('restore.factory.refused')}>{msg(factory.refuse)}</Alert>}
+        </>
+      )}
+    </StepPage>
+  );
+  const restoreReady = task === 'armbian' ? !!armbianFound : task === 'factory' ? !!factory && !factory.refuse : true;
 
   // What was read from the chosen image, before anything is written.
   const windowsFound = (w: WindowsChoice) => {
@@ -631,6 +742,17 @@ export function App() {
       if (dest !== 'emmc' && !disk) why = t('review.disk.choose');
       if (!destOk) why = t('host.macDisk');
       goLabel = onBoard || dest !== 'emmc' || method === 'host' ? t('go.erase') : t('go.connect');
+    } else if (restoreTask) {
+      reviewRows = reviewRows.concat([
+        [t('review.written'), task === 'armbian'
+          ? (armbianFound ? `${t('review.restore.armbian', { version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.restore.written.armbian')}` : t('review.unavailable'))
+          : (factory ? `${t('review.restore.factory', { file: factory.fileName, chip: factory.chip, model: factory.model, version: factory.version })}. ${t('review.restore.written.factory', { n: factory.partitions.filter((p) => p.lba !== null).length })}` : t('review.notChosen'))],
+        [t('review.erased'), t('review.restore.erased')],
+        [t('review.checked'), t('review.restore.checked')],
+        [t('review.then'), task === 'armbian' ? t('review.restore.then.armbian') : t('review.restore.then.factory')],
+      ]);
+      if (!restoreReady) why = task === 'armbian' ? t('why.restore.armbian') : t('why.restore.factory');
+      goLabel = t('go.connect');
     } else if (task === 'stick') {
       reviewRows = reviewRows.concat([
         [t('review.written'), releases?.winpe ? t('review.stick.written', { tag: releases.winpe.tag, file: releases.winpe.file }) : t('review.unavailable')],
@@ -686,7 +808,20 @@ export function App() {
 
   const windowsNeeded = task === 'windows';
   const c = run?.confirm;
-  const confirmText = c && (c.kind === 'stage' ? (
+  const confirmText = c && (c.kind === 'whole' ? (
+    <Review rows={[
+      [t('confirm.write'), t('confirm.restore.whole', { label: armbianFound?.file ?? c.label, size: formatBytes(c.bytes) })],
+      [t('confirm.storage'), c.capacity ? GB(c.capacity) : t('confirm.storage.unknown')],
+      [t('review.erased'), t('review.restore.erased')],
+    ]} />
+  ) : c.kind === 'factory' ? (
+    <Review rows={[
+      [t('confirm.write'), t('confirm.restore.factory', { n: c.partitions.length, model: c.model, version: c.version, size: formatBytes(c.bytes) })],
+      [t('restore.factory.parts'), c.partitions.map((p) => `${p.name} @ ${p.lba}`).join(', ')],
+      [t('confirm.storage'), c.capacity ? GB(c.capacity) : t('confirm.storage.unknown')],
+      [t('review.erased'), t('review.restore.erased')],
+    ]} />
+  ) : c.kind === 'stage' ? (
     <Stack hasGutter>
       <Content component="p">{t('confirm.answered', { size: GB(c.capacity) })}</Content>
       <Review rows={[
@@ -704,10 +839,15 @@ export function App() {
     ]} />
   ));
 
-  const askTitle = !board || !task ? '' : task === 'stick' ? t('ask.stick.title')
+  const askTitle = !board || !task ? '' : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
     : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
     : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
-  const askText = !board || !task ? '' : task === 'stick' ? t('ask.stick.text')
+  const askText = !board || !task ? '' : restoreTask ? (
+    <Stack hasGutter>
+      <Content component="p">{t('ask.restore.text')}</Content>
+      <Checkbox id="ask-understood" label={t('ask.restore.understand')} isChecked={understood} onChange={(_e, v) => setUnderstood(v)} />
+    </Stack>
+  ) : task === 'stick' ? t('ask.stick.text')
     : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
       : task === 'windows' && method === 'host' ? t('ask.host.text')
     : onBoard ? `${here?.emmc && (task === 'windows' || board.firmwareStorage === 'emmc') ? `${here.emmc.model}, ${here.emmc.device}, ${GB(here.emmc.bytes)}. ` : ''}${task === 'windows' ? t('ask.here.windows') : ''}${t('ask.here.password')}`
@@ -775,18 +915,21 @@ export function App() {
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
             <WizardStep name={t('step.windows')} id="windows" isHidden={!windowsNeeded} footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>
             <WizardStep name={t('step.setup')} id="setup" isHidden={!windowsNeeded} isDisabled={!edition} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>
-            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk))}
+            <WizardStep name={t('step.restore')} id="restore" isHidden={!restoreTask} footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>
+            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady)}
               footer={<ReviewFooter label={goLabel} disabled={!!why} why={why} onGo={() => setAsk(true)} />}>
               {reviewStep}
             </WizardStep>
           </Wizard>
         </PageSection>
       )}
-      <Modal isOpen={ask} onClose={() => setAsk(false)} variant="small" aria-labelledby="ask-title">
+      <Modal isOpen={ask} onClose={() => { setAsk(false); setUnderstood(false); }} variant="small" aria-labelledby="ask-title">
         <ModalHeader title={askTitle} labelId="ask-title" />
         <ModalBody>{askText}</ModalBody>
         <ModalFooter>
-          <Button variant={onBoard || task === 'stick' || onPc ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' || onPc ? t('go.erase') : t('ask.connect')}</Button>
+          {restoreTask
+            ? <Button variant="danger" onClick={() => { setUnderstood(false); start(); }} isDisabled={!understood}>{t('ask.connect')}</Button>
+            : <Button variant={onBoard || task === 'stick' || onPc ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' || onPc ? t('go.erase') : t('ask.connect')}</Button>}
           <Button variant="link" onClick={() => setAsk(false)}>{t('cancel')}</Button>
         </ModalFooter>
       </Modal>

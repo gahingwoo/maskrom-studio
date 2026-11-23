@@ -54,9 +54,23 @@ export interface RegionJob {
   reconnectTimeout?: number;
   /** Wait after db before the next command, as on real RK3576 boards. */
   afterLoaderMs?: number;
+  /**
+   * Commands run after the confirmation and before the first wl, with files
+   * they need: a factory update.img's partition table (gpt parameter.txt) and
+   * boot loader (ul).
+   */
+  before?: Array<{ what: string; files: Array<{ name: string; data: Uint8Array }>; args: (paths: string[]) => string[] }>;
+  /**
+   * Read back everything written in the first this many bytes of the storage
+   * and compare it whole (sampling stays for the rest): the part where the
+   * loader's reads are trusted (TRUSTED_READ_BYTES).
+   */
+  checkHeadBytes?: number;
 }
 
 export interface SpotChecks {
+  /** Bytes compared in full within the first 32 MiB (checkHeadBytes), all equal. */
+  headBytes?: number;
   matched: number;
   /** Samples past 32 MiB that read back as 0xCC filler: unknown, not wrong. */
   filler: number;
@@ -176,6 +190,11 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
     hooks.stage('confirm');
     if (!(await job.confirm(summary))) return { ok: false, reason: 'Stopped before writing. Nothing was written.', written };
 
+    for (const b of job.before ?? []) {
+      const paths = b.files.map((f) => r.writeFile(f.name, f.data));
+      await step(b.args(paths), b.what);
+    }
+
     hooks.stage('write');
     const total = regions.reduce((s, g) => s + g.source.size, 0);
     hooks.progress(0, total);
@@ -220,6 +239,28 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
           hooks.log(`Sample at sector ${at / SECTOR} (${g.label}) read back ${got ? 'differently' : 'with an error'}; past 32 MiB the loader's reads are not trusted.`);
         }
       }
+    }
+
+    if (job.checkHeadBytes) {
+      hooks.stage('check');
+      checks ??= { matched: 0, filler: 0, unsure: 0, samples: 0 };
+      const limit = Math.min(job.checkHeadBytes, TRUSTED_READ_BYTES);
+      const CHUNK = 1 << 20;
+      let compared = 0;
+      for (const g of regions) {
+        const start = g.lba * SECTOR;
+        const end = Math.min(start + g.source.size, limit);
+        for (let at = start; at < end; at += CHUNK) {
+          const len = Math.min(CHUNK, end - at);
+          const got = await readSectors(r, at / SECTOR, Math.ceil(len / SECTOR));
+          if (!got || !sameBytes(got.subarray(0, len), g.source.read(at - start, len))) {
+            return { ok: false, written, reason: `${g.label} does not read back as written (sector ${at / SECTOR}). Write it again.` };
+          }
+          compared += len;
+        }
+      }
+      checks.headBytes = compared;
+      hooks.log(`Read back and compared ${compared} bytes within the first ${limit / (1 << 20)} MiB: all equal.`);
     }
 
     if (job.resetAfter) {

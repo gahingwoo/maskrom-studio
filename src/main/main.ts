@@ -10,6 +10,10 @@ import * as drivelist from 'drivelist';
 import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
 import { isWindowsSourceUrl } from '../shared/windows-sources';
+import { checkArmbianSignature, checkFactoryMd5, findArmbian, inspectFactory, type ArmbianImage, type FactoryImage } from './restore';
+import { planFactory } from '../woa/rkfw';
+import type { ArmbianBranch } from '../woa/armbian-restore';
+import type { ArmbianChoice, FactoryChoice } from '../shared/ipc';
 import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './elevate';
 import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
@@ -54,7 +58,7 @@ function writerPath(name = WRITER): string {
   return app.isPackaged ? join(process.resourcesPath, 'writer', name) : join(appDir, 'build-res', 'writer', name);
 }
 
-const OWN_LINKS = /^https:\/\/(github\.com\/gahingwoo\/|flash\.gahingwoo\.com\/|edk2\.gahingwoo\.com\/|zadig\.akeo\.ie\/)/;
+const OWN_LINKS = /^https:\/\/(github\.com\/gahingwoo\/|flash\.gahingwoo\.com\/|edk2\.gahingwoo\.com\/|zadig\.akeo\.ie\/|www\.armbian\.com\/boards\/|wiki\.lckfb\.com\/|docs\.armsom\.org\/)/;
 /** Links the page may open in the browser: ours, and the listed places to get Windows. */
 const LINKS = { test: (url: string) => OWN_LINKS.test(url) || isWindowsSourceUrl(url) };
 
@@ -257,6 +261,100 @@ ipcMain.handle('woa:hash-windows', (e, token: string) => exclusive(async (signal
   try {
     img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(e.sender, { stage: 'check', bytes, total: img.imageSize }), signal);
     return { sha256: img.sha256 };
+  } catch (err) {
+    if (signal.aborted) return { error: 'Cancelled.' };
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
+// --- restoring Armbian or a factory image ----------------------------------
+
+const armbianFound = new Map<string, ArmbianImage>();
+const armbianKey = (board: BoardId, branch: ArmbianBranch) => `${board}:${branch}`;
+
+ipcMain.handle('restore:find-armbian', async (_e, board: BoardId, branch: ArmbianBranch): Promise<ArmbianChoice | { error: string }> => {
+  try {
+    // Screenshots: a made-up answer, no network.
+    const a = FAKE_RELEASES ? {
+      board, branch, file: `Armbian_community_26.11.0-trunk.137_Lckfb-taishanpi-3m_trixie_${branch}_${branch === 'edge' ? '7.3.5' : '6.1.172'}_minimal.img.xz`,
+      url: 'https://example.invalid/a.img.xz', size: 352968008, sha256: '0'.repeat(64), asc: '', version: '26.11.0-trunk.137',
+      kernel: branch === 'edge' ? '7.3.5' : '6.1.172', distro: 'trixie', variant: 'minimal', signed: '2026-11-20',
+    } : await findArmbian(board, branch, (url, init) => net.fetch(url, init));
+    armbianFound.set(armbianKey(board, branch), a);
+    return { branch, file: a.file, size: a.size, version: a.version, kernel: a.kernel, distro: a.distro, variant: a.variant, signed: a.signed };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
+
+ipcMain.handle('restore:prepare-armbian', (e, board: BoardId, branch: ArmbianBranch) => exclusive(async (signal) => {
+  try {
+    const a = armbianFound.get(armbianKey(board, branch));
+    if (!a) return { error: 'Look up the Armbian image again.' };
+    const progress = (p: JobProgress) => sendProgress(e.sender, p);
+    // The SHA-256 from Armbian's .sha is checked by the download itself, a cached copy included.
+    const xz = await fetchImage({ file: a.file, url: a.url, size: a.size, sha256: a.sha256, sample: false }, cacheDir(), progress, signal);
+    const bad = await checkArmbianSignature(xz, a.asc, (bytes) => progress({ stage: 'check', bytes, total: a.size }), signal);
+    if (bad) { rmSync(xz, { force: true }); return { error: `${bad} The download was deleted.` }; }
+    // One decompressed image at a time; it is about 2 GB.
+    const dir = join(cacheDir(), 'armbian');
+    const name = a.file.replace(/\.xz$/, '');
+    const keep = join(dir, name);
+    try {
+      const [sum, size] = readFileSync(`${keep}.sha256`, 'utf8').trim().split(/\s+/);
+      if (/^[0-9a-f]{64}$/.test(sum) && statSync(keep).size === Number(size)) return serve(keep, name);
+    } catch { /* not there yet */ }
+    rmSync(dir, { recursive: true, force: true });
+    const out = await decompress(xz, dir, progress, signal);
+    renameSync(out.path, keep);
+    writeFileSync(`${keep}.sha256`, `${out.sha256} ${out.size}\n`);
+    return serve(keep, name);
+  } catch (err) {
+    if (signal.aborted) return { error: 'Cancelled.' };
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
+const factoryImages = new Map<string, FactoryImage & { md5Checked?: boolean }>();
+
+ipcMain.handle('restore:pick-factory', async (): Promise<FactoryChoice | { error: string } | null> => {
+  const pick = !app.isPackaged ? process.env.WOA_IMAGER_TEST_FACTORY : undefined;
+  let path = pick;
+  if (!path) {
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Choose the factory update.img',
+      properties: ['openFile'],
+      filters: [{ name: 'Rockchip firmware', extensions: ['img'] }, { name: 'All files', extensions: ['*'] }],
+    });
+    if (r.canceled || r.filePaths.length === 0) return null;
+    path = r.filePaths[0];
+  }
+  try {
+    const f = inspectFactory(path);
+    const token = randomBytes(16).toString('hex');
+    factoryImages.set(token, f);
+    const plan = planFactory(f.info, null);
+    return {
+      token, fileName: f.fileName, size: f.size, chip: f.info.chip, loaderChip: f.info.loader?.chip ?? null,
+      model: f.info.model, manufacturer: f.info.manufacturer, version: f.info.version, released: f.info.released, hasMd5: !!f.info.md5,
+      partitions: f.info.parts.map((p) => ({ name: p.name, lba: p.lba, bytes: p.size, sparse: p.sparse })),
+      refuse: 'stop' in plan ? plan.stop : null,
+    };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
+
+ipcMain.handle('restore:prepare-factory', (e, token: string) => exclusive(async (signal) => {
+  const f = factoryImages.get(token);
+  if (!f) return { error: 'Choose the update.img again.' };
+  try {
+    if (!f.md5Checked) {
+      const bad = await checkFactoryMd5(f, (bytes, total) => sendProgress(e.sender, { stage: 'check', bytes, total }), signal);
+      if (bad) return { error: bad };
+      f.md5Checked = true;
+    }
+    return serve(f.path, f.fileName);
   } catch (err) {
     if (signal.aborted) return { error: 'Cancelled.' };
     return { error: String((err as Error).message ?? err) };

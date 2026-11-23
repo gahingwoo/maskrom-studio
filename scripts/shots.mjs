@@ -79,6 +79,58 @@ const flow = async (page, shot) => {
   await shot('5-review');
 };
 
+// A small RK3576 update.img (RKFW header, loader, RKAF with parameter.txt and two partitions).
+const factory = join(tmp, 'update.img');
+{
+  const enc = (t) => new TextEncoder().encode(t);
+  const param = enc('FIRMWARE_VER: 14.0\nMACHINE_MODEL: TaishanPi3M\nCMDLINE: mtdparts=:0x2000@0x4000(uboot),0x20000@0x6800(boot),-@0x26800(userdata:grow)\n');
+  const parts = [['parameter', 'parameter.txt', param], ['uboot', 'Image/uboot.img', new Uint8Array(4 << 20)], ['boot', 'Image/boot.img', new Uint8Array(40 << 20)]];
+  let pos = 2048;
+  const placed = parts.map(([n, f, d]) => { const at = pos; pos += Math.ceil(d.length / 2048) * 2048; return { n, f, d, at }; });
+  const rkaf = new Uint8Array(pos);
+  const dv = new DataView(rkaf.buffer);
+  rkaf.set(enc('RKAF'), 0); rkaf.set(enc('TaishanPi3M'), 8); rkaf.set(enc('LCKFB'), 72);
+  dv.setUint32(136, placed.length, true);
+  placed.forEach((p, i) => { const o = 140 + i * 112; rkaf.set(enc(p.n), o); rkaf.set(enc(p.f), o + 32); dv.setUint32(o + 96, p.at, true); dv.setUint32(o + 108, p.d.length, true); rkaf.set(p.d, p.at); });
+  const loader = new Uint8Array(4096); loader.set(enc('LDR '), 0); new DataView(loader.buffer).setUint32(0x15, 0x33353736, true);
+  const head = new Uint8Array(0x66); const hv = new DataView(head.buffer);
+  head.set(enc('RKFW'), 0); hv.setUint32(6, 0x0e000000, true); hv.setUint16(0x0e, 2026, true); head[0x10] = 11; head[0x11] = 2;
+  hv.setUint32(0x15, 0x33353736, true); hv.setUint32(0x19, 0x66, true); hv.setUint32(0x1d, 4096, true); hv.setUint32(0x21, 0x66 + 4096, true); hv.setUint32(0x25, rkaf.length, true);
+  const out = new Uint8Array(0x66 + 4096 + rkaf.length);
+  out.set(head, 0); out.set(loader, 0x66); out.set(rkaf, 0x66 + 4096);
+  writeFileSync(factory, out);
+}
+
+// Putting the board back: Armbian (made-up answer), then a factory update.img.
+const restoreFlow = async (page, shot) => {
+  await page.click('label[for="board-tspi3m"]');
+  await next(page);
+  await page.waitForSelector('#task-armbian');
+  await page.click('label[for="task-armbian"]');
+  await shot('7-restore-task');
+  await next(page);
+  await page.waitForSelector('text=26.11.0-trunk.137');
+  await shot('8-restore-armbian');
+  await next(page);
+  await page.waitForSelector('.pf-v6-c-wizard__footer');
+  await shot('9-restore-review');
+  await page.click('.pf-v6-c-wizard__footer button.pf-m-secondary');
+  await page.click('.pf-v6-c-wizard__footer button.pf-m-secondary');
+  await page.waitForSelector('#task-factory');
+  await page.click('label[for="task-factory"]');
+  await next(page);
+  await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /update\.img/.test(b.textContent))?.click(); });
+  await page.waitForSelector('text=TaishanPi3M');
+  await shot('8-restore-factory');
+};
+
+for (const [w, h, tag] of [[1100, 780, 'd'], [720, 640, 'm']]) {
+  for (const theme of ['light', 'dark']) {
+    await session(tag, w, h, theme, { ...base, WOA_IMAGER_TEST_FACTORY: factory }, restoreFlow);
+  }
+}
+await session('d', 1100, 780, 'light', { ...base, WOA_IMAGER_TEST_FACTORY: factory }, restoreFlow, 'zh-CN');
+
 for (const [w, h, tag] of [[1100, 780, 'd'], [720, 640, 'm']]) {
   for (const theme of ['light', 'dark']) {
     await session(tag, w, h, theme, base, flow);
