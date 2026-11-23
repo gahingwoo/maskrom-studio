@@ -264,9 +264,19 @@ jobs:
           name: macos-${{ matrix.arch }}
           path: dist/*.dmg
   windows:
-    name: Windows x64
+    name: Windows ${{ matrix.arch }}
     needs: wasm
-    runs-on: windows-2022
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            arch: x64
+          # Windows on Arm, native: the writer and the native addons are
+          # built for arm64 on an arm64 runner.
+          - runner: windows-11-arm
+            arch: arm64
     defaults:
       run:
         shell: bash
@@ -289,27 +299,27 @@ jobs:
       - run: npm run icons
       # Unsigned: SmartScreen will warn. See docs/install.md.
       - name: Installer and zip
-        run: npx electron-builder --win nsis zip --x64 --publish never
+        run: npx electron-builder --win nsis zip --${{ matrix.arch }} --publish never
       - name: Icon and no firmware blobs in the app
-        run: node scripts/check-package.mjs dist/win-unpacked
+        run: node scripts/check-package.mjs dist/${{ matrix.arch == 'arm64' && 'win-arm64-unpacked' || 'win-unpacked' }} ${{ matrix.arch }}
       - name: Name the zip
         run: |
           V=$(node -p "require('./package.json').version")
-          mv dist/maskrom-studio-$V-win-x64.zip dist/maskrom-studio-$V-windows-x64.zip
+          mv dist/maskrom-studio-$V-win-${{ matrix.arch }}.zip dist/maskrom-studio-$V-windows-${{ matrix.arch }}.zip
           ls -l dist
       - name: Smoke-test the app
         run: |
           set +e
-          timeout 30 "dist/win-unpacked/maskrom-studio.exe" > app.log 2>&1
+          timeout 30 "dist/${{ matrix.arch == 'arm64' && 'win-arm64-unpacked' || 'win-unpacked' }}/maskrom-studio.exe" > app.log 2>&1
           rc=$?
           cat app.log
           [ "$rc" = 124 ] || { echo "FAIL: exited with $rc"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x64
+          name: windows-${{ matrix.arch }}
           path: |
             dist/*-setup.exe
-            dist/*-windows-x64.zip
+            dist/*-windows-${{ matrix.arch }}.zip
 
   release:
     name: Publish the release
