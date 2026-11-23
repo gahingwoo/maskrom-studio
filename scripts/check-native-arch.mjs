@@ -8,6 +8,9 @@ import { machines } from './lib/machine.mjs';
 const [dir, arch] = process.argv.slice(2);
 if (!dir || !arch) { console.error('usage: check-native-arch.mjs DIR ARCH'); process.exit(2); }
 const walk = (d) => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? walk(p) : [p]; });
+// electron-builder's NSIS elevate.exe is a 32-bit x86 helper on every
+// Windows build; Windows runs it on x64 and on arm64 alike.
+const ALLOWED = { 'elevate.exe': ['ia32'] };
 let bad = 0;
 let seen = 0;
 for (const f of walk(dir)) {
@@ -15,7 +18,7 @@ for (const f of walk(dir)) {
   const m = machines(f);
   if (m.length === 0) continue;
   seen++;
-  const ok = m.includes(arch);
+  const ok = m.includes(arch) || (ALLOWED[f.split(/[\\/]/).pop().toLowerCase()] ?? []).some((a) => m.includes(a));
   if (!ok || /\.node$/.test(f)) console.log(`${ok ? 'ok  ' : 'BAD '} ${m.join('+').padEnd(6)} ${f}`);
   if (!ok) bad++;
 }
