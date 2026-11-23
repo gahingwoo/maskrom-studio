@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import {
   Alert, Button, Checkbox, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form,
-  FormGroup, FormHelperText, HelperText, HelperTextItem, List, ListItem, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
+  FormGroup, FormHelperText, FormSection, HelperText, HelperTextItem, List, ListItem, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
   ModalHeader, Page, Progress, ProgressMeasureLocation, Spinner, Stack, StackItem, Switch, Title, ToggleGroup,
   ToggleGroupItem, Toolbar, ToolbarContent, ToolbarGroup, ToolbarItem,
 } from '@patternfly/react-core';
@@ -325,56 +325,72 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
       <ModalBody>
         {s && (
           <Form onSubmit={(e) => e.preventDefault()}>
-              <FormGroup label={t('settings.updates')} fieldId="updates" role="group">
-                <Stack hasGutter id="updates">
-                  <Switch id="set-update" label={t('settings.updateCheck')} isChecked={s.updateCheck}
-                    onChange={(_e, v) => { set({ updateCheck: v }); }} />
-                  <ChannelPicker id="app-channel" label={t('settings.appChannel')} value={s.appChannel}
-                    onChange={(c) => { set({ appChannel: c }).then(checkNow); }} />
-                  <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
-                    <FlexItem flex={{ default: 'flexNone' }}>
-                      <Button variant="secondary" onClick={checkNow} isLoading={checking} isDisabled={checking}>{t('settings.checkNow')}</Button>
-                    </FlexItem>
-                    {check && <FlexItem className="update-result" aria-live="polite">{checkWords(check, t)}</FlexItem>}
-                    {check?.state === 'newer' && (
-                      <FlexItem><Button variant="link" isInline isDisabled={writing} onClick={onUpdate}>{t('settings.update')}</Button></FlexItem>
-                    )}
-                  </Flex>
-                </Stack>
+            <FormSection title={t('settings.updates')} titleElement="h3">
+              <FormGroup fieldId="set-update" label={t('settings.updateCheck.label')} hasNoPaddingTop>
+                <Switch id="set-update" label={t('settings.updateCheck')} isChecked={s.updateCheck}
+                  onChange={(_e, v) => { set({ updateCheck: v }); }} />
               </FormGroup>
-            <FormGroup label={t('settings.fwChannel')} fieldId="fw-channel" role="group">
-              <ChannelPicker id="fw-channel" label={t('settings.fwChannel')} value={s.firmwareChannel}
-                onChange={(c) => { set({ firmwareChannel: c }).then(() => onFirmwareChannel?.()); }} />
-              <FormHelperText><HelperText><HelperTextItem>{t('settings.fwChannel.help')}</HelperTextItem></HelperText></FormHelperText>
-            </FormGroup>
-            <Switch id="set-reset" label={t('settings.reset')} isChecked={s.resetAfterMaskrom}
-              onChange={(_e, v) => { set({ resetAfterMaskrom: v }); }} />
-            <FormGroup label={t('cache.label')} fieldId="cache" role="group">
-              <Content component="p">{cache ? t('cache.size', { size: formatBytes(cacheBytes), files: cache.images.files + cache.loaders.files }) : t('cache.looking')}</Content>
-              <Flex><FlexItem>
-                <Button variant="secondary" isDisabled={writing || !cache || (cacheBytes === 0 && cache.nvdata.files === 0)} onClick={() => setClearAsk(true)}>{t('cache.clear')}</Button>
-              </FlexItem></Flex>
-              {writing && <FormHelperText><HelperText><HelperTextItem>{t('cache.writing')}</HelperTextItem></HelperText></FormHelperText>}
-              {cleared && <Content component="p" className="selectable">{cleared}</Content>}
-            </FormGroup>
-            <FormGroup label={t('settings.appearance')} fieldId="appearance" role="group">
-              <ToggleGroup aria-label={t('settings.appearance')} id="appearance">
-                {(['system', 'light', 'dark'] as Theme[]).map((th) => (
-                  <ToggleGroupItem key={th} text={t(`settings.theme.${th}`)} isSelected={theme === th} onChange={() => setTheme(th)} />
-                ))}
-              </ToggleGroup>
-            </FormGroup>
-            <FormGroup label={t('settings.language')} fieldId="language" role="group">
-              <ToggleGroup aria-label={t('settings.language')} id="language">
-                {LANGS.map((l) => (
-                  <ToggleGroupItem key={l} text={LANG_NAMES[l]} isSelected={lang === l} onChange={() => setLang(l)} />
-                ))}
-              </ToggleGroup>
-            </FormGroup>
-            <DescriptionList isCompact isHorizontal>
-              <DescriptionListGroup><DescriptionListTerm>{t('settings.version')}</DescriptionListTerm><DescriptionListDescription>{api.version}</DescriptionListDescription></DescriptionListGroup>
-            </DescriptionList>
-            {onAbout && <Content component="p"><button className="link-button" type="button" onClick={onAbout}>{t('about.open')}</button></Content>}
+              <FormGroup fieldId="app-channel" label={t('settings.tier')} role="group">
+                <ChannelPicker id="app-channel" label={t('settings.tier')} value={s.appChannel}
+                  onChange={(c) => { set({ appChannel: c }).then(checkNow); }} />
+              </FormGroup>
+              <FormGroup fieldId="check-now">
+                <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem flex={{ default: 'flexNone' }}>
+                    <Button id="check-now" variant="secondary" onClick={checkNow} isLoading={checking} isDisabled={checking}>{t('settings.checkNow')}</Button>
+                  </FlexItem>
+                  {check && <FlexItem className="update-result" aria-live="polite">{checkWords(check, t)}</FlexItem>}
+                  {check?.state === 'newer' && (
+                    <FlexItem><Button variant="link" isInline isDisabled={writing} onClick={onUpdate}>{t('settings.update')}</Button></FlexItem>
+                  )}
+                </Flex>
+              </FormGroup>
+            </FormSection>
+            <FormSection title={t('settings.fwChannel')} titleElement="h3">
+              <FormGroup fieldId="fw-channel" label={t('settings.tier')} role="group">
+                <ChannelPicker id="fw-channel" label={t('settings.tier')} value={s.firmwareChannel} help={t('settings.fwChannel.help')}
+                  onChange={(c) => { set({ firmwareChannel: c }).then(() => onFirmwareChannel?.()); }} />
+              </FormGroup>
+            </FormSection>
+            <FormSection title={t('settings.maskrom')} titleElement="h3">
+              <FormGroup fieldId="set-reset" label={t('settings.reset.label')} hasNoPaddingTop>
+                <Switch id="set-reset" label={t('settings.reset')} isChecked={s.resetAfterMaskrom}
+                  onChange={(_e, v) => { set({ resetAfterMaskrom: v }); }} />
+              </FormGroup>
+            </FormSection>
+            <FormSection title={t('cache.label')} titleElement="h3">
+              <FormGroup fieldId="clear-cache">
+                <Content component="p">{cache ? t('cache.size', { size: formatBytes(cacheBytes), files: cache.images.files + cache.loaders.files }) : t('cache.looking')}</Content>
+                <Flex><FlexItem>
+                  <Button id="clear-cache" variant="secondary" isDisabled={writing || !cache || (cacheBytes === 0 && cache.nvdata.files === 0)} onClick={() => setClearAsk(true)}>{t('cache.clear')}</Button>
+                </FlexItem></Flex>
+                {(writing || cleared) && (
+                  <FormHelperText><HelperText><HelperTextItem className="selectable">{writing ? t('cache.writing') : cleared}</HelperTextItem></HelperText></FormHelperText>
+                )}
+              </FormGroup>
+            </FormSection>
+            <FormSection title={t('settings.appearance')} titleElement="h3">
+              <FormGroup fieldId="appearance" label={t('settings.theme')} role="group">
+                <ToggleGroup aria-label={t('settings.appearance')} id="appearance">
+                  {(['system', 'light', 'dark'] as Theme[]).map((th) => (
+                    <ToggleGroupItem key={th} text={t(`settings.theme.${th}`)} isSelected={theme === th} onChange={() => setTheme(th)} />
+                  ))}
+                </ToggleGroup>
+              </FormGroup>
+              <FormGroup fieldId="language" label={t('settings.language')} role="group">
+                <ToggleGroup aria-label={t('settings.language')} id="language">
+                  {LANGS.map((l) => (
+                    <ToggleGroupItem key={l} text={LANG_NAMES[l]} isSelected={lang === l} onChange={() => setLang(l)} />
+                  ))}
+                </ToggleGroup>
+              </FormGroup>
+            </FormSection>
+            <FormSection title={t('settings.version')} titleElement="h3">
+              <FormGroup fieldId="about-open">
+                <Content component="p">{api.version}</Content>
+                {onAbout && <Button id="about-open" variant="link" isInline onClick={onAbout}>{t('about.open')}</Button>}
+              </FormGroup>
+            </FormSection>
           </Form>
         )}
       </ModalBody>
@@ -489,16 +505,18 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
   );
 }
 
-/** Stable / Prerelease / CI, with what the chosen one means. */
-function ChannelPicker({ id, label, value, onChange }: { id: string; label: string; value: Channel; onChange: (c: Channel) => void }) {
+/** Stable / Prerelease / CI, with what the chosen one means as the group's helper text. */
+function ChannelPicker({ id, label, value, help, onChange }: { id: string; label: string; value: Channel; help?: string; onChange: (c: Channel) => void }) {
   const { t } = useI18n();
+  const note = value === 'prerelease' ? t('tier.prerelease.desc') : value === 'ci' ? t('tier.ci.desc') : help;
   return (
-    <Stack hasGutter>
+    <>
       <ToggleGroup aria-label={label} id={id}>
         {CHANNELS.map((c) => <ToggleGroupItem key={c} text={t(`tier.${c}`)} isSelected={value === c} onChange={() => onChange(c)} />)}
       </ToggleGroup>
-      {value === 'prerelease' && <Alert isInline isPlain variant="warning" title={t('tier.prerelease.desc')} />}
-      {value === 'ci' && <Alert isInline isPlain variant="custom" title={t('tier.ci.desc')} />}
-    </Stack>
+      {note && (
+        <FormHelperText><HelperText><HelperTextItem variant={value === 'stable' ? 'default' : 'warning'}>{note}</HelperTextItem></HelperText></FormHelperText>
+      )}
+    </>
   );
 }

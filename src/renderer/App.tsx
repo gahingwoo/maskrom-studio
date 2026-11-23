@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActionList, ActionListGroup, ActionListItem, Alert, AlertActionCloseButton, AlertActionLink, Button, Card, CardBody,
   CardTitle, Checkbox, CodeBlock, CodeBlockCode, Content, DescriptionList, DescriptionListDescription, DescriptionListGroup,
-  DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form, FormGroup, FormHelperText, HelperText, HelperTextItem,
+  DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form, FormGroup, FormSection, FormHelperText, HelperText, HelperTextItem,
   List, ListItem, Modal, ModalBody, ModalFooter, ModalHeader, OrderType, PageSection, Progress, ProgressMeasureLocation,
   Radio, Stack, StackItem, Switch, TextArea, TextInput, Title, Wizard, WizardFooterWrapper, WizardStep, useWizardContext,
 } from '@patternfly/react-core';
@@ -389,7 +389,7 @@ export function App() {
         { id: 'fw', label: t('run.upgrade.image', { origin: up.origin }), percent: 100, note: `${up.served.name}, ${formatBytes(up.served.size)}` },
         { id: 'board', label: t('run.upgrade.board'), percent: null },
         { id: 'write', label: t('run.writeTo', { storage: t('storage.emmc') }), percent: 0 },
-        { id: 'check', label: t('run.check'), percent: null },
+        { id: 'check', label: t('run.check.full'), percent: null },
       ] });
       await startMaskrom(() => ({ kind: 'upgrade', boardId: board.id, image: { url: up.served.url, size: up.served.size }, keepSettings, resetAfter: true }), [], null);
       return;
@@ -514,36 +514,37 @@ export function App() {
       )}
       {tierNotice}
       <Form onSubmit={(e) => e.preventDefault()}>
-        <FormGroup role="radiogroup" fieldId="task" label={t('task.label')} isStack>
+        <FormGroup role="radiogroup" fieldId="task-win" label={t('task.group.windows')} isStack>
           <Radio id="task-windows" name="task" label={t('task.windows.any')} isChecked={task === 'windows'} isDisabled={onBoard && !board.windows}
-            onChange={() => { setTask('windows'); if (!board.windows) setDest('nvme'); }} description={board.windows ? t('task.windows.desc') : t('task.windows.rock4d')} />
+            onChange={() => { setTask('windows'); if (!board.windows) setDest('nvme'); }} description={board.windows ? t('task.windows.short') : t('task.windows.rock4d')} />
+          {board.windows && (
+            <Radio id="task-stick" name="task" label={t('task.stick')} isChecked={task === 'stick'} isDisabled={onBoard}
+              onChange={() => { setTask('stick'); refreshDrives(); }} description={t('task.stick.short')} />
+          )}
+        </FormGroup>
+        <FormGroup role="radiogroup" fieldId="task-fw" label={t('task.group.firmware')} isStack>
           {firmwareTargets(board).map((tg) => (
             <Radio key={tg.id} id={`task-${tg.id}`} name="task" label={fwText(board, tg, 'label')} isChecked={task === tg.id}
-              onChange={() => setTask(tg.id as Task)}
-              description={`${fwText(board, tg, 'note')} ${fwRelease ? t('task.release', { tag: releases!.firmware!.tier.label, file: fwRelease.file }) : ''}`.trim()} />
+              onChange={() => setTask(tg.id as Task)} description={fwText(board, tg, 'note')} />
           ))}
           {board.firmwareStorage === 'emmc' && (
             <Radio id="task-upgrade" name="task" label={t('task.upgrade')} isChecked={task === 'upgrade'} isDisabled={onBoard}
-              onChange={() => setTask('upgrade')} description={onBoard ? t('task.upgrade.here') : t('task.upgrade.desc')} />
+              onChange={() => setTask('upgrade')} description={onBoard ? t('task.upgrade.here') : t('task.upgrade.short')} />
           )}
           {sdRelease && (
             <Radio id="task-uefi-sd" name="task" label={t('task.uefiSd')} isChecked={task === 'uefi-sd'} isDisabled={onBoard}
               onChange={() => { setTask('uefi-sd'); setStick(null); refreshDrives(); }}
-              description={`${t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.uefi`)} ${t('task.release', { tag: releases!.firmware!.tier.label, file: sdRelease.file })}`} />
-          )}
-          {ARMBIAN_RESTORE[board.id] && (
-            <>
-              <Radio id="task-armbian" name="task" label={t('task.armbian')} isChecked={task === 'armbian'} isDisabled={onBoard}
-                onChange={() => setTask('armbian')} description={onBoard ? t('task.restore.here') : t('task.armbian.desc')} />
-              <Radio id="task-factory" name="task" label={t('task.factory')} isChecked={task === 'factory'} isDisabled={onBoard}
-                onChange={() => setTask('factory')} description={onBoard ? t('task.restore.here') : t('task.factory.desc')} />
-            </>
-          )}
-          {board.windows && (
-            <Radio id="task-stick" name="task" label={t('task.stick')} isChecked={task === 'stick'} isDisabled={onBoard}
-              onChange={() => { setTask('stick'); refreshDrives(); }} description={t('task.stick.desc')} />
+              description={t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.uefi`)} />
           )}
         </FormGroup>
+        {ARMBIAN_RESTORE[board.id] && (
+          <FormGroup role="radiogroup" fieldId="task-other" label={t('task.group.other')} isStack>
+            <Radio id="task-armbian" name="task" label={t('task.armbian')} isChecked={task === 'armbian'} isDisabled={onBoard}
+              onChange={() => setTask('armbian')} description={onBoard ? t('task.restore.here') : t('task.armbian.short')} />
+            <Radio id="task-factory" name="task" label={t('task.factory')} isChecked={task === 'factory'} isDisabled={onBoard}
+              onChange={() => setTask('factory')} description={onBoard ? t('task.restore.here') : t('task.factory.short')} />
+          </FormGroup>
+        )}
       </Form>
       {task === 'windows' && (
         <Form onSubmit={(e) => e.preventDefault()}>
@@ -788,31 +789,42 @@ export function App() {
   );
 
   const GBs = (n: number) => `${(n / GiB).toFixed(1)} GB`;
-  const layoutRows = (): string[] => {
-    const rows: string[] = [];
-    if (dest === 'emmc') rows.push(t('layout.row.firmware'));
-    rows.push(t('layout.row.esp'), t('layout.row.msr'));
-    if (!layoutChoice) { rows.push(t('layout.row.windowsAll')); return rows; }
+  // The disk after the install, as [partition, size] rows.
+  const layoutRows = (): Array<[string, string]> => {
+    const rows: Array<[string, string]> = [];
+    if (dest === 'emmc') rows.push([t('layout.part.firmware'), t('layout.size.kept', { size: '64 MiB' })]);
+    rows.push([t('layout.part.esp'), '260 MiB'], [t('layout.part.msr'), '16 MiB']);
+    if (!layoutChoice) { rows.push([t('layout.part.windows'), t('layout.size.rest')]); return rows; }
     if (layoutPlan && !('problem' in layoutPlan)) {
-      rows.push(t('layout.row.windows', { size: GBs(layoutPlan.windowsBytes) }));
-      if (layoutPlan.data) rows.push(t('layout.row.data', { size: GBs(layoutPlan.data.bytes), fs: layoutPlan.data.fs === 'ntfs' ? 'NTFS' : 'exFAT', label: layoutPlan.data.label }));
-      if (layoutPlan.linuxReserveBytes > 0) rows.push(t('layout.row.linux', { size: GBs(layoutPlan.linuxReserveBytes) }));
+      rows.push([t('layout.part.windows'), GBs(layoutPlan.windowsBytes)]);
+      if (layoutPlan.data) rows.push([t('layout.part.data', { fs: layoutPlan.data.fs === 'ntfs' ? 'NTFS' : 'exFAT', label: layoutPlan.data.label }), GBs(layoutPlan.data.bytes)]);
+      if (layoutPlan.linuxReserveBytes > 0) rows.push([t('layout.part.linux'), GBs(layoutPlan.linuxReserveBytes)]);
       const other = layoutPlan.unallocatedBytes - layoutPlan.linuxReserveBytes;
-      if (other >= 512 * MiB) rows.push(t('layout.row.free', { size: GBs(other) }));
+      if (other >= 512 * MiB) rows.push([t('layout.part.free'), GBs(other)]);
     }
     return rows;
   };
+  const layoutList = (
+    <DescriptionList isCompact isHorizontal horizontalTermWidthModifier={{ default: '14rem' }} aria-label={t('layout.label')}>
+      {layoutRows().map(([k, v]) => (
+        <DescriptionListGroup key={k}><DescriptionListTerm>{k}</DescriptionListTerm><DescriptionListDescription>{v}</DescriptionListDescription></DescriptionListGroup>
+      ))}
+    </DescriptionList>
+  );
   const layoutGroup = staged && (
-    <FormGroup role="radiogroup" fieldId="layout" label={t('layout.label')} isStack>
-      <Radio id="layout-whole" name="layout" label={t('layout.whole')} isChecked={layoutMode === 'whole'} onChange={() => setLayoutMode('whole')} description={t('layout.whole.desc')} />
-      <Radio id="layout-custom" name="layout" label={t('layout.custom')} isChecked={layoutMode === 'custom'} isDisabled={!customPossible}
-        onChange={() => { setLayoutMode('custom'); if (!winGb && layoutMaxWin) setWinGb(String(Math.max(32, Math.floor(layoutMaxWin / GiB / 2)))); }}
-        description={customPossible ? t('layout.custom.desc', { min: GBs(MIN_WINDOWS_CHOSEN) }) : t('layout.custom.tooSmall', { min: GBs(MIN_WINDOWS_CHOSEN) })} />
+    <FormSection title={t('layout.label')} titleElement="h3">
+      <FormGroup role="radiogroup" fieldId="layout" label={t('layout.size')} isStack>
+        <Radio id="layout-whole" name="layout" label={t('layout.whole')} isChecked={layoutMode === 'whole'} onChange={() => setLayoutMode('whole')} description={t('layout.whole.desc')} />
+        <Radio id="layout-custom" name="layout" label={t('layout.custom')} isChecked={layoutMode === 'custom'} isDisabled={!customPossible}
+          onChange={() => { setLayoutMode('custom'); if (!winGb && layoutMaxWin) setWinGb(String(Math.max(32, Math.floor(layoutMaxWin / GiB / 2)))); }}
+          description={customPossible ? t('layout.custom.desc', { min: GBs(MIN_WINDOWS_CHOSEN) }) : t('layout.custom.tooSmall', { min: GBs(MIN_WINDOWS_CHOSEN) })} />
+      </FormGroup>
       {layoutMode === 'custom' && (
         <>
           <FormGroup label={t('layout.windowsSize')} fieldId="layout-win" isRequired>
             <TextInput id="layout-win" value={winGb} onChange={(_e, v) => setWinGb(v)} type="text" inputMode="decimal" validated={layoutErr ? 'error' : 'default'} />
-            <FormHelperText><HelperText><HelperTextItem>{layoutMaxWin ? t('layout.windowsSize.help', { min: GBs(MIN_WINDOWS_CHOSEN), max: GBs(layoutMaxWin) }) : t('layout.windowsSize.helpNoDisk', { min: GBs(MIN_WINDOWS_CHOSEN) })}</HelperTextItem></HelperText></FormHelperText>
+            <FormHelperText><HelperText><HelperTextItem variant={layoutErr ? 'error' : 'default'}>{layoutErr
+              ?? (layoutMaxWin ? t('layout.windowsSize.help', { min: GBs(MIN_WINDOWS_CHOSEN), max: GBs(layoutMaxWin) }) : t('layout.windowsSize.helpNoDisk', { min: GBs(MIN_WINDOWS_CHOSEN) }))}</HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
           <FormGroup role="radiogroup" fieldId="layout-rest" label={t('layout.rest')} isStack>
             <Radio id="rest-free" name="rest" label={t('layout.rest.free')} isChecked={rest === 'unallocated'} onChange={() => setRest('unallocated')} />
@@ -828,12 +840,12 @@ export function App() {
             <TextInput id="layout-linux" value={linuxGb} onChange={(_e, v) => setLinuxGb(v)} type="text" inputMode="decimal" />
             <FormHelperText><HelperText><HelperTextItem>{t('layout.linux.help')}</HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
-          {layoutErr && <HelperText><HelperTextItem variant="error">{layoutErr}</HelperTextItem></HelperText>}
         </>
       )}
-      <Content component="p" className="muted">{layoutDisk ? t(dest === 'emmc' ? 'layout.preview.emmc' : 'layout.preview.drive', { size: GBs(layoutDisk) }) : t('layout.preview.later')}</Content>
-      {layoutDisk && <List>{layoutRows().map((r) => <ListItem key={r}>{r}</ListItem>)}</List>}
-    </FormGroup>
+      <FormGroup fieldId="layout-preview" label={layoutDisk ? t(dest === 'emmc' ? 'layout.preview.emmc' : 'layout.preview.drive', { size: GBs(layoutDisk) }) : t('layout.preview.later')}>
+        {layoutDisk && layoutList}
+      </FormGroup>
+    </FormSection>
   );
 
   const setupStep = (
@@ -919,7 +931,7 @@ export function App() {
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
         [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
         [t('review.target'), t(`review.target.${dest}.${method}`)],
-        ...(staged ? [[t('layout.label'), layoutDisk ? layoutRows().join('; ') : t('layout.preview.later')] as [string, string]] : []),
+        ...(staged ? [[t('layout.label'), layoutDisk ? layoutRows().map(([k, v]) => `${k}: ${v}`).join('; ') : t('layout.preview.later')] as [string, string]] : []),
         [t('review.erased'), dest === 'emmc' ? t('review.erased.windows') : disk ? t('review.erased.disk', { drive: drives?.find((x) => x.device === disk)?.description ?? disk }) : t('review.disk.choose')],
         ...(method === 'stage' ? [
           [t('review.written'), t('review.written.windows', { size: windows ? formatBytes(windows.imageSize + 560e6) : '' }) + (onBoard || dest !== 'emmc' ? '' : t('review.written.maskrom'))],
@@ -1099,13 +1111,13 @@ export function App() {
             <ProgressList stages={run.stages} waiting={t('run.waiting')} />
             {run.confirm && (
               <Card>
-                <CardTitle>{t('confirm.title')}</CardTitle>
+                <CardTitle>{t(c?.kind === 'upgrade' ? 'confirm.title.upgrade' : 'confirm.title')}</CardTitle>
                 <CardBody>
                   <Stack hasGutter>
                     {confirmText}
                     <ActionList>
                       <ActionListGroup>
-                        <ActionListItem><Button variant="danger" onClick={() => answer(true)}>{t('go.erase')}</Button></ActionListItem>
+                        <ActionListItem><Button variant={c?.kind === 'upgrade' ? 'primary' : 'danger'} onClick={() => answer(true)}>{t(c?.kind === 'upgrade' ? 'go.upgrade' : 'go.erase')}</Button></ActionListItem>
                         <ActionListItem><Button variant="secondary" onClick={() => answer(false)}>{t('confirm.stop')}</Button></ActionListItem>
                       </ActionListGroup>
                     </ActionList>
@@ -1141,10 +1153,10 @@ export function App() {
           <Wizard navAriaLabel="Steps" isVisitRequired>
             <WizardStep name={t('step.board')} id="board" footer={{ isNextDisabled: !board, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{boardStep}</WizardStep>
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
-            <WizardStep name={t('step.windows')} id="windows" isHidden={!windowsNeeded} footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>
-            <WizardStep name={t('step.setup')} id="setup" isHidden={!windowsNeeded} isDisabled={!edition} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>
-            <WizardStep name={t('step.upgrade')} id="upgrade" isHidden={task !== 'upgrade'} footer={{ isNextDisabled: !upgradeReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{upgradeStep}</WizardStep>
-            <WizardStep name={t('step.restore')} id="restore" isHidden={!restoreTask} footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>
+            {windowsNeeded && (<WizardStep name={t('step.windows')} id="windows" footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>)}
+            {windowsNeeded && (<WizardStep name={t('step.setup')} id="setup" isDisabled={!edition} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>)}
+            {task === 'upgrade' && (<WizardStep name={t('step.upgrade')} id="upgrade" footer={{ isNextDisabled: !upgradeReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{upgradeStep}</WizardStep>)}
+            {restoreTask && (<WizardStep name={t('step.restore')} id="restore" footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>)}
             <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady) || (task === 'upgrade' && !upgradeReady)}
               footer={<ReviewFooter label={goLabel} disabled={!!why} why={why} onGo={() => setAsk(true)} />}>
               {reviewStep}

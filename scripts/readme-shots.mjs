@@ -13,6 +13,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const out = process.argv[2] ?? 'docs/imgs';
+// SHOT_SIZE=900x600 for a check at a smaller window; the README set is 1100x780.
+const [W, H] = (process.env.SHOT_SIZE ?? '1100x780').split('x').map(Number);
 mkdirSync(out, { recursive: true });
 const tmp = mkdtempSync(join(tmpdir(), 'readme-shots-'));
 await build({ entryPoints: ['test/electron/fake-board-worker.ts'], bundle: true, format: 'esm', platform: 'browser', target: 'chrome130',
@@ -55,7 +57,7 @@ async function session(name, { theme = 'light', lang = 'en', env = {} }, steps) 
   const app = await electron.launch({ args: ['.'], env: { ...base, ...env } });
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1100, 780));
+  await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [W, H]);
   await page.evaluate(([t, l]) => { localStorage.setItem('theme', t); localStorage.setItem('lang', l); }, [theme, lang]);
   await page.reload();
   await page.waitForSelector('h2');
@@ -103,7 +105,7 @@ const windowsFlow = (only) => async (page, shot) => {
   await page.fill('#layout-win', '40');
   await page.click('label[for="rest-exfat"]');
   await page.fill('#layout-linux', '8');
-  await page.locator('text=UEFI firmware, 64 MiB, kept').or(page.locator('text=UEFI 固件，64 MiB，保留')).scrollIntoViewIfNeeded();
+  await page.locator('dl[aria-label]').last().scrollIntoViewIfNeeded();
   await shot('windows-setup');
   if (only) return;
   await next(page);
@@ -141,10 +143,10 @@ await session('upgrade', { env: { WOA_IMAGER_TEST_WORKER: 'fake-board-worker.js'
   await next(page);
   await page.click('.pf-v6-c-wizard__footer button:has-text("Connect and write")');
   await page.click('.pf-v6-c-modal-box button:has-text("Connect")');
-  await page.waitForSelector('text=Erase and write?', { timeout: 120000 });
+  await page.waitForSelector('text=Upgrade the firmware?', { timeout: 120000 });
   await page.waitForTimeout(500);
   await shot('upgrade-confirm');
-  await page.click('button:has-text("Erase and write")');
+  await page.click('.pf-v6-c-card button:has-text("Upgrade")');
   await page.waitForSelector('text=The firmware is upgraded', { timeout: 180000 });
   await shot('upgrade-done');
 });
@@ -159,7 +161,7 @@ const about = async (page, shot) => {
   await page.waitForTimeout(400);
   await shot('clear-cache');
   await page.click('.pf-v6-c-modal-box button.pf-m-link:has-text("Cancel"), .pf-v6-c-modal-box button.pf-m-link:has-text("取消")');
-  await page.click('button.link-button');
+  await page.click('#about-open');
   await page.waitForSelector('#about-title');
   await page.waitForTimeout(500);
   await shot('about');

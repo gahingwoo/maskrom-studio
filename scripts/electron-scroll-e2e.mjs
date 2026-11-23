@@ -102,7 +102,7 @@ for (const [w, h] of [[900, 600], [1024, 700], [720, 480]]) {
   await page.waitForSelector('.pf-v6-c-modal-box');
   await page.waitForTimeout(300);
   await check(page, tag('settings'), [w / 2, h / 2], '.pf-v6-c-modal-box');
-  await page.click('button.link-button');
+  await page.click('#about-open');
   await page.waitForSelector('#about-title');
   await page.waitForTimeout(500);
   await check(page, tag('about'), [w / 2, h / 2], '.about-backdrop');
