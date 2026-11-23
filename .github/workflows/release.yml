@@ -301,7 +301,7 @@ jobs:
       - name: Installer and zip
         run: npx electron-builder --win nsis zip --${{ matrix.arch }} --publish never
       - name: Icon and no firmware blobs in the app
-        run: node scripts/check-package.mjs dist/${{ matrix.arch == 'arm64' && 'win-arm64-unpacked' || 'win-unpacked' }} ${{ matrix.arch }}
+        run: node scripts/check-package.mjs dist/${{ matrix.arch == 'arm64' && 'win-arm64-unpacked' || 'win-unpacked' }}
       - name: Name the zip
         run: |
           V=$(node -p "require('./package.json').version")
