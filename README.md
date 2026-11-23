@@ -43,6 +43,10 @@ Status: first version, not yet run on hardware. See
 - **UEFI firmware.** The latest edk2-rk3576 release, written as the web
   flasher [flash.gahingwoo.com](https://flash.gahingwoo.com/) writes it
   ("whole image" or "keep the partitions"), over Maskrom.
+- **Firmware upgrade that keeps Windows.** For the TaishanPi 3M and
+  CM5-IO: shows the installed and the new edk2-rk3576 version, saves the
+  board's UEFI settings on the PC and writes them back, never touches the
+  partition table, and reads back everything it wrote.
 - **On the board itself.** Run the app under Linux on the board (booted
   from an SD card or USB drive) and it writes that board's eMMC or SPI NOR
   directly, no second computer.

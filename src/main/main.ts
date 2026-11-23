@@ -12,6 +12,8 @@ import { withDiskFacts } from './linux-disks';
 import { isWindowsSourceUrl } from '../shared/windows-sources';
 import { checkArmbianSignature, checkFactoryMd5, findArmbian, inspectFactory, type ArmbianImage, type FactoryImage } from './restore';
 import { planFactory } from '../woa/rkfw';
+import { checkNewImage } from '../woa/upgrade-plan';
+import type { UpgradeImage } from '../shared/ipc';
 import type { ArmbianBranch } from '../woa/armbian-restore';
 import type { ArmbianChoice, FactoryChoice } from '../shared/ipc';
 import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
@@ -266,6 +268,61 @@ ipcMain.handle('woa:hash-windows', (e, token: string) => exclusive(async (signal
     return { error: String((err as Error).message ?? err) };
   }
 }, { error: 'Another job is running.' }));
+
+// --- upgrading the firmware, keeping Windows and the settings -------------
+
+/** Where the copies of the boards' UEFI settings are kept. */
+const nvdataDir = () => join(app.getPath('userData'), 'nvdata-backups');
+
+ipcMain.handle('upgrade:prepare', (e, board: BoardId, from: 'release' | 'file') => exclusive(async (signal): Promise<UpgradeImage | { error: string } | null> => {
+  try {
+    let path: string;
+    let origin: string;
+    let name: string;
+    // Screenshots: the made-up releases have no file; a test image stands in for both choices.
+    const testImage = !app.isPackaged ? process.env.WOA_IMAGER_TEST_FIRMWARE : undefined;
+    if (from === 'release' && FAKE_RELEASES && testImage) from = 'file';
+    if (from === 'file') {
+      const pick = testImage;
+      if (pick) path = pick;
+      else {
+        const r = await dialog.showOpenDialog(win!, {
+          title: 'Choose an edk2-rk3576 eMMC image', properties: ['openFile'],
+          filters: [{ name: 'Firmware image', extensions: ['img'] }, { name: 'All files', extensions: ['*'] }],
+        });
+        if (r.canceled || r.filePaths.length === 0) return null;
+        path = r.filePaths[0];
+      }
+      name = path.split(/[\\/]/).pop()!;
+      origin = name;
+    } else {
+      path = await firmwareFile(e.sender, board, signal);
+      name = firmware!.images[board]!.file;
+      origin = `edk2-rk3576 ${firmware!.tag}`;
+    }
+    const f = fileSource(path);
+    let info;
+    try { info = await checkNewImage(f, board); } finally { f.close(); }
+    if (typeof info === 'string') return { error: info };
+    return { served: serve(path, name), origin, version: info.version, dt: info.dt, nvdataLba: info.nvdata.lba, nvdataSectors: info.nvdata.sectors };
+  } catch (err) {
+    if (signal.aborted) return { error: 'Cancelled.' };
+    return { error: String((err as Error).message ?? err) };
+  }
+}, { error: 'Another job is running.' }));
+
+ipcMain.handle('upgrade:save-nvdata', (_e, board: BoardId, data: Uint8Array) => {
+  try {
+    if (!(data instanceof Uint8Array) || data.length === 0 || data.length > 1 << 20) return { error: 'Not a settings copy.' };
+    mkdirSync(nvdataDir(), { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const path = join(nvdataDir(), `${board}-nvdata-${stamp}.bin`);
+    writeFileSync(path, data);
+    return { path };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
 
 // --- restoring Armbian or a factory image ----------------------------------
 

@@ -95,6 +95,17 @@ export interface FactoryChoice {
   refuse: string | null;
 }
 
+/** A firmware image ready for an upgrade: served to the worker, with what it says it is. */
+export interface UpgradeImage {
+  served: Served;
+  /** Where it came from: "edk2-rk3576 0.4.1" or the file name. */
+  origin: string;
+  version: string | null;
+  dt: string;
+  nvdataLba: number;
+  nvdataSectors: number;
+}
+
 export interface DriverFolder { token: string; name: string; files: number; bytes: number; infs: number }
 
 export interface BoardHereInfo {
@@ -151,6 +162,10 @@ export interface ImagerApi {
   pickFactory(): Promise<FactoryChoice | { error: string } | null>;
   /** Check its MD5 and serve it. */
   prepareFactory(token: string): Promise<Served | { error: string }>;
+  /** The firmware for an upgrade: the latest release's eMMC image (downloaded, checked) or a file chosen here; read and checked for this board. */
+  prepareUpgrade(board: BoardId, from: 'release' | 'file'): Promise<UpgradeImage | { error: string } | null>;
+  /** Keep a copy of the board's UEFI settings (nvdata) on this computer; returns its path. */
+  saveNvdata(board: BoardId, data: Uint8Array): Promise<{ path: string } | { error: string }>;
   /** Serve the chosen Windows file to the Maskrom worker. */
   serveWindows(token: string): Promise<Served | { error: string }>;
   /** Choose a folder of extra driver packages (wddm-mali-g52, gt9271, ...). Errors are translation keys or messages. */

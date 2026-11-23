@@ -39,6 +39,10 @@ export interface Probe {
   capacity: number | null;
   /** Sectors 0..33, when they were asked for. */
   head: Uint8Array | null;
+  /** The eMMC maker as rfi names it ("SAMSUNG"), or null. */
+  manufacturer?: string | null;
+  /** Read sectors (rl), retried up to three times: the first rl after db sometimes fails. Trusted only within the first 32 MiB. */
+  read?: (lba: number, sectors: number) => Promise<Uint8Array | null>;
 }
 
 export interface RegionJob {
@@ -134,9 +138,15 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
     if (mode === 'none') return { ok: false, reason: 'No board in Maskrom mode was found.', written };
     if (mode === 'several') return { ok: false, reason: 'More than one Rockchip device is connected. Leave only the board you want to write.', written };
 
+    let manufacturer: string | null = null;
     const rfi = async () => {
       const p = await r.run(['rfi']);
-      return p.code === 0 ? parseFlashSize(p.lines) : null;
+      if (p.code !== 0) return null;
+      for (const l of p.lines) {
+        const m = /Manufacturer:\s*([^,]+),/i.exec(l);
+        if (m) manufacturer = m[1].trim();
+      }
+      return parseFlashSize(p.lines);
     };
     let capacity: number | null = null;
     if (mode === 'maskrom' && (capacity = await rfi()) !== null) {
@@ -177,7 +187,16 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
       head = await readSectors(r, 0, 34);
       if (!head) hooks.log('Reading the partition table failed.');
     }
-    const planned = await job.plan({ capacity, head });
+    const read = async (lba: number, sectors: number) => {
+      for (let i = 1; i <= 3; i++) {
+        hooks.log(`$ rkdeveloptool rl ${lba} ${sectors}${i > 1 ? ` (try ${i})` : ''}`);
+        const got = await readSectors(r, lba, sectors);
+        if (got && got.length === sectors * SECTOR) return got;
+        await hooks.sleep(1000);
+      }
+      return null;
+    };
+    const planned = await job.plan({ capacity, head, manufacturer, read });
     if ('stop' in planned) return { ok: false, reason: planned.stop, written };
     const { regions, summary } = planned;
     if (capacity !== null) {

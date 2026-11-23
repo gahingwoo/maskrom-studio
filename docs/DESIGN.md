@@ -364,6 +364,47 @@ Enterprise 23H2 arm64; its 23H2 Consumer media is x64 only), UUP dump
 checked), and Microsoft's own ARM64 ISO page, marked unsuitable: it offers
 only the current release (26H2 on that date).
 
+## Upgrading the firmware, keeping Windows and the settings
+
+`src/woa/edk2-image.ts`, `src/woa/upgrade-plan.ts`. The procedure used by
+hand on both boards, for an eMMC that runs edk2-rk3576 with Windows (or
+anything else) behind it:
+
+1. The new image: the latest release's `<Board>-emmc-edk2-<tag>.img`
+   (checked against the release's SHA-256) or a file chosen here. It must
+   be 32 MiB with a FIT (d00dfeed) at sector 16384 holding edk2 and nvdata
+   images, made for this board: the FIT's configuration names the device
+   tree (rk3576-lckfb-tspi-3m, rk3576-armsom-cm5-io) and the edk2 image
+   carries the build stamp `rk3576-<Board>-<version>` in UTF-16; both must
+   name this board. The page shows the version before the board is
+   connected.
+2. Over MaskROM: `db`, then `rfi` (the eMMC's maker and size, shown in the
+   confirmation), `rl 0 34` (the partition table must have the firmware
+   partition at sector 64, or the upgrade could overwrite a partition),
+   then the installed firmware's FIT and edk2 image are read the same way,
+   so the confirmation says "installed X, new Y". All of it lies below
+   32 MiB, where this loader's reads are trustworthy.
+3. Keeping the settings (the default): the nvdata slot must be at the same
+   sectors in both images (43648, 384 sectors in every build so far). It
+   is read (`rl`, up to three tries: the first rl after db has failed with
+   "Read LBA failed"), must hold a firmware volume (`_FVH` at 0x28), and is
+   saved under the app's data folder (`nvdata-backups/<board>-nvdata-<time>.bin`)
+   before anything is written. An all-0xFF slot means the board has no
+   settings saved; that is said, and the image's empty slot goes on.
+   "Reset the settings" writes the image as it is.
+4. One `wl 64` of the image from sector 64 to its end with the saved slot
+   in place of the image's empty one: the same bytes as writing the image
+   and then `wl 43648` the backup, in one command. Sectors 0..63 (the GPT
+   that belongs to Windows) are never written.
+5. Everything written (sectors 64 to 65535) is read back and compared byte
+   for byte, then `rd`.
+
+In the rkdeveloptool built here `rl` takes a length in sectors (rktool-
+webusb's main.cpp); the desktop build used by hand takes bytes.
+
+The ROCK 4D keeps its firmware in SPI NOR with no Windows partition table
+to protect; it has no upgrade entry.
+
 ## Putting the board back: Armbian or a factory image
 
 Both replace everything on the eMMC (Windows, the UEFI firmware and its

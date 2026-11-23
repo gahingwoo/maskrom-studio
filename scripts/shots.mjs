@@ -101,6 +101,60 @@ const factory = join(tmp, 'update.img');
   writeFileSync(factory, out);
 }
 
+// An edk2-rk3576 eMMC image for the upgrade: 32 MiB, a FIT at sector 16384 with edk2 and nvdata, a build stamp.
+const firmwareImg = join(tmp, 'TaishanPi3M-emmc-edk2-0.4.2.img');
+{
+  const strings = [];
+  const strOff = (n) => { let o = 0; for (const x of strings) { if (x === n) return o; o += x.length + 1; } strings.push(n); return o; };
+  const words = [];
+  const bytes = (b) => { const pad = new Uint8Array(Math.ceil(b.length / 4) * 4); pad.set(b); for (let i = 0; i < pad.length; i += 4) words.push(((pad[i] << 24) | (pad[i + 1] << 16) | (pad[i + 2] << 8) | pad[i + 3]) >>> 0); };
+  const node = (name, n) => {
+    words.push(1); bytes(new TextEncoder().encode(`${name}\0`));
+    for (const [k, v] of Object.entries(n)) {
+      if (typeof v === 'object') continue;
+      const val = typeof v === 'number' ? Uint8Array.of(v >>> 24, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff) : new TextEncoder().encode(`${v}\0`);
+      words.push(3, val.length, strOff(k)); bytes(val);
+    }
+    for (const [k, v] of Object.entries(n)) if (typeof v === 'object') node(k, v);
+    words.push(2);
+  };
+  node('', { images: { edk2: { 'data-size': 0xd00000, 'data-offset': 0x4f000 }, nvdata: { 'data-size': 0x30000, 'data-offset': 0xd4f000 } },
+    configurations: { default: 'conf', conf: { description: 'rk3576-lckfb-tspi-3m' } } });
+  words.push(9);
+  const fit = new Uint8Array(4096);
+  const dv = new DataView(fit.buffer);
+  const str = new TextEncoder().encode(strings.map((x) => `${x}\0`).join(''));
+  [0xd00dfeed, 4096, 0x38, 0x38 + words.length * 4, 0x28, 17, 16, 0, str.length, words.length * 4].forEach((v, i) => dv.setUint32(i * 4, v));
+  words.forEach((w, i) => dv.setUint32(0x38 + i * 4, w));
+  fit.set(str, 0x38 + words.length * 4);
+  const img = new Uint8Array(32 << 20);
+  img.set(fit, 16384 * 512);
+  const stamp = 'rk3576-TaishanPi3M-0.4.2';
+  const at = 16384 * 512 + 4096 + 0x4f000 + 0x1000;
+  for (let i = 0; i < stamp.length; i++) img[at + i * 2] = stamp.charCodeAt(i);
+  img.fill(0xff, 16384 * 512 + 4096 + 0xd4f000, 16384 * 512 + 4096 + 0xd4f000 + 0x30000);
+  writeFileSync(firmwareImg, img);
+}
+
+const upgradeFlow = async (page, shot) => {
+  await page.click('label[for="board-tspi3m"]');
+  await next(page);
+  await page.waitForSelector('#task-upgrade');
+  await page.click('label[for="task-upgrade"]');
+  await next(page);
+  await page.waitForSelector('text=rk3576-lckfb-tspi-3m');
+  await shot('10-upgrade');
+  await next(page);
+  await page.waitForSelector('.pf-v6-c-wizard__footer');
+  await shot('11-upgrade-review');
+};
+for (const [w, h, tag] of [[1100, 780, 'd'], [720, 640, 'm']]) {
+  for (const theme of ['light', 'dark']) {
+    await session(tag, w, h, theme, { ...base, WOA_IMAGER_TEST_FIRMWARE: firmwareImg }, upgradeFlow);
+  }
+}
+await session('d', 1100, 780, 'light', { ...base, WOA_IMAGER_TEST_FIRMWARE: firmwareImg }, upgradeFlow, 'zh-CN');
+
 // Putting the board back: Armbian (made-up answer), then a factory update.img.
 const restoreFlow = async (page, shot) => {
   await page.click('label[for="board-tspi3m"]');

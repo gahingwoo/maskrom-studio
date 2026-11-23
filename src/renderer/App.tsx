@@ -11,7 +11,7 @@ import {
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import { formatBytes } from '../shared/format';
-import type { ArmbianChoice, FactoryChoice, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { ArmbianChoice, FactoryChoice, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
 import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WoaBoard } from '../woa/boards';
@@ -25,7 +25,7 @@ import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
 import { applyTheme, readTheme, type Theme } from './theme';
 
-type Task = 'windows' | 'uefi' | 'uefi-keep' | 'stick' | 'armbian' | 'factory';
+type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
 type Dest = 'emmc' | 'sd' | 'nvme';
 type Method = 'stage' | 'host';
@@ -39,12 +39,13 @@ interface Run {
   title: string;
   stages: Stage[];
   log: string[];
-  confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | null;
+  confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | UpgradeSummary | null;
   result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[] } | null;
 }
 interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }> }
 interface WholeSummary { kind: 'whole'; label: string; capacity: number | null; bytes: number; clearsBackupGpt: boolean }
 interface FactorySummary { kind: 'factory'; capacity: number | null; chip: string; model: string; version: string; partitions: Array<{ name: string; lba: number; bytes: number }>; skipped: string[]; bytes: number }
+interface UpgradeSummary { kind: 'upgrade'; manufacturer: string | null; capacity: number | null; installed: string | null; next: string | null; settings: 'kept' | 'reset' | 'none'; backup: string | null; nvdataLba: number; nvdataSectors: number; lba: number; bytes: number }
 interface FirmwareSummary { kind: 'firmware'; board: string; target: string; lba: number; bytes: number; capacity: number | null; dropped: Array<{ name: string; bytes: number }>; erases: string }
 
 const EMPTY_ACCOUNT: Account = { user: '', password: '', computerName: '', locale: '', keyboard: '', timeZone: '', autoLogonAlways: false };
@@ -120,6 +121,9 @@ export function App() {
   const [armbian, setArmbian] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
   const [factory, setFactory] = useState<FactoryChoice | null>(null);
   const [factoryError, setFactoryError] = useState<string | null>(null);
+  const [upgrade, setUpgrade] = useState<UpgradeImage | 'loading' | null>(null);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [keepSettings, setKeepSettings] = useState(true);
   const [run, setRun] = useState<Run | null>(null);
   const [settings, setSettings] = useState(false);
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
@@ -256,7 +260,7 @@ export function App() {
     if ('error' in loader) { finish({ ok: false, title: t('result.loader'), detail: loader.error }); return; }
     const settingsNow = await api.getSettings();
     const job = jobFor(served, extraFiles);
-    if (job.kind === 'firmware' || job.kind === 'whole' || job.kind === 'factory') job.resetAfter = settingsNow.resetAfterMaskrom;
+    if (job.kind === 'firmware' || job.kind === 'whole' || job.kind === 'factory' || job.kind === 'upgrade') job.resetAfter = settingsNow.resetAfterMaskrom;
     const w = new Worker('woa-worker.js', { type: 'module' });
     worker.current = w;
     const at = (p: string) => new URL(p, document.baseURI).href;
@@ -270,12 +274,18 @@ export function App() {
         setStage(target, { note: t(`stage.${m.stage as RegionStage}`) });
       } else if (m.type === 'progress') {
         setStage('write', { percent: Math.min(100, Math.floor((m.done * 100) / Math.max(1, m.total))), note: t('run.of', { done: formatBytes(m.done), total: formatBytes(m.total) }) });
+      } else if (m.type === 'backup') {
+        api.saveNvdata(m.boardId as BoardId, m.data).then((r) => {
+          if ('path' in r) addLog(t('upgrade.backupSaved', { path: r.path }));
+          w.postMessage({ type: 'woa-backup-saved', path: 'path' in r ? r.path : null, ...('error' in r ? { error: r.error } : {}) } satisfies WoaWorkerRequest);
+        });
       } else if (m.type === 'planned') {
         update((r) => ({ ...r, confirm: m.summary as Run['confirm'] }));
       } else if (m.type === 'result') {
         w.terminate();
         worker.current = null;
         finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
+          : job.kind === 'upgrade' ? t('result.upgrade')
           : job.kind === 'whole' ? t('result.restore.armbian') : job.kind === 'factory' ? t('result.restore.factory') : t('result.firmware'),
           job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined));
         if (m.result.ok) update((r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, percent: 100 })) }));
@@ -320,6 +330,17 @@ export function App() {
       setRun({ title: t('run.stagingDisk'), log: [], confirm: null, result: null, stages: [{ id: 'write', label: t('run.stagingDisk.stage'), percent: 0 }] });
       const r = await withProgress('write', () => api.writeBoard({ kind: 'stage-disk', ...req, target: dest as 'sd' | 'nvme', device: disk! }));
       finish(resultOf(r, t('result.stagedDisk'), [t(`next.disk.${dest}`), t('next.disk.boot'), ...STAGE_NEXT.slice(1)]));
+      return;
+    }
+    if (task === 'upgrade') {
+      const up = upgrade as UpgradeImage;
+      setRun({ title: t('run.upgrade'), log: [], confirm: null, result: null, stages: [
+        { id: 'fw', label: t('run.upgrade.image', { origin: up.origin }), percent: 100, note: `${up.served.name}, ${formatBytes(up.served.size)}` },
+        { id: 'board', label: t('run.upgrade.board'), percent: null },
+        { id: 'write', label: t('run.writeTo', { storage: t('storage.emmc') }), percent: 0 },
+        { id: 'check', label: t('run.check'), percent: null },
+      ] });
+      await startMaskrom(() => ({ kind: 'upgrade', boardId: board.id, image: { url: up.served.url, size: up.served.size }, keepSettings, resetAfter: true }), [], null);
       return;
     }
     if (restoreTask) {
@@ -416,6 +437,8 @@ export function App() {
                 if (task === 'uefi-keep' && b.firmwareStorage !== 'emmc') setTask(null);
                 if ((task === 'armbian' || task === 'factory') && !ARMBIAN_RESTORE[b.id]) setTask(null);
                 setFactory(null);
+                setUpgrade(null);
+                if (task === 'upgrade' && b.firmwareStorage !== 'emmc') setTask(null);
               }} />
           ))}
         </FormGroup>
@@ -446,6 +469,10 @@ export function App() {
               onChange={() => setTask(tg.id as Task)}
               description={`${fwText(board, tg, 'note')} ${fwRelease ? t('task.release', { tag: releases!.firmware!.tag, file: fwRelease.file }) : ''}`.trim()} />
           ))}
+          {board.firmwareStorage === 'emmc' && (
+            <Radio id="task-upgrade" name="task" label={t('task.upgrade')} isChecked={task === 'upgrade'} isDisabled={onBoard}
+              onChange={() => setTask('upgrade')} description={onBoard ? t('task.upgrade.here') : t('task.upgrade.desc')} />
+          )}
           {ARMBIAN_RESTORE[board.id] && (
             <>
               <Radio id="task-armbian" name="task" label={t('task.armbian')} isChecked={task === 'armbian'} isDisabled={onBoard}
@@ -486,6 +513,53 @@ export function App() {
       {onBoard && task !== 'windows' && board.firmwareStorage === 'spinor' && here?.mtd.length === 0 && (
         <Alert isInline variant="warning" title={t('task.noMtd')}>{msg(here.noMtdHelp)}</Alert>
       )}
+    </StepPage>
+  );
+
+  const loadUpgrade = async (from: 'release' | 'file') => {
+    if (!board) return;
+    setUpgradeError(null);
+    setUpgrade('loading');
+    const r = await api.prepareUpgrade(board.id, from);
+    if (!r) { setUpgrade(null); return; }
+    if ('error' in r) { setUpgrade(null); setUpgradeError(errorText(r.error)); return; }
+    setUpgrade(r);
+  };
+  useEffect(() => {
+    if (task === 'upgrade' && board && upgrade === null && !upgradeError && fwRelease) loadUpgrade('release');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task, boardId, fwRelease]);
+  const upgradeReady = typeof upgrade === 'object' && upgrade !== null;
+  const upgradeStep = board && (
+    <StepPage title={t('step.upgrade')} lead={t('upgrade.lead')}>
+      <Alert isInline variant="info" title={t('upgrade.kept.title')}>{t('upgrade.kept.text')}</Alert>
+      <Card isPlain>
+        <CardTitle>{t('upgrade.card')}</CardTitle>
+        <CardBody>
+          <Stack hasGutter>
+            {upgrade === 'loading' && <Content component="p">{t('upgrade.loading')}</Content>}
+            {upgradeError && <Alert isInline variant="danger" title={upgradeError} />}
+            {upgradeReady && (
+              <DescriptionList isCompact isHorizontal aria-label={t('upgrade.card')}>
+                {([
+                  [t('upgrade.installed'), t('upgrade.installed.value')],
+                  [t('upgrade.new'), `${upgrade.version ?? t('upgrade.noVersion')} (${upgrade.origin})`],
+                  [t('upgrade.for'), upgrade.dt],
+                  [t('upgrade.settingsAt'), t('upgrade.settingsAt.value', { lba: upgrade.nvdataLba, n: upgrade.nvdataSectors })],
+                ] as Array<[string, string]>).map(([k, v]) => (
+                  <DescriptionListGroup key={k}><DescriptionListTerm>{k}</DescriptionListTerm><DescriptionListDescription>{v}</DescriptionListDescription></DescriptionListGroup>
+                ))}
+              </DescriptionList>
+            )}
+            <Flex spaceItems={{ default: 'spaceItemsMd' }}>
+              <FlexItem><Button variant="secondary" isDisabled={upgrade === 'loading' || !fwRelease} onClick={() => loadUpgrade('release')}>{t('upgrade.useRelease', { tag: releases?.firmware?.tag ?? '' })}</Button></FlexItem>
+              <FlexItem><Button variant="secondary" isDisabled={upgrade === 'loading'} onClick={() => loadUpgrade('file')}>{t('upgrade.useFile')}</Button></FlexItem>
+            </Flex>
+            <Switch id="keep-settings" label={t('upgrade.keep')} isChecked={keepSettings} onChange={(_e, v) => setKeepSettings(v)} />
+            <Content component="p" className="muted">{keepSettings ? t('upgrade.keep.desc') : t('upgrade.reset.desc')}</Content>
+          </Stack>
+        </CardBody>
+      </Card>
     </StepPage>
   );
 
@@ -742,6 +816,16 @@ export function App() {
       if (dest !== 'emmc' && !disk) why = t('review.disk.choose');
       if (!destOk) why = t('host.macDisk');
       goLabel = onBoard || dest !== 'emmc' || method === 'host' ? t('go.erase') : t('go.connect');
+    } else if (task === 'upgrade') {
+      reviewRows = reviewRows.concat([
+        [t('review.firmware'), upgradeReady ? `${upgrade.version ?? t('upgrade.noVersion')} (${upgrade.origin})` : t('review.notChosen')],
+        [t('review.written'), t('review.upgrade.written')],
+        [t('review.upgrade.kept'), keepSettings ? t('review.upgrade.kept.keep') : t('review.upgrade.kept.reset')],
+        [t('review.checked'), t('review.upgrade.checked')],
+        [t('review.then'), t('review.upgrade.then')],
+      ]);
+      if (!upgradeReady) why = t('why.upgrade');
+      goLabel = t('go.connect');
     } else if (restoreTask) {
       reviewRows = reviewRows.concat([
         [t('review.written'), task === 'armbian'
@@ -808,7 +892,14 @@ export function App() {
 
   const windowsNeeded = task === 'windows';
   const c = run?.confirm;
-  const confirmText = c && (c.kind === 'whole' ? (
+  const confirmText = c && (c.kind === 'upgrade' ? (
+    <Review rows={[
+      [t('confirm.upgrade.emmc'), `${c.manufacturer ?? '?'}, ${c.capacity ? `${GB(c.capacity)} (${c.capacity / 512} ${t('confirm.sectors')})` : t('confirm.storage.unknown')}`],
+      [t('confirm.upgrade.versions'), t('confirm.upgrade.versions.value', { installed: c.installed ?? t('upgrade.noVersion'), next: c.next ?? t('upgrade.noVersion') })],
+      [t('confirm.write'), t('confirm.upgrade.write', { lba: c.lba, size: formatBytes(c.bytes) })],
+      [t('review.upgrade.kept'), c.settings === 'kept' ? t('confirm.upgrade.kept', { path: c.backup ?? '' }) : c.settings === 'none' ? t('confirm.upgrade.none') : t('review.upgrade.kept.reset')],
+    ]} />
+  ) : c.kind === 'whole' ? (
     <Review rows={[
       [t('confirm.write'), t('confirm.restore.whole', { label: armbianFound?.file ?? c.label, size: formatBytes(c.bytes) })],
       [t('confirm.storage'), c.capacity ? GB(c.capacity) : t('confirm.storage.unknown')],
@@ -915,8 +1006,9 @@ export function App() {
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
             <WizardStep name={t('step.windows')} id="windows" isHidden={!windowsNeeded} footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>
             <WizardStep name={t('step.setup')} id="setup" isHidden={!windowsNeeded} isDisabled={!edition} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>
+            <WizardStep name={t('step.upgrade')} id="upgrade" isHidden={task !== 'upgrade'} footer={{ isNextDisabled: !upgradeReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{upgradeStep}</WizardStep>
             <WizardStep name={t('step.restore')} id="restore" isHidden={!restoreTask} footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>
-            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady)}
+            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady) || (task === 'upgrade' && !upgradeReady)}
               footer={<ReviewFooter label={goLabel} disabled={!!why} why={why} onGo={() => setAsk(true)} />}>
               {reviewStep}
             </WizardStep>

@@ -22,6 +22,7 @@ import type { SetupOptions } from './setup-files';
 import { planFactoryRegions, planWhole } from './restore-plan';
 import { readUpdateImage } from './rkfw';
 import { TRUSTED_READ_BYTES } from './maskrom-regions';
+import { planUpgrade } from './upgrade-plan';
 
 export interface FileRef { url: string; size: number }
 
@@ -37,28 +38,36 @@ export type WoaJob =
   /** A whole-disk image (Armbian) from sector 0: replaces everything on the eMMC. */
   | { kind: 'whole'; boardId: string; image: FileRef; label: string; resetAfter: boolean }
   /** A factory update.img: its partition table, loader and partitions. */
-  | { kind: 'factory'; boardId: string; image: FileRef; resetAfter: boolean };
+  | { kind: 'factory'; boardId: string; image: FileRef; resetAfter: boolean }
+  /** A new edk2-rk3576 eMMC image from sector 64, keeping the partition table, Windows and (if asked) the saved UEFI settings. */
+  | { kind: 'upgrade'; boardId: string; image: FileRef; keepSettings: boolean; resetAfter: boolean };
 
 export type WoaWorkerRequest =
   | { type: 'woa-start'; moduleUrl: string; wasmUrl: string; loaderUrl: string; job: WoaJob; reconnectTimeout?: number }
-  | { type: 'woa-confirm'; ok: boolean };
+  | { type: 'woa-confirm'; ok: boolean }
+  /** The page saved the settings backup (or could not). */
+  | { type: 'woa-backup-saved'; path: string | null; error?: string };
 
 export type WoaWorkerEvent =
   | { type: 'log'; line: string }
   | { type: 'stage'; stage: RegionStage; detail?: string }
   | { type: 'progress'; done: number; total: number }
   | { type: 'planned'; summary: unknown }
+  /** Save this copy of the board's UEFI settings on the computer before anything is written. */
+  | { type: 'backup'; boardId: string; data: Uint8Array }
   | { type: 'result'; result: RegionResult };
 
 const post = (m: WoaWorkerEvent) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
 
 let answer: ((ok: boolean) => void) | null = null;
+let saved: ((r: { path: string | null; error?: string }) => void) | null = null;
 
 const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
   const m = ev.data;
   if (m.type === 'woa-confirm') { answer?.(m.ok); answer = null; return; }
+  if (m.type === 'woa-backup-saved') { saved?.({ path: m.path, ...(m.error ? { error: m.error } : {}) }); saved = null; return; }
   if (m.type !== 'woa-start') return;
   try {
     const imported = await import(/* @vite-ignore */ m.moduleUrl);
@@ -153,6 +162,18 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
         loader, readHead: false, spotCheck: true, resetAfter: job.resetAfter, checkHeadBytes: TRUSTED_READ_BYTES,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
         plan: async (p) => planWhole(image, job.label, p.capacity),
+        confirm,
+      }, hooks);
+    } else if (job.kind === 'upgrade') {
+      const image = xhrSource(job.image.url, job.image.size);
+      const keep = job.keepSettings;
+      result = await writeRegions(runner, {
+        loader, readHead: true, spotCheck: false, resetAfter: job.resetAfter, checkHeadBytes: TRUSTED_READ_BYTES,
+        ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
+        plan: (p) => planUpgrade({
+          boardId: job.boardId, image, probe: p, keepSettings: keep, log: hooks.log,
+          saveBackup: (data) => new Promise((resolve) => { saved = resolve; post({ type: 'backup', boardId: job.boardId, data }); }),
+        }),
         confirm,
       }, hooks);
     } else if (job.kind === 'factory') {
