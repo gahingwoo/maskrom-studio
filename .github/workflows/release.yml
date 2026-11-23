@@ -311,6 +311,12 @@ jobs:
             (cd "node_modules/$d" && node "$GYP" rebuild --arch=arm64)
             echo "::endgroup::"
           done
+          # electron-builder leaves lzma-native's build/ out of the package (its
+          # prebuilds/ go in), so the arm64 build goes where node-gyp-build
+          # looks first, with the liblzma.dll it links beside it.
+          mkdir -p node_modules/lzma-native/prebuilds/win32-arm64
+          cp node_modules/lzma-native/build/Release/lzma_native.node node_modules/lzma-native/prebuilds/win32-arm64/node.napi.node
+          cp node_modules/lzma-native/deps/bin_arm64/liblzma.dll node_modules/lzma-native/prebuilds/win32-arm64/
           # Optional for etcher-sdk (USB boot of other boards): built if it can be.
           (cd node_modules/winusb-driver-generator && node "$GYP" rebuild --arch=arm64) || echo "winusb-driver-generator not built (optional)"
           node node_modules/esbuild/install.js
