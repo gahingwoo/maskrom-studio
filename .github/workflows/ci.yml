@@ -51,6 +51,8 @@ jobs:
         run: xvfb-run -a node scripts/electron-maskrom-e2e.mjs
       - name: Staged Windows install inside Electron against a pretend TaishanPi 3M
         run: xvfb-run -a node scripts/electron-woa-e2e.mjs
+      - name: Scrolling and text selection inside Electron at small window sizes
+        run: xvfb-run -a node scripts/electron-scroll-e2e.mjs
       - name: Screenshots
         run: xvfb-run -a node scripts/shots.mjs shots
       - uses: actions/upload-artifact@v4

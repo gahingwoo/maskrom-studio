@@ -1,6 +1,25 @@
 /* Page CSS on top of PatternFly. Layout comes from PatternFly's Page, Wizard,
    Stack, Flex and Form; what is here is only what PatternFly has no option for. */
-html, body, #root { height: 100%; }
+/* One scroll container per view: the wizard's main column in the wizard,
+   PatternFly's page main elsewhere (the run view), the modal body in a
+   dialog. The document itself never scrolls, so a wheel anywhere over the
+   content reaches the element that can move. */
+html, body, #root { height: 100%; overflow: hidden; }
+.pf-v6-c-page { height: 100%; }
+
+/* A desktop app, not a web page: the chrome and static text are not
+   selectable by a stray drag or a double click, and Ctrl+A in it selects
+   nothing. What people copy stays selectable: fields, code and logs, file
+   paths and details, error messages, the About values. */
+body { user-select: none; -webkit-user-select: none; }
+input, textarea, [contenteditable="true"],
+.pf-v6-c-code-block, .pf-v6-c-code-block *, .detail, .mono, .selectable,
+.pf-v6-c-alert__title, .pf-v6-c-alert__description,
+.pf-v6-c-helper-text__item.pf-m-error,
+.about-backdrop .pf-v6-c-description-list__description,
+.pf-v6-c-description-list__description {
+  user-select: text; -webkit-user-select: text;
+}
 
 /* Masthead: the mark at its own size beside the name (PatternFly sizes the
    logo slot for a wide wordmark). */
@@ -41,24 +60,41 @@ html, body, #root { height: 100%; }
 /* About Maskrom Studio: PatternFly's about modal box, as gahingwoo.com's
    "About this site" lays it out (its site.css, adapted). */
 .about-backdrop .pf-v6-c-about-modal-box {
-  --pf-v6-c-about-modal-box--BackgroundImage: url("../../node_modules/@patternfly/patternfly/assets/images/pf-background.svg");
-  --pf-v6-c-about-modal-box--BackgroundPosition: bottom right;
+  /* Sized to its rows, as gahingwoo.com's About this site: about 44rem wide,
+     as tall as the content, no artwork behind the text, the PatternFly
+     product layout's large paddings and right-hand column taken out. */
+  --pf-v6-c-about-modal-box--BackgroundImage: none;
   --pf-v6-c-about-modal-box--Height: auto;
   --pf-v6-c-about-modal-box--lg--Height: auto;
+  --pf-v6-c-about-modal-box--sm--GridTemplateColumns: 1fr auto;
+  --pf-v6-c-about-modal-box--lg--GridTemplateColumns: 1fr auto;
+  --pf-v6-c-about-modal-box__brand--PaddingBlockStart: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__brand--sm--PaddingBlockEnd: var(--pf-t--global--spacer--md);
+  --pf-v6-c-about-modal-box__brand--sm--PaddingInlineStart: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__brand--sm--PaddingInlineEnd: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__close--PaddingBlockStart: var(--pf-t--global--spacer--lg);
+  --pf-v6-c-about-modal-box__close--lg--PaddingInlineEnd: var(--pf-t--global--spacer--lg);
+  --pf-v6-c-about-modal-box__close--sm--PaddingBlockEnd: var(--pf-t--global--spacer--md);
+  --pf-v6-c-about-modal-box__header--sm--PaddingInlineStart: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__header--sm--PaddingInlineEnd: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__content--sm--MarginBlockStart: var(--pf-t--global--spacer--md);
+  --pf-v6-c-about-modal-box__header--PaddingBlockEnd: 0;
+  --pf-v6-c-about-modal-box__content--sm--MarginInlineStart: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__content--sm--MarginInlineEnd: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__content--sm--MarginBlockEnd: var(--pf-t--global--spacer--xl);
+  --pf-v6-c-about-modal-box__strapline--sm--PaddingBlockStart: var(--pf-t--global--spacer--lg);
   border-radius: var(--pf-t--global--border--radius--large);
-  width: min(64rem, calc(100vw - 2 * var(--pf-t--global--spacer--lg)));
+  width: min(44rem, calc(100vw - 2 * var(--pf-t--global--spacer--lg)));
   max-height: calc(100dvh - 2 * var(--pf-t--global--spacer--lg));
   overflow: auto;
 }
 .about-backdrop .pf-v6-c-description-list {
-  --pf-v6-c-description-list--m-horizontal__term--width: 10rem;
-  --pf-v6-c-description-list--RowGap: var(--pf-t--global--spacer--md);
+  --pf-v6-c-description-list--m-horizontal__term--width: 9rem;
+  --pf-v6-c-description-list--RowGap: var(--pf-t--global--spacer--sm);
 }
 .about-backdrop .pf-v6-c-description-list__description a { overflow-wrap: anywhere; }
 .about-backdrop { z-index: 1000; }
-.about-list { margin: 0; padding-left: 1.1rem; }
-.about-list li + li { margin-top: var(--pf-t--global--spacer--xs); }
-.credit-badge { display: block; width: 11.25rem; height: auto; }
+.credit-badge { display: block; width: 9rem; height: auto; }
 .credit-badge__mark { fill: #9472db; }
 .credit-badge__label, .credit-badge__name { font-family: var(--pf-t--global--font--family--mono); }
 .credit-badge__label { font-size: 20px; font-weight: 500; letter-spacing: 0.5px; fill: var(--pf-t--global--text--color--subtle); }

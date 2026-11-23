@@ -394,31 +394,12 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
     return () => window.removeEventListener('keydown', key);
   }, [open, onClose]);
   if (!open) return null;
-  const sep = api.platform === 'win32' ? '\\' : '/';
-  const at = (p: string) => `${api.dataDir}${sep}${p}`;
   const link = (href: string, text: string) => <a href={href} target="_blank" rel="noreferrer">{text}</a>;
   const rows: Array<[string, React.ReactNode]> = [
     [t('about.version'), t('about.version.value', { version: api.version, commit: BUILD.commit, date: BUILD.date })],
     [t('about.design'), `PatternFly ${BUILD.patternfly}`],
-    [t('about.network'), (
-      <ul className="about-list">
-        <li>{t('about.network.releases')}</li>
-        <li>{t('about.network.loader')}</li>
-        <li>{t('about.network.armbian')}</li>
-        <li>{t('about.network.openssh')}</li>
-        <li>{t('about.network.update')}</li>
-        <li>{t('about.network.links')}</li>
-        <li>{t('about.network.none')}</li>
-      </ul>
-    )],
-    [t('about.kept'), (
-      <ul className="about-list">
-        <li>{t('about.kept.settings', { path: at('settings.json') })}</li>
-        <li>{t('about.kept.nvdata', { path: at('nvdata-backups') })}</li>
-        <li>{t('about.kept.images', { path: at('images') })}</li>
-        <li>{t('about.kept.loaders', { path: at('loaders') })}</li>
-      </ul>
-    )],
+    [t('about.network'), <>{t('about.network.value')} {link(`https://github.com/gahingwoo/maskrom-studio/blob/${BUILD.commit}/docs/network.md`, t('about.details'))}</>],
+    [t('about.kept'), <span className="selectable">{t('about.kept.value', { path: api.dataDir })}</span>],
     [t('about.images'), t('about.images.value')],
     [t('about.boards'), t('about.boards.value')],
     [t('about.licence'), t('about.licence.value')],
@@ -435,7 +416,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
             <Button ref={close} variant="plain" aria-label={t('about.close')} icon={<TimesIcon />} onClick={onClose} />
           </div>
           <div className="pf-v6-c-about-modal-box__header">
-            <h1 className="pf-v6-c-title pf-m-4xl" id="about-title">{t('about.title')}</h1>
+            <h1 className="pf-v6-c-title pf-m-2xl" id="about-title">{t('about.title')}</h1>
           </div>
           <div className="pf-v6-c-about-modal-box__content">
             <dl className="pf-v6-c-description-list pf-m-horizontal">
