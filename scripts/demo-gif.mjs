@@ -54,6 +54,7 @@ async function record(lang) {
   let last = 0;
   let recording = false;
   let loop = null;
+  let failures = 0;
   try {
     const page = await app.firstWindow();
     await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [W, H]);
@@ -66,16 +67,29 @@ async function record(lang) {
     const grab = async () => {
       while (recording) {
         const now = Date.now();
-        const data = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
-        virtual += (now - last) / speed;
-        last = now;
-        frames.push({ data, t: virtual / 1000 });
+        // capturePage() of a hidden window under xvfb now and then fails
+        // (UnknownVizError on the CI runner); that frame is skipped, the
+        // previous one stays on screen a little longer.
+        let data = null;
+        try {
+          data = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+        } catch (e) {
+          if (!recording) break;
+          failures += 1;
+          if (failures > 200) throw e;
+        }
+        if (data) {
+          virtual += (now - last) / speed;
+          last = now;
+          frames.push({ data, t: virtual / 1000 });
+        }
         await new Promise((r) => setTimeout(r, Math.max(0, 70 - (Date.now() - now))));
       }
     };
     last = Date.now();
     recording = true;
     loop = grab();
+    loop.catch(() => {});
 
     let x = W / 2, y = H / 2;
     await page.mouse.move(x, y);
@@ -126,6 +140,8 @@ async function record(lang) {
     await loop?.catch(() => {});
     await app.close();
   }
+  if (failures) console.log(`${lang}: ${failures} frames could not be captured`);
+  if (frames.length < 50) throw new Error(`only ${frames.length} frames`);
   return frames;
 }
 
