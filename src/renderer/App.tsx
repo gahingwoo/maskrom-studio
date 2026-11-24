@@ -42,7 +42,7 @@ interface Run {
   stages: Stage[];
   log: string[];
   confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | UpgradeSummary | null;
-  result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[] } | null;
+  result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[]; help?: 'noBoard' } | null;
 }
 interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }>;
   layout?: { windowsBytes: number; data: { fs: string; label: string; bytes: number } | null; unallocatedBytes: number }; chosen?: boolean }
@@ -230,7 +230,10 @@ export function App() {
       </Alert>
     );
   })();
-  const errorText = (e: string) => (/^[a-z]+\.[a-z.]+$/.test(e) ? t(e) : msg(e));
+  // A failed download says what to do, with the system's own words kept for a search.
+  const NETWORK = /^net::ERR_[A-Z_]+|fetch failed|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENETUNREACH|socket hang up/i;
+  const errorText = (e: string) => (/^[a-z]+\.[a-z.]+$/.test(e) ? t(e)
+    : NETWORK.test(e) ? t('error.network', { code: NETWORK.exec(e)![0] }) : msg(e));
 
   // The disk after the install (windows-layout.ts). Sizes are typed in GB (GiB); the preview uses the
   // board's usual eMMC size, or the chosen drive's; the plan on the real size is checked again when writing.
@@ -309,7 +312,8 @@ export function App() {
       }
       return { ok: true, title: okTitle, ...(text ? { text } : {}), ...(next ? { next } : {}) };
     }
-    return { ok: false, title: errorText(r.reason), ...('detail' in r && r.detail ? { detail: r.detail } : {}) };
+    return { ok: false, title: errorText(r.reason), ...('detail' in r && r.detail ? { detail: r.detail } : {}),
+      ...(/^No board in Maskrom mode was found/.test(r.reason) ? { help: 'noBoard' as const } : {}) };
   };
 
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
@@ -497,10 +501,15 @@ export function App() {
       finish({ ok: false, title: t('result.cancelled') });
     } else api.cancel();
   };
-  const closeRun = () => {
+  // After a failure the wizard opens where the run was started (Confirm or Review), with every choice kept.
+  const [wizardStart, setWizardStart] = useState(1);
+  const closeRun = (again = false) => {
     for (const tok of servedTokens.current) api.releaseServed(tok);
     servedTokens.current = [];
+    setWizardStart(run?.result && !run.result.ok ? lastStep : 1);
     setRun(null);
+    // Try again: as pressing Start (Simple) or the Review button (Advanced, which asks first) once more.
+    if (again) { if (mode === 'simple') start(); else setAsk(true); }
   };
 
   // --- steps -------------------------------------------------------------------
@@ -544,7 +553,7 @@ export function App() {
       {releases && releases.problems.length > 0 && (
         <Alert isInline variant="warning" title={t('task.problems')}
           actionLinks={<AlertActionLink onClick={() => api.releases(true).then(setReleases)}>{t('task.retry')}</AlertActionLink>}>
-          <List>{releases.problems.map((p) => <ListItem key={p}>{msg(p)}</ListItem>)}</List>
+          <List>{releases.problems.map((p) => <ListItem key={p}>{errorText(p)}</ListItem>)}</List>
         </Alert>
       )}
       {tierNotice}
@@ -677,7 +686,7 @@ export function App() {
       {task === 'armbian' && (
         <>
           {armbianOffers === 'looking' && <Content component="p">{t('restore.list.looking')}</Content>}
-          {armbianOffers && typeof armbianOffers === 'object' && 'error' in armbianOffers && <Alert isInline variant="danger" title={msg(armbianOffers.error)} />}
+          {armbianOffers && typeof armbianOffers === 'object' && 'error' in armbianOffers && <Alert isInline variant="danger" title={errorText(armbianOffers.error)} />}
           {offerList.length > 0 && (
             <Table aria-label={t('restore.list')} variant="compact" id="armbian-offers">
               <Thead><Tr>
@@ -711,7 +720,7 @@ export function App() {
             <Alert isInline variant="info" title={t(`sd.boot.${board.sdBoot}.title`, { board: board.name })}>{t(`sd.boot.${board.sdBoot}.armbian`, { board: board.name })}</Alert>
           )}
           {armbian === 'looking' && <Content component="p">{t('restore.looking')}</Content>}
-          {armbian && typeof armbian === 'object' && 'error' in armbian && <Alert isInline variant="danger" title={msg(armbian.error)} />}
+          {armbian && typeof armbian === 'object' && 'error' in armbian && <Alert isInline variant="danger" title={errorText(armbian.error)} />}
           {armbianFound && (
             <DescriptionList isCompact isHorizontal aria-label={t('restore.found')}>
               {([
@@ -1208,7 +1217,7 @@ export function App() {
         {task === 'armbian' && (
           <FormGroup fieldId="s-armbian" role="radiogroup" label={t('s.armbian.label')}>
             {armbianOffers === 'looking' && <Content component="p">{t('s.armbian.looking')}</Content>}
-            {armbianOffers && typeof armbianOffers === 'object' && 'error' in armbianOffers && <Content component="p">{msg(armbianOffers.error)}</Content>}
+            {armbianOffers && typeof armbianOffers === 'object' && 'error' in armbianOffers && <Content component="p">{errorText(armbianOffers.error)}</Content>}
             {offerList.length > 0 && (
               <Gallery hasGutter minWidths={{ default: '12rem' }}>
                 {[...simpleArmbian.desktops, ...(simpleArmbian.cli ? [simpleArmbian.cli] : [])].map((o) => {
@@ -1239,7 +1248,7 @@ export function App() {
             <FormHelperText><HelperText><HelperTextItem>
               {armbianFound ? t('s.armbian.info', { version: armbianFound.version, kernel: armbianFound.kernel, distro: distroWords(armbianFound.distro),
                 need: armbianFound.minBytes ? formatBytes(armbianFound.minBytes) : '?' })
-                : armbian && typeof armbian === 'object' && 'error' in armbian ? msg(armbian.error) : armbian === 'looking' ? t('s.armbian.checking') : ''}
+                : armbian && typeof armbian === 'object' && 'error' in armbian ? errorText(armbian.error) : armbian === 'looking' ? t('s.armbian.checking') : ''}
             </HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
         )}
@@ -1307,7 +1316,7 @@ export function App() {
     </StepPage>
   );
   const simpleWizard = (
-    <Wizard navAriaLabel={t('steps')} isVisitRequired>
+    <Wizard navAriaLabel={t('steps')} isVisitRequired startIndex={wizardStart}>
       <WizardStep name={t('s.step.board')} id="s-board" footer={{ isNextDisabled: !board || !SIMPLE_BOARDS.includes(board.id), isCancelHidden: true, isBackHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleBoardStep}</WizardStep>
       <WizardStep name={t('s.step.what')} id="s-what" isDisabled={!board} footer={{ isNextDisabled: !task || !SIMPLE_TASKS.includes(task) || !simpleReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleWhatStep}</WizardStep>
       <WizardStep name={t('s.step.ready')} id="s-ready" isDisabled={!simpleReady} footer={{ isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleReadyStep}</WizardStep>
@@ -1319,6 +1328,13 @@ export function App() {
   );
 
   const windowsNeeded = task === 'windows';
+  const lastStep = mode === 'simple' ? 4 : 3 + (windowsNeeded ? 2 : 0) + (task === 'upgrade' ? 1 : 0) + (restoreTask ? 1 : 0);
+  // Opened at the last step once; afterwards the wizard starts at the first step as before.
+  useEffect(() => {
+    if (run || wizardStart === 1) return undefined;
+    const id = setTimeout(() => setWizardStart(1), 0);
+    return () => clearTimeout(id);
+  }, [run, wizardStart]);
   const c = run?.confirm;
   const confirmText = c && (c.kind === 'upgrade' ? (
     <Review rows={[
@@ -1391,7 +1407,8 @@ export function App() {
         <PageSection isFilled aria-label={run.title}>
           <Stack hasGutter className="step">
             <Title headingLevel="h2">{run.result ? (run.result.ok ? t('run.done') : t('run.stopped')) : run.title}</Title>
-            <ProgressList stages={run.stages} waiting={t('run.waiting')} />
+            {!run.result && !run.confirm && <Content component="p" className="step-lead">{t('run.keep')}</Content>}
+            {/* The one thing the run waits for comes first, above the progress. */}
             {run.confirm && (
               <Card>
                 <CardTitle>{t(c?.kind === 'upgrade' ? 'confirm.title.upgrade' : 'confirm.title')}</CardTitle>
@@ -1408,6 +1425,7 @@ export function App() {
                 </CardBody>
               </Card>
             )}
+            <ProgressList stages={run.stages} waiting={t('run.waiting')} />
             {run.result && (
               <Alert isInline variant={run.result.ok ? 'success' : 'danger'} title={run.result.title}>
                 {run.result.text && <p>{run.result.text}</p>}
@@ -1420,9 +1438,31 @@ export function App() {
                 <CardBody><List component="ol" type={OrderType.number}>{run.result.next.map((n) => <ListItem key={n}>{n}</ListItem>)}</List></CardBody>
               </Card>
             )}
+            {run.result?.help === 'noBoard' && (
+              <Card>
+                <CardTitle>{t('noboard.title')}</CardTitle>
+                <CardBody>
+                  <List>
+                    <ListItem>{t('noboard.mode')}</ListItem>
+                    <ListItem>{t('noboard.cable')}</ListItem>
+                    {api.platform === 'win32' && <ListItem>{t('noboard.windows')}</ListItem>}
+                    {api.platform === 'linux' && <ListItem>{t('noboard.linux')}</ListItem>}
+                    <ListItem>{t('noboard.one')}</ListItem>
+                  </List>
+                </CardBody>
+              </Card>
+            )}
             <StackItem>
               {!run.result ? <Button variant="secondary" onClick={cancel}>{t('cancel')}</Button>
-                : <Button variant="primary" onClick={closeRun}>{t('done')}</Button>}
+                : run.result.ok ? <Button variant="primary" onClick={() => closeRun()}>{t('done')}</Button>
+                : (
+                  <ActionList>
+                    <ActionListGroup>
+                      <ActionListItem><Button variant="primary" onClick={() => closeRun(true)}>{t('run.again')}</Button></ActionListItem>
+                      <ActionListItem><Button variant="secondary" onClick={() => closeRun()}>{t('run.backToSteps')}</Button></ActionListItem>
+                    </ActionListGroup>
+                  </ActionList>
+                )}
             </StackItem>
             {run.log.length > 0 && (
               <ExpandableSection toggleText={t('log')} className="log">
@@ -1433,7 +1473,7 @@ export function App() {
         </PageSection>
       ) : (
         <PageSection type="wizard" isFilled hasBodyWrapper={false} aria-label={t('app.name')}>
-          {mode === 'simple' ? simpleWizard : mode === 'advanced' && <Wizard navAriaLabel={t('steps')} isVisitRequired>
+          {mode === 'simple' ? simpleWizard : mode === 'advanced' && <Wizard navAriaLabel={t('steps')} isVisitRequired startIndex={wizardStart}>
             <WizardStep name={t('step.board')} id="board" footer={{ isNextDisabled: !board, isCancelHidden: true, isBackHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{boardStep}</WizardStep>
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
             {windowsNeeded && (<WizardStep name={t('step.windows')} id="windows" footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>)}
