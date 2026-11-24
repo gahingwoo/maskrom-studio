@@ -517,7 +517,7 @@ export const MESSAGES: Dict = {
   'ask.restore.title': d('Erase the whole eMMC?', '清除整个 eMMC？'),
   'ask.restore.text': d('Windows, the UEFI firmware, its settings and all data on the board\'s eMMC will be lost. The board must be in MaskROM mode and connected.',
     '开发板 eMMC 上的 Windows、UEFI 固件及其设置和全部数据都会丢失。开发板需要处于 MaskROM 模式并已连接。'),
-  'ask.restore.understand': d('I understand that everything on the eMMC is erased', '我知道 eMMC 上的全部内容都会被清除'),
+  'review.understand': d('I understand that this data will be erased', '我明白这些数据会被清除'),
   'run.restore': d('Writing {what}', '正在写入 {what}'),
   'run.restore.armbian': d('Armbian image: download, SHA-256, signature, decompress', 'Armbian 映像：下载、SHA-256、签名、解压'),
   'run.restore.factory': d('update.img: MD5', 'update.img：MD5'),
@@ -706,7 +706,6 @@ export const MESSAGES: Dict = {
   'ask.here.password': d('Your administrator password is asked for next.', '接下来会请求管理员密码。'),
   'ask.connect.title': d('Connect to the board', '连接开发板'),
   'ask.connect.text': d('The board is connected and read first. Nothing is erased until you confirm what the board reports.', '先连接并读取开发板。在你确认开发板报告的内容之前，不会清除任何东西。'),
-  'ask.connect': d('Connect', '连接'),
   'storage.emmc': d('eMMC', 'eMMC'),
   'storage.spinor': d('SPI NOR flash', 'SPI NOR 闪存'),
 

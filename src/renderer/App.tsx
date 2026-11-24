@@ -120,7 +120,6 @@ export function App() {
   const [dest, setDest] = useState<Dest>('emmc');
   const [method, setMethod] = useState<Method>('stage');
   const [disk, setDisk] = useState<string | null>(null);
-  const [ask, setAsk] = useState(false);
   const [layoutMode, setLayoutMode] = useState<'whole' | 'custom'>('whole');
   const [winGb, setWinGb] = useState('');
   const [rest, setRest] = useState<RestUse>('unallocated');
@@ -391,7 +390,6 @@ export function App() {
   const storageWord = (b: WoaBoard, tk: Task) => t(tk === 'windows' || b.firmwareStorage === 'emmc' ? 'storage.emmc' : 'storage.spinor');
 
   const start = async () => {
-    setAsk(false);
     if (!board || !task) return;
     if (driveTask) {
       const isArmbian = task === 'armbian';
@@ -522,8 +520,8 @@ export function App() {
     servedTokens.current = [];
     setWizardStart(run?.result && !run.result.ok ? lastStep : 1);
     setRun(null);
-    // Try again: as pressing Start (Simple) or the Review button (Advanced, which asks first) once more.
-    if (again) { if (mode === 'simple') start(); else setAsk(true); }
+    // Try again: as pressing Start or the Review button once more; what is erased was confirmed on that page.
+    if (again) start();
   };
 
   // --- steps -------------------------------------------------------------------
@@ -1097,6 +1095,18 @@ export function App() {
     }
   }
 
+  const erases = task !== 'upgrade';
+  const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
+    : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
+    : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
+  const askText = !board || !task ? '' : driveTask ? t('ask.drive.text', { drive: drives?.find((x) => x.device === stick)?.description ?? stick ?? '' })
+    : restoreTask ? t('ask.restore.text')
+    : task === 'stick' ? t('ask.stick.text')
+    : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
+      : task === 'windows' && method === 'host' ? t('ask.host.text')
+    : onBoard ? `${here?.emmc && (task === 'windows' || board.firmwareStorage === 'emmc') ? `${here.emmc.model}, ${here.emmc.device}, ${GB(here.emmc.bytes)}. ` : ''}${task === 'windows' ? t('ask.here.windows') : ''}${t('ask.here.password')}`
+      : t('ask.connect.text');
+
   const reviewStep = (
     <StepPage title={t('step.review')}>
       <Review rows={reviewRows} />
@@ -1127,6 +1137,16 @@ export function App() {
         </FormGroup>
       )}
       {maskromCard}
+      {/* The one confirmation before starting (UX audit D5): what is erased, a box to tick, then the button below.
+          A write over MaskROM still shows what the board itself reports before anything is written. */}
+      {board && task && (
+        <Alert isInline variant={erases ? 'warning' : 'info'} title={askTitle} id="review-erase">
+          <Stack hasGutter>
+            <Content component="p">{askText}</Content>
+            {erases && <Checkbox id="review-understood" label={t('review.understand')} isChecked={understood} onChange={(_e, v) => setUnderstood(v)} />}
+          </Stack>
+        </Alert>
+      )}
     </StepPage>
   );
 
@@ -1168,9 +1188,8 @@ export function App() {
     : task === 'armbian' ? !!armbianFound && !armbianTooBig
     : task === 'factory' ? !!factory && !factory.refuse
     : task === 'upgrade' ? upgradeReady : false;
-  const erases = task !== 'upgrade';
   const [understood2, setUnderstood2] = useState(false);
-  useEffect(() => { setUnderstood2(false); }, [task, boardId]);
+  useEffect(() => { setUnderstood2(false); setUnderstood(false); }, [task, boardId, dest, disk, stick, method, restoreTo]);
   const term = (word: string, help: string) => (
     <>
       {word}{' '}
@@ -1387,20 +1406,6 @@ export function App() {
     ]} />
   ));
 
-  const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
-    : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
-    : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
-  const askText = !board || !task ? '' : driveTask ? t('ask.drive.text', { drive: drives?.find((x) => x.device === stick)?.description ?? stick ?? '' }) : restoreTask ? (
-    <Stack hasGutter>
-      <Content component="p">{t('ask.restore.text')}</Content>
-      <Checkbox id="ask-understood" label={t('ask.restore.understand')} isChecked={understood} onChange={(_e, v) => setUnderstood(v)} />
-    </Stack>
-  ) : task === 'stick' ? t('ask.stick.text')
-    : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
-      : task === 'windows' && method === 'host' ? t('ask.host.text')
-    : onBoard ? `${here?.emmc && (task === 'windows' || board.firmwareStorage === 'emmc') ? `${here.emmc.model}, ${here.emmc.device}, ${GB(here.emmc.bytes)}. ` : ''}${task === 'windows' ? t('ask.here.windows') : ''}${t('ask.here.password')}`
-      : t('ask.connect.text');
-
   return (
     <Shell onSettings={() => setSettings(true)} mode={run ? null : mode} onMode={requestMode}>
       {!run && offer && dismissed !== offer.version && (
@@ -1492,22 +1497,12 @@ export function App() {
             {task === 'upgrade' && (<WizardStep name={t('step.upgrade')} id="upgrade" footer={{ isNextDisabled: !upgradeReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{upgradeStep}</WizardStep>)}
             {restoreTask && (<WizardStep name={t('step.restore')} id="restore" footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>)}
             <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady) || (task === 'upgrade' && !upgradeReady)}
-              footer={<ReviewFooter label={goLabel} disabled={!!why} why={why} onGo={() => setAsk(true)} />}>
+              footer={<ReviewFooter label={goLabel} disabled={!!why || (erases && !understood)} why={why} onGo={() => { setUnderstood(false); start(); }} />}>
               {reviewStep}
             </WizardStep>
           </Wizard>}
         </PageSection>
       )}
-      <Modal isOpen={ask} onClose={() => { setAsk(false); setUnderstood(false); }} variant="small" aria-labelledby="ask-title">
-        <ModalHeader title={askTitle} labelId="ask-title" />
-        <ModalBody>{askText}</ModalBody>
-        <ModalFooter>
-          {restoreTask && !driveTask
-            ? <Button variant="danger" onClick={() => { setUnderstood(false); start(); }} isDisabled={!understood}>{t('ask.connect')}</Button>
-            : <Button variant={onBoard || task === 'stick' || driveTask || onPc ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' || driveTask || onPc ? t('go.erase') : t('ask.connect')}</Button>}
-          <Button variant="link" onClick={() => setAsk(false)}>{t('cancel')}</Button>
-        </ModalFooter>
-      </Modal>
       <SettingsModal open={settings} onClose={() => setSettings(false)} theme={theme} setTheme={setTheme}
         onOffer={(o) => setOffer(o)} onUpdate={() => { setSettings(false); setUpdating(true); }} writing={!!run && !run.result}
         onAbout={() => { setSettings(false); setAbout(true); }} onFirmwareChannel={() => api.releases(true).then(setReleases)}
