@@ -23,7 +23,7 @@ import { accountProblem, DEFAULT_SETUP, OPENSSH, sshKeyProblem, type Account, ty
 import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal, type UiMode } from './common';
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
-import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
+import { ARMBIAN_RESTORE, DESKTOPS, distroWords, simpleOffers, variantWords, type ArmbianOffer } from '../woa/armbian-restore';
 import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
 
@@ -125,7 +125,8 @@ export function App() {
   const [dataLabel, setDataLabel] = useState('Data');
   const [linuxGb, setLinuxGb] = useState('0');
   const [understood, setUnderstood] = useState(false);
-  const [branch, setBranch] = useState<ArmbianBranch>('vendor');
+  const [armbianOffers, setArmbianOffers] = useState<ArmbianOffer[] | { error: string } | 'looking' | null>(null);
+  const [armbianId, setArmbianId] = useState<string | null>(null);
   const [restoreTo, setRestoreTo] = useState<'emmc' | 'drive'>('emmc');
   const [armbian, setArmbian] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
   const [factory, setFactory] = useState<FactoryChoice | null>(null);
@@ -168,13 +169,30 @@ export function App() {
 
   const board = boardId ? woaBoard(boardId)! : null;
   const restoreTask = task === 'armbian' || task === 'factory';
+  // What Armbian publishes for the board (its image index), then the chosen image's .sha, .asc and sizes.
   useEffect(() => {
     if (task !== 'armbian' || !boardId || !ARMBIAN_RESTORE[boardId]) return;
     let live = true;
-    setArmbian('looking');
-    api.findArmbian(boardId, branch).then((r) => { if (live) setArmbian(r); });
+    setArmbianOffers('looking');
+    setArmbian(null);
+    api.listArmbian(boardId).then((r) => {
+      if (!live) return;
+      if ('error' in r) { setArmbianOffers(r); return; }
+      setArmbianOffers(r.offers);
+      setArmbianId((id) => (id && r.offers.some((o) => o.id === id) ? id : simpleOffers(r.offers).recommended));
+    });
     return () => { live = false; };
-  }, [task, boardId, branch]);
+  }, [task, boardId]);
+  useEffect(() => {
+    if (task !== 'armbian' || !boardId || !armbianId || !Array.isArray(armbianOffers)) return;
+    let live = true;
+    setArmbian('looking');
+    api.findArmbian(boardId, armbianId).then((r) => { if (live) setArmbian(r); });
+    return () => { live = false; };
+  }, [task, boardId, armbianId, armbianOffers]);
+  const offerList = Array.isArray(armbianOffers) ? armbianOffers : [];
+  const simpleArmbian = simpleOffers(offerList);
+  const simpleArmbianIds = [...simpleArmbian.desktops.map((o) => o.id), ...(simpleArmbian.cli ? [simpleArmbian.cli.id] : [])];
   const onBoard = via === 'here' && !!here?.boardId && here.boardId === boardId;
   const edition = windows?.editions.find((e) => e.index === index) ?? null;
   const fwRelease = releases?.firmware && boardId ? releases.firmware.boards[boardId] : undefined;
@@ -369,7 +387,7 @@ export function App() {
       setRun({ title: isArmbian ? t('run.drive.armbian') : t('run.drive.uefi'), log: [], confirm: null, result: null,
         stages: [{ id: 'write', label: isArmbian ? t('run.drive.armbian.stage') : t('run.drive.uefi.stage'), percent: 0 }] });
       const r = await withProgress('write', () => api.writeDrive(isArmbian
-        ? { kind: 'armbian', board: board.id, branch, device: stick! } : { kind: 'uefi-sd', board: board.id, device: stick! }));
+        ? { kind: 'armbian', board: board.id, id: armbianId!, device: stick! } : { kind: 'uefi-sd', board: board.id, device: stick! }));
       finish(resultOf(r, isArmbian ? t('result.drive.armbian') : t('result.drive.uefi'), [t(`next.drive.${board.sdBoot}`, { board: board.name })]));
       return;
     }
@@ -423,7 +441,7 @@ export function App() {
       await startMaskrom((sv) => (isArmbian
         ? { kind: 'whole', boardId: board.id, image: { url: sv.img.url, size: sv.img.size }, label: 'The Armbian image', resetAfter: true }
         : { kind: 'factory', boardId: board.id, image: { url: sv.img.url, size: sv.img.size }, resetAfter: true }),
-      [{ id: 'img', get: () => (isArmbian ? api.prepareArmbian(board.id, branch) : api.prepareFactory(factory!.token)) }], null);
+      [{ id: 'img', get: () => (isArmbian ? api.prepareArmbian(board.id, armbianId!) : api.prepareFactory(factory!.token)) }], null);
       return;
     }
     if (onBoard) {
@@ -641,7 +659,11 @@ export function App() {
     </StepPage>
   );
 
-  const armbianFound = armbian && typeof armbian === 'object' && 'file' in armbian ? armbian : null;
+  const armbianFound = armbian && typeof armbian === 'object' && 'file' in armbian && armbian.id === armbianId ? armbian : null;
+  // The board's eMMC is smaller than the image and its room to grow (never so far: 32 and 64 GB).
+  const armbianTooBig = !!armbianFound?.minBytes && restoreTo === 'emmc' && !!board?.emmc && board.emmc.bytes < armbianFound.minBytes;
+  const offerWords = (o: { desktop: boolean; variant: string }) => (o.desktop ? t('restore.desktop', { name: variantWords(o.variant) })
+    : t(o.variant === 'server' ? 'restore.server' : 'restore.minimal'));
   const factoryLink = board?.factoryPage ? (lang === 'en' ? board.factoryPage.en : board.factoryPage.zh) : undefined;
   const chooseFactory = async () => {
     setFactoryError(null);
@@ -654,12 +676,30 @@ export function App() {
     <StepPage title={t('step.restore')} lead={t('restore.lead')}>
       {task === 'armbian' && (
         <>
-          <Form onSubmit={(e) => e.preventDefault()}>
-            <FormGroup role="radiogroup" fieldId="branch" label={t('restore.branch')} isStack>
-              <Radio id="branch-vendor" name="branch" label={t('restore.vendor')} isChecked={branch === 'vendor'} onChange={() => setBranch('vendor')} description={t('restore.vendor.desc')} />
-              <Radio id="branch-edge" name="branch" label={t('restore.edge')} isChecked={branch === 'edge'} onChange={() => setBranch('edge')} description={t('restore.edge.desc')} />
-            </FormGroup>
-          </Form>
+          {armbianOffers === 'looking' && <Content component="p">{t('restore.list.looking')}</Content>}
+          {armbianOffers && typeof armbianOffers === 'object' && 'error' in armbianOffers && <Alert isInline variant="danger" title={msg(armbianOffers.error)} />}
+          {offerList.length > 0 && (
+            <Table aria-label={t('restore.list')} variant="compact" id="armbian-offers">
+              <Thead><Tr>
+                <Th screenReaderText={t('restore.list.pick')} />
+                <Th>{t('restore.col.desktop')}</Th><Th>{t('restore.col.system')}</Th><Th>{t('restore.col.kernel')}</Th>
+                <Th modifier="nowrap">{t('restore.col.download')}</Th><Th modifier="nowrap">{t('restore.col.date')}</Th>
+              </Tr></Thead>
+              <Tbody>
+                {offerList.map((o, i) => (
+                  <Tr key={o.id} id={`offer-${o.id}`} isClickable isRowSelected={armbianId === o.id} onRowClick={() => setArmbianId(o.id)}>
+                    <Td select={{ rowIndex: i, onSelect: () => setArmbianId(o.id), isSelected: armbianId === o.id, variant: 'radio' }} />
+                    <Td dataLabel={t('restore.col.desktop')}>{o.promoted ? t('restore.withNote', { what: offerWords(o), note: t('restore.promoted') }) : offerWords(o)}</Td>
+                    <Td dataLabel={t('restore.col.system')}>{distroWords(o.distro)}</Td>
+                    <Td dataLabel={t('restore.col.kernel')}>{t('restore.withNote', { what: o.kernel, note: t(`restore.branch.${o.branch}`) === `restore.branch.${o.branch}` ? o.branch : t(`restore.branch.${o.branch}`) })}</Td>
+                    <Td dataLabel={t('restore.col.download')} modifier="nowrap">{formatBytes(o.size)}</Td>
+                    <Td dataLabel={t('restore.col.date')} modifier="nowrap">{o.date}</Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          )}
+          <Content component="p" className="muted">{t('restore.branches')}</Content>
           <Form onSubmit={(e) => e.preventDefault()}>
             <FormGroup role="radiogroup" fieldId="restore-to" label={t('restore.to')} isStack>
               <Radio id="restore-to-emmc" name="restore-to" label={t('restore.to.emmc')} isChecked={restoreTo === 'emmc'} onChange={() => setRestoreTo('emmc')} description={t('restore.to.emmc.desc')} />
@@ -677,15 +717,18 @@ export function App() {
               {([
                 [t('restore.file'), armbianFound.file],
                 [t('restore.version'), armbianFound.version],
-                [t('restore.kernel'), `${armbianFound.kernel} (${armbianFound.branch})`],
-                [t('restore.distro'), `Debian ${armbianFound.distro}, ${armbianFound.variant}`],
+                [t('restore.kernel'), t('restore.withNote', { what: armbianFound.kernel, note: armbianFound.branch })],
+                [t('restore.distro'), `${distroWords(armbianFound.distro)}, ${variantWords(armbianFound.variant)}`],
                 [t('restore.signed'), armbianFound.signed ?? '?'],
                 [t('restore.download'), formatBytes(armbianFound.size)],
+                [t('restore.image'), armbianFound.imageBytes === null ? t('restore.image.later') : formatBytes(armbianFound.imageBytes)],
+                [t('restore.needs'), armbianFound.minBytes === null ? t('restore.image.later') : t('restore.needs.value', { size: formatBytes(armbianFound.minBytes) })],
               ] as Array<[string, string]>).map(([k, v]) => (
                 <DescriptionListGroup key={k}><DescriptionListTerm>{k}</DescriptionListTerm><DescriptionListDescription>{v}</DescriptionListDescription></DescriptionListGroup>
               ))}
             </DescriptionList>
           )}
+          {armbianTooBig && <Alert isInline variant="danger" title={t('restore.tooBig', { need: formatBytes(armbianFound!.minBytes!), have: formatBytes(board.emmc!.bytes) })} />}
           <Content component="p">{t('restore.checks')}</Content>
           <Content component="p"><Button variant="link" isInline component="a" href={ARMBIAN_RESTORE[board.id]!.page} target="_blank">{t('restore.armbianPage')}</Button></Content>
         </>
@@ -717,7 +760,7 @@ export function App() {
       )}
     </StepPage>
   );
-  const restoreReady = task === 'armbian' ? !!armbianFound : task === 'factory' ? !!factory && !factory.refuse : true;
+  const restoreReady = task === 'armbian' ? !!armbianFound && !armbianTooBig : task === 'factory' ? !!factory && !factory.refuse : true;
 
   // What was read from the chosen image, before anything is written.
   const windowsFound = (w: WindowsChoice) => {
@@ -980,7 +1023,7 @@ export function App() {
       const drive = stick ? drives?.find((x) => x.device === stick)?.description ?? stick : null;
       reviewRows = reviewRows.concat([
         [t('review.written'), task === 'armbian'
-          ? (armbianFound ? `${t('review.restore.armbian', { version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.drive.written.armbian')}` : t('review.unavailable'))
+          ? (armbianFound ? `${t('review.restore.armbian', { what: `${offerWords(armbianFound)}, ${distroWords(armbianFound.distro)}`, version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.drive.written.armbian')}` : t('review.unavailable'))
           : (sdRelease ? t('review.drive.written.uefi', { tag: releases!.firmware!.tier.label, file: sdRelease.file }) : t('review.unavailable'))],
         [t('review.erased'), drive ? t('review.stick.erased', { drive }) : t('review.drive.choose')],
         [t('review.checked'), t('review.stick.checked')],
@@ -992,7 +1035,7 @@ export function App() {
     } else if (restoreTask) {
       reviewRows = reviewRows.concat([
         [t('review.written'), task === 'armbian'
-          ? (armbianFound ? `${t('review.restore.armbian', { version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.restore.written.armbian')}` : t('review.unavailable'))
+          ? (armbianFound ? `${t('review.restore.armbian', { what: `${offerWords(armbianFound)}, ${distroWords(armbianFound.distro)}`, version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.restore.written.armbian')}` : t('review.unavailable'))
           : (factory ? `${t('review.restore.factory', { file: factory.fileName, chip: factory.chip, model: factory.model, version: factory.version })}. ${t('review.restore.written.factory', { n: factory.partitions.filter((p) => p.lba !== null).length })}` : t('review.notChosen'))],
         [t('review.erased'), t('review.restore.erased')],
         [t('review.checked'), t('review.restore.checked')],
@@ -1042,10 +1085,14 @@ export function App() {
         <FormGroup role="radiogroup" fieldId="stick" label={t(driveTask ? 'review.drive' : 'review.usb')} isStack>
           {drives === null ? <Content component="p">{t('review.usb.looking')}</Content>
             : drives.length === 0 ? <Content component="p">{t('review.usb.none')}</Content>
-              : drives.map((x) => (
-                <Radio key={x.device} id={`stick-${x.device}`} name="stick" isChecked={stick === x.device} onChange={() => setStick(x.device)}
-                  label={`${x.description} (${formatBytes(x.size)})`} description={x.device} />
-              ))}
+              : drives.map((x) => {
+                const small = task === 'armbian' && !!armbianFound?.minBytes && x.size < armbianFound.minBytes;
+                return (
+                  <Radio key={x.device} id={`stick-${x.device}`} name="stick" isChecked={stick === x.device && !small} isDisabled={small} onChange={() => setStick(x.device)}
+                    label={`${x.description} (${formatBytes(x.size)})`}
+                    description={small ? t('drive.tooSmall', { device: x.device, need: formatBytes(armbianFound!.minBytes!) }) : x.device} />
+                );
+              })}
           <Button variant="link" isInline onClick={() => refreshDrives()}>{t('refresh')}</Button>
         </FormGroup>
       )}
@@ -1067,7 +1114,7 @@ export function App() {
     if (layoutMode !== 'whole') out.push(t('mode.reset.layout'));
     if (st.firmwareChannel !== 'stable') out.push(t('mode.reset.tier'));
     if (restoreTo !== 'emmc' || dest !== 'emmc' || method !== 'stage') out.push(t('mode.reset.target'));
-    if (branch !== 'vendor') out.push(t('mode.reset.branch'));
+    if (armbianId && offerList.length && !simpleArmbianIds.includes(armbianId)) out.push(t('mode.reset.branch'));
     if (!keepSettings) out.push(t('mode.reset.keep'));
     if (via === 'here') out.push(t('mode.reset.here'));
     return out;
@@ -1075,7 +1122,8 @@ export function App() {
   const toSimple = async () => {
     if (boardId && !SIMPLE_BOARDS.includes(boardId)) setBoardId(null);
     if (task && !SIMPLE_TASKS.includes(task)) setTask(null);
-    setLayoutMode('whole'); setRestoreTo('emmc'); setDest('emmc'); setMethod('stage'); setBranch('vendor'); setKeepSettings(true); setVia('maskrom');
+    setLayoutMode('whole'); setRestoreTo('emmc'); setDest('emmc'); setMethod('stage');
+    if (armbianId && offerList.length && !simpleArmbianIds.includes(armbianId)) setArmbianId(simpleArmbian.recommended); setKeepSettings(true); setVia('maskrom');
     const st = await api.getSettings();
     if (st.firmwareChannel !== 'stable') { await api.setSettings({ firmwareChannel: 'stable' }); api.releases(true).then(setReleases); }
     await api.setSettings({ uiMode: 'simple' });
@@ -1087,7 +1135,7 @@ export function App() {
     if (list.length) setModeAsk(list); else await toSimple();
   };
   const simpleReady = task === 'windows' ? !!edition
-    : task === 'armbian' ? !!armbianFound
+    : task === 'armbian' ? !!armbianFound && !armbianTooBig
     : task === 'factory' ? !!factory && !factory.refuse
     : task === 'upgrade' ? upgradeReady : false;
   const erases = task !== 'upgrade';
@@ -1103,7 +1151,7 @@ export function App() {
   );
   const simpleChoice = (id: Task, title: string, desc: string, disabled = false) => (
     <Radio key={id} id={`s-task-${id}`} name="s-task" label={title} description={desc} isChecked={task === id} isDisabled={disabled}
-      onChange={() => { setTask(id); if (id === 'armbian') { setBranch('vendor'); setRestoreTo('emmc'); } }} />
+      onChange={() => { setTask(id); if (id === 'armbian') { setRestoreTo('emmc'); if (armbianId && offerList.length && !simpleArmbianIds.includes(armbianId)) setArmbianId(simpleArmbian.recommended); } }} />
   );
   const simpleBoardStep = (
     <StepPage title={t('s.step.board')} lead={t('s.board.lead')}>
@@ -1158,9 +1206,41 @@ export function App() {
           </FormGroup>
         )}
         {task === 'armbian' && (
-          <FormGroup fieldId="s-armbian" label="Armbian">
-            <Content component="p">{armbianFound ? t('s.armbian.info', { version: armbianFound.version, kernel: armbianFound.kernel })
-              : armbian && typeof armbian === 'object' && 'error' in armbian ? msg(armbian.error) : t('s.armbian.looking')}</Content>
+          <FormGroup fieldId="s-armbian" role="radiogroup" label={t('s.armbian.label')}>
+            {armbianOffers === 'looking' && <Content component="p">{t('s.armbian.looking')}</Content>}
+            {armbianOffers && typeof armbianOffers === 'object' && 'error' in armbianOffers && <Content component="p">{msg(armbianOffers.error)}</Content>}
+            {offerList.length > 0 && (
+              <Gallery hasGutter minWidths={{ default: '12rem' }}>
+                {[...simpleArmbian.desktops, ...(simpleArmbian.cli ? [simpleArmbian.cli] : [])].map((o) => {
+                  const pic = o.desktop ? DESKTOPS[o.variant]?.picture : undefined;
+                  const title = o.desktop
+                    ? t(o.id === simpleArmbian.recommended ? 's.armbian.desktop.recommended' : 's.armbian.desktop', { name: variantWords(o.variant) })
+                    : t('s.armbian.cli');
+                  const line = o.desktop ? (t(`s.desk.${o.variant}`) === `s.desk.${o.variant}` ? t('s.desk.other') : t(`s.desk.${o.variant}`)) : t('s.armbian.cli.desc');
+                  return (
+                    <Card key={o.id} id={`s-armbian-${o.id}`} isSelectable isSelected={armbianId === o.id} isCompact>
+                      <CardHeader selectableActions={{ selectableActionId: `s-armbian-input-${o.id}`, selectableActionAriaLabelledby: `s-armbian-${o.id}`, name: 's-armbian',
+                        variant: 'single', onChange: () => setArmbianId(o.id), isChecked: armbianId === o.id }}>
+                        <CardTitle>{title}</CardTitle>
+                      </CardHeader>
+                      <CardBody>
+                        <Stack hasGutter>
+                          {pic ? <img src={`resources/desktops/${pic}`} alt={t('s.armbian.picture', { name: variantWords(o.variant) })} className="desktop-picture" />
+                            : <div className={`desktop-picture desktop-plain${o.desktop ? '' : ' desktop-cli'}`} aria-hidden="true">{o.desktop ? variantWords(o.variant) : '$ _'}</div>}
+                          <Content component="small">{line}</Content>
+                          <Content component="small" className="muted">{t('s.armbian.size', { size: formatBytes(o.size) })}</Content>
+                        </Stack>
+                      </CardBody>
+                    </Card>
+                  );
+                })}
+              </Gallery>
+            )}
+            <FormHelperText><HelperText><HelperTextItem>
+              {armbianFound ? t('s.armbian.info', { version: armbianFound.version, kernel: armbianFound.kernel, distro: distroWords(armbianFound.distro),
+                need: armbianFound.minBytes ? formatBytes(armbianFound.minBytes) : '?' })
+                : armbian && typeof armbian === 'object' && 'error' in armbian ? msg(armbian.error) : armbian === 'looking' ? t('s.armbian.checking') : ''}
+            </HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
         )}
         {task === 'factory' && (

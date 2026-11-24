@@ -8,7 +8,7 @@ import { createReadStream } from 'node:fs';
 import { basename } from 'node:path';
 import { fileSource } from '../helper/board-write';
 import { readPublicKey, readSignature, signatureVerifier } from '../shared/openpgp';
-import { ARMBIAN_RESTORE, ARMBIAN_SIGNING_KEY, armbianRedirect, parseArmbianFileName, parseShaLine, type ArmbianBranch } from '../woa/armbian-restore';
+import { ARMBIAN_INDEX, ARMBIAN_RESTORE, ARMBIAN_SIGNING_KEY, armbianRedirect, isDesktop, minimumDiskBytes, OFFER_ID, parseArmbianFileName, parseArmbianIndex, parseShaLine, xzUncompressedSize, type ArmbianBranch, type ArmbianOffer } from '../woa/armbian-restore';
 import type { BoardId } from '../woa/boards';
 import { readUpdateImage, type UpdateImage } from '../woa/rkfw';
 
@@ -16,6 +16,8 @@ export type FetchFn = (url: string, init?: { method?: string; signal?: AbortSign
 
 export interface ArmbianImage {
   board: BoardId;
+  /** The offer: "Resolute_vendor_gnome". */
+  id: string;
   branch: ArmbianBranch;
   file: string;
   /** Where the redirector sent the download (GitHub or a mirror). */
@@ -30,6 +32,11 @@ export interface ArmbianImage {
   variant: string;
   /** When Armbian signed it (the signature's creation time). */
   signed: string | null;
+  desktop: boolean;
+  /** The decompressed image, from the .xz index at the end of the file; null when the server would not say. */
+  imageBytes: number | null;
+  /** The smallest disk it is written to (minimumDiskBytes); null with imageBytes. */
+  minBytes: number | null;
 }
 
 async function text(fetchFn: FetchFn, url: string, signal?: AbortSignal): Promise<string> {
@@ -38,17 +45,44 @@ async function text(fetchFn: FetchFn, url: string, signal?: AbortSignal): Promis
   return r.text();
 }
 
-/** The current minimal image of this board and kernel branch, from Armbian's redirector. Nothing is downloaded but its .sha and .asc. */
-export async function findArmbian(board: BoardId, branch: ArmbianBranch, fetchFn: FetchFn, signal?: AbortSignal): Promise<ArmbianImage> {
+/** What Armbian publishes for the board, from its image index (armbian-restore.ts). */
+export async function listArmbian(board: BoardId, fetchFn: FetchFn, signal?: AbortSignal): Promise<ArmbianOffer[]> {
   const b = ARMBIAN_RESTORE[board];
   if (!b) throw new Error('Armbian has no image for this board.');
-  const redirect = armbianRedirect(b, branch);
+  const r = await fetchFn(ARMBIAN_INDEX, { signal });
+  if (!r.ok) throw new Error(`Armbian answered HTTP ${r.status} for ${ARMBIAN_INDEX}.`);
+  const offers = parseArmbianIndex(await r.json(), b.slug);
+  if (offers.length === 0) throw new Error(`Armbian's image index lists no image for ${b.slug}.`);
+  return offers;
+}
+
+/** The size of the decompressed image, read from the last 64 KiB of the .img.xz (one ranged request); null if that does not work. */
+async function imageBytesOf(fetchFn: FetchFn, url: string, size: number, signal?: AbortSignal): Promise<number | null> {
+  try {
+    const from = Math.max(0, size - 65536);
+    const r = await fetchFn(url, { signal, headers: { Range: `bytes=${from}-${size - 1}` } });
+    if (r.status !== 206) return null;
+    const tail = new Uint8Array(await r.arrayBuffer());
+    return tail.length === size - from ? xzUncompressedSize(tail) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One image of the board (an offer's id), from Armbian's redirector. Nothing is downloaded but its .sha, .asc and the end of the file. */
+export async function findArmbian(board: BoardId, id: string, fetchFn: FetchFn, signal?: AbortSignal): Promise<ArmbianImage> {
+  const b = ARMBIAN_RESTORE[board];
+  if (!b) throw new Error('Armbian has no image for this board.');
+  if (!OFFER_ID.test(id)) throw new Error(`Not an Armbian image name: ${id}`);
+  const [distro, branch, variant] = id.split('_');
+  const redirect = armbianRedirect(b, id);
   const sha = parseShaLine(await text(fetchFn, `${redirect}.sha`, signal));
   if (!sha) throw new Error('Armbian\'s .sha file for the image could not be read.');
   const name = parseArmbianFileName(sha.file);
   if (!name) throw new Error(`Armbian's current image has a name this app does not know how to read: ${sha.file}`);
-  if (name.board.toLowerCase() !== b.slug || name.branch !== branch) {
-    throw new Error(`Armbian's redirector answered with ${sha.file}, which is not the ${branch} image for ${b.slug}.`);
+  if (name.board.toLowerCase() !== b.slug || name.branch !== branch || name.distro !== distro.toLowerCase()
+    || (name.variant !== variant && name.variant !== `${variant}_desktop`)) {
+    throw new Error(`Armbian's redirector answered with ${sha.file}, which is not the ${id} image for ${b.slug}.`);
   }
   const asc = await text(fetchFn, `${redirect}.asc`, signal);
   const sig = readSignature(asc);
@@ -59,10 +93,13 @@ export async function findArmbian(board: BoardId, branch: ArmbianBranch, fetchFn
   const url = head.url || redirect;
   if (!url.startsWith('https://')) throw new Error(`Armbian's redirector sent the download to ${url}, which is not HTTPS.`);
   // The mirror's own path does not matter: the file must match the .sha and the signature.
+  const desktop = isDesktop(variant);
+  const imageBytes = await imageBytesOf(fetchFn, url, size, signal);
   return {
-    board, branch, file: sha.file, url, size, sha256: sha.sha256, asc,
-    version: name.version, kernel: name.kernel, distro: name.distro, variant: name.variant,
+    board, id, branch, file: sha.file, url, size, sha256: sha.sha256, asc,
+    version: name.version, kernel: name.kernel, distro: name.distro, variant,
     signed: sig.created ? sig.created.toISOString().slice(0, 10) : null,
+    desktop, imageBytes, minBytes: imageBytes === null ? null : minimumDiskBytes(imageBytes, desktop),
   };
 }
 

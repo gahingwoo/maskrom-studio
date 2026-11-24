@@ -10,11 +10,11 @@ import * as drivelist from 'drivelist';
 import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
 import { isWindowsSourceUrl } from '../shared/windows-sources';
-import { checkArmbianSignature, checkFactoryMd5, findArmbian, inspectFactory, type ArmbianImage, type FactoryImage } from './restore';
+import { checkArmbianSignature, checkFactoryMd5, findArmbian, inspectFactory, listArmbian, type ArmbianImage, type FactoryImage } from './restore';
 import { planFactory } from '../woa/rkfw';
 import { checkNewImage } from '../woa/upgrade-plan';
 import type { UpgradeImage } from '../shared/ipc';
-import type { ArmbianBranch } from '../woa/armbian-restore';
+import { ARMBIAN_RESTORE, minimumDiskBytes, parseArmbianIndex, type ArmbianOffer } from '../woa/armbian-restore';
 import type { ArmbianChoice, DriveWriteRequest, FactoryChoice } from '../shared/ipc';
 import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './elevate';
@@ -363,26 +363,55 @@ ipcMain.handle('upgrade:save-nvdata', (_e, board: BoardId, data: Uint8Array) => 
 // --- restoring Armbian or a factory image ----------------------------------
 
 const armbianFound = new Map<string, ArmbianImage>();
-const armbianKey = (board: BoardId, branch: ArmbianBranch) => `${board}:${branch}`;
+const armbianKey = (board: BoardId, id: string) => `${board}:${id}`;
 
-ipcMain.handle('restore:find-armbian', async (_e, board: BoardId, branch: ArmbianBranch): Promise<ArmbianChoice | { error: string }> => {
+/** Screenshots: Armbian's offers as the index had them on 2026-11-24, no network. */
+function fakeArmbianOffers(board: BoardId): ArmbianOffer[] {
+  const k = (branch: string) => (branch === 'edge' ? '7.3.5' : '6.1.172');
+  const rows: Array<[string, string, string, number, boolean]> = [
+    ['trixie', 'vendor', 'minimal', 352968008, true], ['trixie', 'edge', 'minimal', 370574004, false],
+    ['resolute', 'vendor', 'minimal', 365602440, false], ['resolute', 'edge', 'minimal', 370312004, false],
+    ['resolute', 'vendor', 'gnome', 984104848, true], ['resolute', 'edge', 'gnome', 1002010176, false],
+    ['resolute', 'vendor', 'kde-plasma', 1203277816, false], ['resolute', 'edge', 'kde-plasma', 1235194848, false],
+  ];
+  return parseArmbianIndex({ assets: rows.map(([distro, branch, variant, size, promoted]) => ({
+    board_slug: ARMBIAN_RESTORE[board]!.slug, file_extension: 'img.xz', file_application: '', distro, branch, variant,
+    redi_url: `https://dl.armbian.com/${ARMBIAN_RESTORE[board]!.slug}/${distro[0].toUpperCase()}${distro.slice(1)}_${branch}_${variant}`,
+    file_size: String(size), file_date: '2026-11-20T19:44:46Z', promoted: String(promoted), armbian_version: '26.11.0-trunk.137', kernel_version: k(branch),
+  })) }, ARMBIAN_RESTORE[board]!.slug);
+}
+
+ipcMain.handle('restore:list-armbian', async (_e, board: BoardId): Promise<{ offers: ArmbianOffer[] } | { error: string }> => {
   try {
-    // Screenshots: a made-up answer, no network.
-    const a = FAKE_RELEASES ? {
-      board, branch, file: `Armbian_community_26.11.0-trunk.137_Lckfb-taishanpi-3m_trixie_${branch}_${branch === 'edge' ? '7.3.5' : '6.1.172'}_minimal.img.xz`,
-      url: 'https://example.invalid/a.img.xz', size: 352968008, sha256: '0'.repeat(64), asc: '', version: '26.11.0-trunk.137',
-      kernel: branch === 'edge' ? '7.3.5' : '6.1.172', distro: 'trixie', variant: 'minimal', signed: '2026-11-20',
-    } : await findArmbian(board, branch, (url, init) => net.fetch(url, init));
-    armbianFound.set(armbianKey(board, branch), a);
-    return { branch, file: a.file, size: a.size, version: a.version, kernel: a.kernel, distro: a.distro, variant: a.variant, signed: a.signed };
+    return { offers: FAKE_RELEASES ? fakeArmbianOffers(board) : await listArmbian(board, (url, init) => net.fetch(url, init)) };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
+
+ipcMain.handle('restore:find-armbian', async (_e, board: BoardId, id: string): Promise<ArmbianChoice | { error: string }> => {
+  try {
+    let a: ArmbianImage;
+    if (FAKE_RELEASES) {
+      const o = fakeArmbianOffers(board).find((x) => x.id === id);
+      if (!o) throw new Error(`No ${id}.`);
+      const imageBytes = o.desktop ? 6979321856 : 2059403264;
+      const slugName = ARMBIAN_RESTORE[board]!.slug.replace(/^./, (c) => c.toUpperCase());
+      a = { board, id, branch: o.branch, file: `Armbian_community_${o.version}_${slugName}_${o.distro}_${o.branch}_${o.kernel}_${o.variant}${o.desktop ? '_desktop' : ''}.img.xz`,
+        url: 'https://example.invalid/a.img.xz', size: o.size, sha256: '0'.repeat(64), asc: '', version: o.version, kernel: o.kernel, distro: o.distro,
+        variant: o.variant, signed: o.date, desktop: o.desktop, imageBytes, minBytes: minimumDiskBytes(imageBytes, o.desktop) };
+    } else a = await findArmbian(board, id, (url, init) => net.fetch(url, init));
+    armbianFound.set(armbianKey(board, id), a);
+    return { id, branch: a.branch, file: a.file, size: a.size, version: a.version, kernel: a.kernel, distro: a.distro, variant: a.variant,
+      signed: a.signed, desktop: a.desktop, imageBytes: a.imageBytes, minBytes: a.minBytes };
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
   }
 });
 
 /** Armbian's image for the board, downloaded, checked (SHA-256, signature) and decompressed into the cache. */
-async function armbianFile(wc: WebContents, board: BoardId, branch: ArmbianBranch, signal: AbortSignal): Promise<{ path: string; name: string; size: number; sha256: string }> {
-  const a = armbianFound.get(armbianKey(board, branch));
+async function armbianFile(wc: WebContents, board: BoardId, id: string, signal: AbortSignal): Promise<{ path: string; name: string; size: number; sha256: string; minBytes: number }> {
+  const a = armbianFound.get(armbianKey(board, id));
   if (!a) throw new Error('Look up the Armbian image again.');
   const progress = (p: JobProgress) => sendProgress(wc, p);
   const xz = await fetchImage({ file: a.file, url: a.url, size: a.size, sha256: a.sha256, sample: false }, cacheDir(), progress, signal);
@@ -391,15 +420,22 @@ async function armbianFile(wc: WebContents, board: BoardId, branch: ArmbianBranc
   const dir = join(cacheDir(), 'armbian');
   const name = a.file.replace(/\.xz$/, '');
   const keep = join(dir, name);
+  const done = (size: number, sha256: string) => ({ path: keep, name, size, sha256, minBytes: minimumDiskBytes(size, a.desktop) });
   try {
     const [sum, size] = readFileSync(`${keep}.sha256`, 'utf8').trim().split(/\s+/);
-    if (/^[0-9a-f]{64}$/.test(sum) && statSync(keep).size === Number(size)) return { path: keep, name, size: Number(size), sha256: sum };
+    if (/^[0-9a-f]{64}$/.test(sum) && statSync(keep).size === Number(size)) return done(Number(size), sum);
   } catch { /* not there yet */ }
   rmSync(dir, { recursive: true, force: true });
   const out = await decompress(xz, dir, progress, signal);
   renameSync(out.path, keep);
   writeFileSync(`${keep}.sha256`, `${out.sha256} ${out.size}\n`);
-  return { path: keep, name, size: out.size, sha256: out.sha256 };
+  return done(out.size, out.sha256);
+}
+
+/** The drive's size, as the drive list has it; null when it is not listed. */
+async function driveSize(device: string): Promise<number | null> {
+  const drives = await drivelist.list() as unknown as Array<{ device: string; size: number | null }>;
+  return drives.find((d) => d.device === device)?.size ?? null;
 }
 
 /** Write an image file to a removable drive of this computer (the Roxora path: elevated helper or authopen), read back and compared. */
@@ -424,7 +460,14 @@ async function writeImageToDrive(wc: WebContents, signal: AbortSignal, img: { pa
 ipcMain.handle('restore:write-drive', (e, req: DriveWriteRequest) => exclusive(async (signal): Promise<JobResult> => {
   try {
     let img: { path: string; size: number; sha256: string };
-    if (req.kind === 'armbian') img = await armbianFile(e.sender, req.board, req.branch, signal);
+    if (req.kind === 'armbian') {
+      const a = await armbianFile(e.sender, req.board, req.id, signal);
+      const have = await driveSize(req.device);
+      if (have !== null && have < a.minBytes) {
+        return { ok: false, reason: `The drive is ${(have / 1e9).toFixed(1)} GB; this Armbian image needs at least ${(a.minBytes / 1e9).toFixed(1)} GB (the image and room for its first start). Nothing was written.` };
+      }
+      img = a;
+    }
     else {
       const a = firmware?.sdcard[req.board];
       if (!a) return { ok: false, reason: 'The edk2-rk3576 release has no SD card image for this board.' };
@@ -438,9 +481,11 @@ ipcMain.handle('restore:write-drive', (e, req: DriveWriteRequest) => exclusive(a
   }
 }, { ok: false, reason: 'Another write is running.' }));
 
-ipcMain.handle('restore:prepare-armbian', (e, board: BoardId, branch: ArmbianBranch) => exclusive(async (signal) => {
+ipcMain.handle('restore:prepare-armbian', (e, board: BoardId, id: string) => exclusive(async (signal) => {
   try {
-    const f = await armbianFile(e.sender, board, branch, signal);
+    const f = await armbianFile(e.sender, board, id, signal);
+    const emmc = woaBoard(board)?.emmc?.bytes ?? null;
+    if (emmc !== null && emmc < f.minBytes) return { error: `This Armbian image needs at least ${(f.minBytes / 1e9).toFixed(1)} GB; the board's eMMC has ${(emmc / 1e9).toFixed(1)} GB. Nothing was written.` };
     return serve(f.path, f.name);
   } catch (err) {
     if (signal.aborted) return { error: 'Cancelled.' };

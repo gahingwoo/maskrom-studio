@@ -44,7 +44,7 @@ macOS 可用 Homebrew：先 `brew trust gahingwoo/tap`，再 `brew install --cas
 - **装好的 Windows 直接可用。** 自带 RK3576 驱动并信任其测试证书；可以再加一个驱动文件夹（显示、触摸屏等）；默认开启 OpenSSH 服务器（22 端口）；按 UTC 读取主板时钟，每次开机后联网校时（板子的 RTC 不可靠，时间不对时测试签名的驱动会装不上）；首次启动可以走 Windows 自己的设置向导（OOBE），也可以完全跳过：填好用户名和密码，开机直接进桌面。
 - **UEFI 固件。** 从 edk2-rk3576 最新发布中取固件，按网页刷写工具 [flash.gahingwoo.com](https://flash.gahingwoo.com/) 完全相同的方式写入（“完整映像”或“保留分区”），通过 MaskROM。
 - **不一定占满整个磁盘。** Windows 可以只用设定的大小（至少 32 GB），剩下的空间可以不分配、建成 NTFS 或 exFAT 数据分区，或在末尾留给以后装 Linux；写入前会显示分区布局。
-- **回到 Linux。** 为泰山派 3M 或 CM5-IO 写入 Armbian 官方映像（厂商内核或主线内核）：从 Armbian 下载，用 SHA-256 和 Armbian 的 OpenPGP 签名校验后写满整个 eMMC；或者写入你从开发板厂商下载的出厂 update.img（本程序会读取并检查，拒绝其他芯片的包，按 RKDevTool“升级固件”的方式写入；尚未在开发板上实测）。两者都会替换 Windows 和 UEFI 固件。
+- **回到 Linux。** 为泰山派 3M 或 CM5-IO 写入 Armbian 发布的任意官方映像（Debian 或 Ubuntu，厂商内核或主线内核，带或不带桌面：GNOME、KDE Plasma，以 Armbian 索引为准），并显示大小和所需空间：从 Armbian 下载，用 SHA-256 和 Armbian 的 OpenPGP 签名校验后写满整个 eMMC；或者写入你从开发板厂商下载的出厂 update.img（本程序会读取并检查，拒绝其他芯片的包，按 RKDevTool“升级固件”的方式写入；尚未在开发板上实测）。两者都会替换 Windows 和 UEFI 固件。
 - **保留 Windows 的固件升级。** 适用于泰山派 3M 和 CM5-IO：显示已安装和新的 edk2-rk3576 版本，把开发板的 UEFI 设置保存到电脑并写回，从不写分区表，写入的内容全部读回比较。
 - **在开发板上直接运行。** 在开发板上的 Linux（从 SD 卡或 U 盘启动）里运行本应用，可以直接写入本机的 eMMC 或 SPI NOR，不需要第二台电脑。
 - **WinPE 启动 U 盘。** 把 woa-rk3576 的 WinPE 映像写到 U 盘，按 woa-rk3576 的 [INSTALL.md](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/INSTALL.md) 手动安装。

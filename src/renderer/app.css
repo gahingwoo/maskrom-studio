@@ -119,3 +119,12 @@ html.pf-v6-theme-dark .credit-badge__label { fill: var(--pf-t--global--text--col
 /* Simple mode: the boards' pictures and the flashing-mode photo at a readable size. */
 .board-photo { display: block; width: 100%; max-width: 20rem; height: auto; margin-inline: auto; }
 .maskrom-photo { display: block; width: 100%; max-width: 48rem; height: auto; border-radius: var(--pf-t--global--border--radius--small); }
+/* Armbian's desktops in Simple mode: a 16:9 picture, or a plain card where no free picture exists. */
+.desktop-picture { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; object-fit: cover; border-radius: var(--pf-t--global--border--radius--small); }
+.desktop-plain {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--heading--md);
+}
+.desktop-cli { font-family: var(--pf-t--global--font--family--mono); }

@@ -2,6 +2,7 @@
 import type { HiddenDrive, Target } from './targets';
 import type { UpdateCheck, UpdateResult } from './update';
 import type { BoardId } from '../woa/boards';
+import type { ArmbianOffer } from '../woa/armbian-restore';
 import type { Extent } from '../woa/udf';
 import type { SetupOptions } from '../woa/setup-files';
 import type { CacheInfo, ClearResult } from '../main/cache';
@@ -68,9 +69,11 @@ export interface WindowsChoice {
   editions: EditionInfo[];
 }
 
-/** Armbian's current minimal image for a board and kernel branch, as its .sha, .asc and file name say. */
+/** One Armbian image of the board (an offer of the index), as its .sha, .asc, file name and .xz index say. */
 export interface ArmbianChoice {
-  branch: 'vendor' | 'edge';
+  /** The offer: "Resolute_vendor_gnome". */
+  id: string;
+  branch: string;
   file: string;
   /** Compressed (.img.xz) size. */
   size: number;
@@ -80,11 +83,16 @@ export interface ArmbianChoice {
   variant: string;
   /** Date of Armbian's signature. */
   signed: string | null;
+  desktop: boolean;
+  /** The decompressed image; null when the download server would not say (then checked after the download). */
+  imageBytes: number | null;
+  /** The smallest disk it is written to. */
+  minBytes: number | null;
 }
 
 /** Writing to an SD card or USB drive of this computer instead of the board's eMMC. */
 export type DriveWriteRequest =
-  | { kind: 'armbian'; board: BoardId; branch: 'vendor' | 'edge'; device: string }
+  | { kind: 'armbian'; board: BoardId; id: string; device: string }
   | { kind: 'uefi-sd'; board: BoardId; device: string };
 
 /** A factory update.img the user chose, as read on this computer. */
@@ -167,10 +175,12 @@ export interface ImagerApi {
   dropWindows(file: File): Promise<WindowsChoice | { error: string }>;
   /** Read the whole image once for its SHA-256, which the board checks again. */
   hashWindows(token: string): Promise<{ sha256: string } | { error: string }>;
-  /** Armbian's current image for the board: name, kernel, date (only its .sha and .asc are downloaded). */
-  findArmbian(board: BoardId, branch: 'vendor' | 'edge'): Promise<ArmbianChoice | { error: string }>;
+  /** What Armbian publishes for the board (its image index). */
+  listArmbian(board: BoardId): Promise<{ offers: ArmbianOffer[] } | { error: string }>;
+  /** One of those images: name, kernel, date, sizes (only its .sha, .asc and the end of the file are downloaded). */
+  findArmbian(board: BoardId, id: string): Promise<ArmbianChoice | { error: string }>;
   /** Download it, check SHA-256 and signature, decompress it, and serve it. */
-  prepareArmbian(board: BoardId, branch: 'vendor' | 'edge'): Promise<Served | { error: string }>;
+  prepareArmbian(board: BoardId, id: string): Promise<Served | { error: string }>;
   /** Write Armbian or the SD card firmware to a drive of this computer (download, check, write, read back). */
   writeDrive(req: DriveWriteRequest): Promise<JobResult>;
   /** Choose a factory update.img (dialog) and read it. */

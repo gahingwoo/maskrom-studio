@@ -78,8 +78,10 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
 - **On the board itself.** Run the app under Linux on the board (booted
   from an SD card or USB drive) and it writes that board's eMMC or SPI NOR
   directly, no second computer.
-- **Back to Linux.** Armbian's own image for the TaishanPi 3M or CM5-IO
-  (vendor or mainline kernel), downloaded from Armbian, checked against
+- **Back to Linux.** Any image Armbian publishes for the TaishanPi 3M or
+  CM5-IO (Debian or Ubuntu, vendor or mainline kernel, with or without a
+  desktop: GNOME, KDE Plasma, whatever Armbian's index lists), with its
+  size and the space it needs, downloaded from Armbian, checked against
   its SHA-256 and Armbian's OpenPGP signature, and written over the whole
   eMMC; or a factory `update.img` you downloaded from the board maker
   (the app reads it, refuses one for another chip, and writes it as

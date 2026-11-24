@@ -11,9 +11,11 @@ The About dialog sums this up in one line each; this is the detail.
 - **raw.githubusercontent.com, the first time MaskROM is used:** the pieces
   of the MaskROM loader from rockchip-linux/rkbin at a pinned commit,
   checked against pinned SHA-256 values, then kept.
+- **github.armbian.com, only when Armbian is chosen:** Armbian's image
+  index (armbian-images.json, about 5 MB), for the list of images.
 - **dl.armbian.com and the mirror it redirects to, only when Armbian is
-  chosen:** the image's .sha and .asc, then the image (checked against
-  both).
+  chosen:** the chosen image's .sha and .asc, the last 64 KiB of the image
+  (its decompressed size), then the image (checked against both).
 - **github.com/PowerShell/Win32-OpenSSH, only when the SSH server is chosen
   for Windows:** the pinned OpenSSH-ARM64.zip.
 - **GitHub, once a day when update checks are on (Settings):** the releases

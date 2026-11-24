@@ -3,16 +3,17 @@
 // throwaway RSA 2048 key, SHA-512 detached signature); the Armbian .asc is
 // the one published for trunk.137's TaishanPi 3M vendor minimal image.
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readPublicKey, readSignature, signatureVerifier } from '../src/shared/openpgp';
-import { ARMBIAN_RESTORE, ARMBIAN_SIGNING_KEY, armbianRedirect, parseArmbianFileName, parseShaLine } from '../src/woa/armbian-restore';
+import { ARMBIAN_RESTORE, ARMBIAN_SIGNING_KEY, armbianRedirect, minimumDiskBytes, parseArmbianFileName, parseArmbianIndex, parseShaLine, simpleOffers, xzUncompressedSize } from '../src/woa/armbian-restore';
 import { chipName, parseParameter, readUpdateImage, RK3576 } from '../src/woa/rkfw';
 import { BACKUP_GPT_SECTORS, planFactoryRegions, planWhole } from '../src/woa/restore-plan';
 import { bytesSource } from '../src/woa/pieces';
-import { checkArmbianSignature, checkFactoryMd5, findArmbian, inspectFactory } from '../src/main/restore';
+import { checkArmbianSignature, checkFactoryMd5, findArmbian, inspectFactory, listArmbian } from '../src/main/restore';
 
 const fx = (n: string) => join(__dirname, 'fixtures', 'openpgp', n);
 const ARMBIAN_ASC = 'Armbian_community_26.11.0-trunk.137_Lckfb-taishanpi-3m_trixie_vendor_6.1.172_minimal.img.xz.asc';
@@ -73,27 +74,75 @@ describe('Armbian images', () => {
     expect(parseShaLine('311f796a0e3320284bedcdc8aec85dd9917e0acaa4f764af88c176384aa62947 Armbian_x.img.xz\n'))
       .toEqual({ sha256: '311f796a0e3320284bedcdc8aec85dd9917e0acaa4f764af88c176384aa62947', file: 'Armbian_x.img.xz' });
   });
-  it('asks the redirector for the minimal image of both boards', () => {
-    expect(armbianRedirect(ARMBIAN_RESTORE.tspi3m!, 'vendor')).toBe('https://dl.armbian.com/lckfb-taishanpi-3m/Trixie_vendor_minimal');
-    expect(armbianRedirect(ARMBIAN_RESTORE.cm5io!, 'edge')).toBe('https://dl.armbian.com/armsom-cm5-io/Trixie_edge_minimal');
+  it('asks the redirector for the image an offer names', () => {
+    expect(armbianRedirect(ARMBIAN_RESTORE.tspi3m!, 'Trixie_vendor_minimal')).toBe('https://dl.armbian.com/lckfb-taishanpi-3m/Trixie_vendor_minimal');
+    expect(armbianRedirect(ARMBIAN_RESTORE.cm5io!, 'Resolute_edge_kde-plasma')).toBe('https://dl.armbian.com/armsom-cm5-io/Resolute_edge_kde-plasma');
+    expect(() => armbianRedirect(ARMBIAN_RESTORE.cm5io!, '../x')).toThrow(/Not an Armbian image name/);
     expect(ARMBIAN_RESTORE.rock4d).toBeUndefined();
   });
-  it('finds the image through the redirector, and refuses a name for another board', async () => {
-    const file = 'Armbian_community_26.11.0-trunk.137_Lckfb-taishanpi-3m_trixie_vendor_6.1.172_minimal.img.xz';
+
+  const index = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'armbian-images.json'), 'utf8'));
+  it('offers every plain image Armbian\'s index lists for the board, newest build of each', () => {
+    const offers = parseArmbianIndex(index, 'lckfb-taishanpi-3m');
+    expect(offers.map((o) => o.id)).toEqual([
+      'Trixie_vendor_minimal', 'Resolute_vendor_minimal', 'Resolute_edge_minimal', 'Trixie_edge_minimal',
+      'Resolute_vendor_gnome', 'Resolute_edge_gnome', 'Resolute_vendor_kde-plasma', 'Resolute_edge_kde-plasma',
+    ]);
+    expect(offers.find((o) => o.id === 'Trixie_vendor_minimal')).toMatchObject({ size: 352968008, version: '26.11.0-trunk.137', promoted: true, desktop: false, date: '2026-11-20' });
+    // An application image (Home Assistant), another file type and a redirect elsewhere are left out.
+    const cm5 = parseArmbianIndex(index, 'armsom-cm5-io');
+    expect(cm5).toHaveLength(8);
+    expect(cm5.every((o) => o.id.split('_').length === 3)).toBe(true);
+    expect(() => parseArmbianIndex({}, 'x')).toThrow(/no list/);
+  });
+  it('gives Simple mode one card per desktop and one without, on the board maker\'s kernel', () => {
+    const s = simpleOffers(parseArmbianIndex(index, 'armsom-cm5-io'));
+    expect(s.desktops.map((o) => o.id)).toEqual(['Resolute_vendor_gnome', 'Resolute_vendor_kde-plasma']);
+    expect(s.cli?.id).toBe('Trixie_vendor_minimal');
+    expect(s.recommended).toBe('Resolute_vendor_gnome');
+    expect(simpleOffers([])).toEqual({ desktops: [], cli: null, recommended: null });
+  });
+  it('reads the decompressed size from the end of an .xz file', () => {
+    const data = Buffer.alloc(3 << 20);
+    for (let i = 0; i < data.length; i += 4096) data[i] = i & 0xff;
+    const xz = execFileSync('xz', ['-c', '-T2', '--block-size=1MiB'], { input: data });
+    expect(xzUncompressedSize(new Uint8Array(xz))).toBe(data.length);
+    expect(xzUncompressedSize(new Uint8Array(xz.subarray(xz.length - 20)))).toBeNull();
+    expect(xzUncompressedSize(new Uint8Array(64))).toBeNull();
+    expect(minimumDiskBytes(2059403264, false)).toBe(2059403264 + 1024 ** 3);
+    expect(minimumDiskBytes(6e9, true)).toBe(6e9 + 4 * 1024 ** 3);
+  });
+  it('lists the board\'s images from the index', async () => {
+    const offers = await listArmbian('cm5io', async (url) => { expect(url).toBe('https://github.armbian.com/armbian-images.json'); return new Response(JSON.stringify(index)); });
+    expect(offers.length).toBe(8);
+    await expect(listArmbian('tspi3m', async () => new Response('{"assets":[]}'))).rejects.toThrow(/lists no image/);
+  });
+  it('finds the image through the redirector, its decompressed size, and refuses a name for another board or variant', async () => {
+    const file = 'Armbian_community_26.11.0-trunk.137_Lckfb-taishanpi-3m_resolute_vendor_6.1.172_gnome_desktop.img.xz';
     const asc = readFileSync(fx(ARMBIAN_ASC), 'utf8');
-    const answer = (name: string) => async (url: string, init?: { method?: string }) => {
+    const data = Buffer.alloc(1 << 20, 7);
+    const xz = execFileSync('xz', ['-c'], { input: data });
+    const answer = (name: string, ranged = true) => async (url: string, init?: { method?: string; headers?: Record<string, string> }) => {
       if (url.endsWith('.sha')) return new Response(`${'a'.repeat(64)} ${name}\n`);
       if (url.endsWith('.asc')) return new Response(asc);
+      if (init?.headers?.Range) {
+        expect(init.headers.Range).toBe(`bytes=0-${xz.length - 1}`);
+        return ranged ? new Response(xz, { status: 206 }) : new Response(xz);
+      }
       expect(init?.method).toBe('HEAD');
-      const r = new Response(null, { headers: { 'content-length': '352968008' } });
+      const r = new Response(null, { headers: { 'content-length': String(xz.length) } });
       Object.defineProperty(r, 'url', { value: `https://github.com/armbian/community/releases/download/26.11.0-trunk.137/${name}` });
       return r;
     };
-    const a = await findArmbian('tspi3m', 'vendor', answer(file));
-    expect(a).toMatchObject({ file, size: 352968008, kernel: '6.1.172', version: '26.11.0-trunk.137', signed: '2026-11-20' });
+    const a = await findArmbian('tspi3m', 'Resolute_vendor_gnome', answer(file));
+    expect(a).toMatchObject({ file, kernel: '6.1.172', version: '26.11.0-trunk.137', signed: '2026-11-20', desktop: true, variant: 'gnome',
+      imageBytes: data.length, minBytes: data.length + 4 * 1024 ** 3 });
     expect(a.url).toMatch(/^https:\/\/github\.com\/armbian\//);
-    await expect(findArmbian('tspi3m', 'vendor', answer(file.replace('Lckfb-taishanpi-3m', 'Armsom-cm5-io')))).rejects.toThrow(/not the vendor image/);
-    await expect(findArmbian('tspi3m', 'edge', answer(file))).rejects.toThrow(/not the edge image/);
+    expect((await findArmbian('tspi3m', 'Resolute_vendor_gnome', answer(file, false))).imageBytes).toBeNull();
+    await expect(findArmbian('tspi3m', 'Resolute_vendor_gnome', answer(file.replace('Lckfb-taishanpi-3m', 'Armsom-cm5-io')))).rejects.toThrow(/not the Resolute_vendor_gnome image/);
+    await expect(findArmbian('tspi3m', 'Resolute_edge_gnome', answer(file))).rejects.toThrow(/not the Resolute_edge_gnome image/);
+    await expect(findArmbian('tspi3m', 'Resolute_vendor_kde-plasma', answer(file))).rejects.toThrow(/not the Resolute_vendor_kde-plasma image/);
+    await expect(findArmbian('tspi3m', 'Trixie_vendor_gnome', answer(file))).rejects.toThrow(/not the Trixie_vendor_gnome/);
   });
 });
 

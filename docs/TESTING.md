@@ -16,6 +16,11 @@ an entry by moving it to "Tested" with the date and what was seen.
   woa-stage.ini asks; Windows starts; the data partition appears.
 - **Armbian onto the eMMC** (restore-linux-factory): vendor and edge on
   both boards; the first 32 MiB read back equal; the board starts Armbian.
+- **Every Armbian image** (armbian-images): a desktop image (GNOME, then
+  KDE Plasma, Ubuntu resolute) onto the eMMC and onto a 16 GB SD card on
+  both boards, its signature checked, the desktop reached; an 8 GB card
+  refused for a desktop image; the list read live from Armbian's index on
+  Linux, Windows and macOS (only checked from Linux so far).
 - **Factory update.img** (restore-linux-factory): never run with a real
   update.img. `gpt parameter.txt`, `ul` with its loader, then `wl` per
   partition; the board starts the factory system.

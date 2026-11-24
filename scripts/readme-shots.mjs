@@ -126,14 +126,19 @@ await session('x64', { env: { WOA_IMAGER_TEST_PICK: x64 } }, async (page, shot) 
   await shot('windows-image-refused');
 });
 
-await session('armbian', {}, async (page, shot) => {
+const armbianShots = async (page, shot) => {
   await toTask(page, 'armbian');
   await next(page);
   await page.waitForSelector('text=26.11.0-trunk.137');
+  await page.waitForSelector('#armbian-offers');
+  await shot('armbian');
   await page.click('label[for="restore-to-drive"]');
   await page.waitForSelector('#restore-to-drive:checked');
-  await shot('armbian');
-});
+  await page.waitForTimeout(300);
+  await shot('armbian-drive');
+};
+await session('armbian', {}, armbianShots);
+for (const o of [{ theme: 'dark' }, { lang: 'zh-CN' }]) await session(`armbian ${JSON.stringify(o)}`, o, armbianShots);
 
 // The firmware upgrade against the pretend board: the confirmation, then the finished run.
 await session('upgrade', { env: { WOA_IMAGER_TEST_WORKER: 'fake-board-worker.js' } }, async (page, shot) => {
@@ -174,6 +179,20 @@ const simpleEnv = { env: { WOA_IMAGER_UI_MODE: 'simple' } };
 await session('simple', simpleEnv, simple('tspi3m'));
 await session('simple cm5io', simpleEnv, simple('cm5io'));
 for (const o of [{ theme: 'dark' }, { lang: 'zh-CN' }]) await session(`simple ${JSON.stringify(o)}`, { ...o, ...simpleEnv }, simple('tspi3m'));
+
+// Simple mode's Armbian choice: a card per desktop Armbian publishes, and one without a desktop.
+const simpleArmbian = async (page, shot) => {
+  await page.click('#s-board-tspi3m');
+  await next(page);
+  await page.click('label[for="s-task-armbian"]');
+  await page.waitForSelector('#s-armbian-Resolute_vendor_gnome');
+  await page.waitForSelector('text=26.11.0-trunk.137');
+  await page.locator('#s-armbian-Trixie_vendor_minimal').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(500);
+  await shot('simple-armbian');
+};
+await session('simple armbian', simpleEnv, simpleArmbian);
+for (const o of [{ theme: 'dark' }, { lang: 'zh-CN' }]) await session(`simple armbian ${JSON.stringify(o)}`, { ...o, ...simpleEnv }, simpleArmbian);
 
 // Advanced to Simple with a non-default choice: the dialog that lists what goes back.
 await session('mode switch', {}, async (page, shot) => {

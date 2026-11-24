@@ -491,6 +491,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
     [t('about.images'), t('about.images.value')],
     [t('about.boards'), WOA_BOARDS.map((b) => b.name).join(lang === 'en' ? ', ' : '、')],
     [t('about.licence'), t('about.licence.value')],
+    [t('about.pictures'), <>{t('about.pictures.value')} {link(`https://github.com/gahingwoo/maskrom-studio/blob/${BUILD.commit}/resources/desktops/README.md`, t('about.details'))}</>],
     [t('about.madeBy'), link('https://gahingwoo.com', 'Ga Hing Woo (Jiaxing Hu)')],
     [t('about.source'), link('https://github.com/gahingwoo/maskrom-studio', 'github.com/gahingwoo/maskrom-studio')],
     [t('about.basedOn'), <>{t('about.basedOn.value')} {link('https://github.com/roxora-os/imager', 'github.com/roxora-os/imager')}</>],
