@@ -558,6 +558,27 @@ samples are read, and a sample that comes back as 0xCC filler or differs
 is reported, not counted as a failure, because this loader's reads past
 32 MiB are not trustworthy. Nothing claims a full read-back.
 
+## A copy before the eMMC's start is replaced
+
+Every write over MaskROM to an eMMC except the firmware upgrade (which
+keeps its own copy of the settings) replaces the partition table, the
+firmware with its UEFI settings, or both: Armbian and factory images, the
+firmware "whole image" and "keep the partitions", the staged and the
+PC-built Windows. Before planning such a write, the worker
+(src/woa/pre-write-backup.ts) reads sectors 0..33 and, when the eMMC holds
+edk2-rk3576 firmware, its nvdata slot, found from that firmware's own FIT
+(43648, 384 sectors on the current TaishanPi 3M and CM5-IO releases); all
+of it lies in the first 32 MiB, the part MaskROM reads back reliably. The
+page saves the files into `<data>/nvdata-backups/<board>-before-write-
+<time>/` with a backup.txt naming the board, the time, the firmware
+version and each file's SHA-256, and shows the folder on the confirmation
+card and the result. A copy that was read but could not be saved stops
+the write ("Nothing was written"); an eMMC without edk2-rk3576 firmware
+just has no settings to keep. Clear cache deletes these folders only when
+asked, like the upgrade's copies. Putting a copy back is not in the app
+yet: the upgrade carries settings over from the board itself, not from a
+file.
+
 ## Shared with Roxora Imager
 
 Written without the board list, to be offered to roxora-os/imager:

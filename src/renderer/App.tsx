@@ -43,6 +43,8 @@ interface Run {
   log: string[];
   confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | UpgradeSummary | null;
   result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[]; help?: 'noBoard' } | null;
+  /** Where the partition table and UEFI settings were kept before the write (pre-write-backup.ts). */
+  backup?: string;
 }
 interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }>;
   layout?: { windowsBytes: number; data: { fs: string; label: string; bytes: number } | null; unallocatedBytes: number }; chosen?: boolean }
@@ -359,15 +361,21 @@ export function App() {
           if ('path' in r) addLog(t('upgrade.backupSaved', { path: r.path }));
           w.postMessage({ type: 'woa-backup-saved', path: 'path' in r ? r.path : null, ...('error' in r ? { error: r.error } : {}) } satisfies WoaWorkerRequest);
         });
+      } else if (m.type === 'pre-backup') {
+        api.saveBeforeWrite(m.boardId as BoardId, m.files, m.notes).then((r) => {
+          if ('path' in r) { const path = r.path; update((x) => ({ ...x, backup: path })); addLog(t('backup.where', { path })); }
+          w.postMessage({ type: 'woa-backup-saved', path: 'path' in r ? r.path : null, ...('error' in r ? { error: r.error } : {}) } satisfies WoaWorkerRequest);
+        });
       } else if (m.type === 'planned') {
         update((r) => ({ ...r, confirm: m.summary as Run['confirm'] }));
       } else if (m.type === 'result') {
         w.terminate();
         worker.current = null;
-        finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
+        const done = resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
           : job.kind === 'upgrade' ? t('result.upgrade')
           : job.kind === 'whole' ? t('result.restore.armbian') : job.kind === 'factory' ? t('result.restore.factory') : t('result.firmware'),
-          job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined));
+          job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined);
+        finish(done);
         if (m.result.ok) update((r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, percent: 100 })) }));
       }
     };
@@ -1416,6 +1424,7 @@ export function App() {
                 <CardBody>
                   <Stack hasGutter>
                     {confirmText}
+                    {run.backup && <Content component="p" className="muted">{t('backup.where', { path: run.backup })}</Content>}
                     <ActionList>
                       <ActionListGroup>
                         <ActionListItem><Button variant={c?.kind === 'upgrade' ? 'primary' : 'danger'} onClick={() => answer(true)}>{t(c?.kind === 'upgrade' ? 'go.upgrade' : 'go.erase')}</Button></ActionListItem>
@@ -1431,6 +1440,7 @@ export function App() {
               <Alert isInline variant={run.result.ok ? 'success' : 'danger'} title={run.result.title}>
                 {run.result.text && <p>{run.result.text}</p>}
                 {run.result.detail && <p className="detail">{run.result.detail}</p>}
+                {run.backup && <p>{t('backup.where', { path: run.backup })}</p>}
               </Alert>
             )}
             {run.result?.ok && run.result.next && (

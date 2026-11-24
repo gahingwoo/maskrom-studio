@@ -27,6 +27,7 @@ const api: ImagerApi = {
   prepareFactory: (token) => ipcRenderer.invoke('restore:prepare-factory', token),
   prepareUpgrade: (board, from) => ipcRenderer.invoke('upgrade:prepare', board, from),
   saveNvdata: (board, data) => ipcRenderer.invoke('upgrade:save-nvdata', board, data),
+  saveBeforeWrite: (board, files, notes) => ipcRenderer.invoke('backup:save-before-write', board, files, notes),
   serveWindows: (token) => ipcRenderer.invoke('woa:serve-windows', token),
   boardHere: () => ipcRenderer.invoke('woa:board-here'),
   pickDrivers: () => ipcRenderer.invoke('woa:pick-drivers'),

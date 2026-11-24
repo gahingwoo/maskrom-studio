@@ -51,12 +51,15 @@ try {
     w.postMessage({ type: 'seed', head });
     const stages = [];
     let planned = null;
+    let backup = null;
     const o = location.origin;
     const result = await new Promise((resolve) => {
       w.onerror = (e) => resolve({ workerError: String(e.message ?? e.type) });
       w.onmessage = (e) => {
         const m = e.data;
         if (m.type === 'stage') stages.push(m.stage);
+        // What the eMMC held, kept before the write (pre-write-backup.ts); the page would save it.
+        if (m.type === 'pre-backup') { backup = { files: m.files.map((f) => `${f.name}:${f.data.length}`), notes: m.notes }; w.postMessage({ type: 'woa-backup-saved', path: 'e2e' }); }
         if (m.type === 'planned') { planned = m.summary; w.postMessage({ type: 'woa-confirm', ok: true }); }
         if (m.type === 'result') resolve(m.result);
       };
@@ -71,7 +74,7 @@ try {
       w.onmessage = (e) => { if (e.data.type === 'dump') resolve(e.data); };
       w.postMessage({ type: 'dump' });
     });
-    return { crossOriginIsolated: self.crossOriginIsolated, result, stages, planned, dump };
+    return { crossOriginIsolated: self.crossOriginIsolated, result, stages, planned, backup, dump };
   }, { head, win, winpeSize: 66 << 20 });
   const show = { ...res, dump: res.dump && { ...res.dump, bootSector: undefined, dataSector: undefined } };
   console.log(JSON.stringify(show, null, 2));
@@ -80,7 +83,8 @@ try {
   ok = res.result?.ok === true && names === 'firmware,WOA-STAGE-BOOT,WOA-STAGE-DATA'
     && res.dump.parts[0].first === 64 && res.dump.parts[0].last === 131071
     && oem(res.dump.dataSector) === 'EXFAT   ' && res.dump.bootSector[510] === 0x55
-    && res.dump.backupSig === 'EFI PART' && res.dump.resets === 1 && res.planned?.removed?.[0]?.name === 'data';
+    && res.dump.backupSig === 'EFI PART' && res.dump.resets === 1 && res.planned?.removed?.[0]?.name === 'data'
+    && res.backup?.files?.[0] === 'gpt-sectors-0-33.bin:17408' && res.backup.notes.includes('board: tspi3m');
 } finally {
   await app.close();
   rmSync('build/renderer/fake-woa-worker.js', { force: true });

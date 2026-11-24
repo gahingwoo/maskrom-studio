@@ -191,6 +191,8 @@ export interface ImagerApi {
   prepareUpgrade(board: BoardId, from: 'release' | 'file'): Promise<UpgradeImage | { error: string } | null>;
   /** Keep a copy of the board's UEFI settings (nvdata) on this computer; returns its path. */
   saveNvdata(board: BoardId, data: Uint8Array): Promise<{ path: string } | { error: string }>;
+  /** Keep what a write is about to replace (partition table, UEFI settings) in a folder of its own; returns the folder. */
+  saveBeforeWrite(board: BoardId, files: Array<{ name: string; data: Uint8Array }>, notes: string[]): Promise<{ path: string } | { error: string }>;
   /** Serve the chosen Windows file to the Maskrom worker. */
   serveWindows(token: string): Promise<Served | { error: string }>;
   /** Choose a folder of extra driver packages (wddm-mali-g52, gt9271, ...). Errors are translation keys or messages. */

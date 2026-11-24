@@ -23,6 +23,8 @@ import { planFactoryRegions, planWhole } from './restore-plan';
 import { readUpdateImage } from './rkfw';
 import { TRUSTED_READ_BYTES } from './maskrom-regions';
 import { planUpgrade } from './upgrade-plan';
+import { readPreWriteBackup } from './pre-write-backup';
+import type { Probe } from './maskrom-regions';
 
 export interface FileRef { url: string; size: number }
 
@@ -55,6 +57,8 @@ export type WoaWorkerEvent =
   | { type: 'planned'; summary: unknown }
   /** Save this copy of the board's UEFI settings on the computer before anything is written. */
   | { type: 'backup'; boardId: string; data: Uint8Array }
+  /** Before a write that replaces the eMMC's start: the partition table and UEFI settings, to keep on the computer (answered with woa-backup-saved). */
+  | { type: 'pre-backup'; boardId: string; files: Array<{ name: string; data: Uint8Array }>; notes: string[] }
   | { type: 'result'; result: RegionResult };
 
 const post = (m: WoaWorkerEvent) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
@@ -97,6 +101,21 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
       sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
       cancelled: () => false, // cancelling terminates the worker
     };
+    // Every write here but the upgrade (which keeps its own copy) replaces the
+    // eMMC's partition table or its firmware: keep both on the computer first.
+    type Planned = { regions: import('./stage-layout').Region[]; summary: unknown } | { stop: string };
+    const keepFirst = (plan: (p: Probe) => Promise<Planned>) => async (p: Probe): Promise<Planned> => {
+      if (board.firmwareStorage !== 'emmc') return plan(p);
+      const b = await readPreWriteBackup(job.boardId, p, hooks.log);
+      if (b) {
+        const s = await new Promise<{ path: string | null; error?: string }>((resolve) => {
+          saved = resolve;
+          post({ type: 'pre-backup', boardId: job.boardId, files: b.files, notes: b.notes });
+        });
+        if (!s.path) return { stop: `The copy of the partition table and UEFI settings could not be saved on this computer${s.error ? `: ${s.error}` : ''}. Nothing was written.` };
+      }
+      return plan(p);
+    };
 
     let result: RegionResult;
     if (job.kind === 'stage') {
@@ -108,7 +127,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
       result = await writeRegions(runner, {
         loader, readHead: true, spotCheck: job.spotCheck, resetAfter: job.resetAfter,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
-        async plan(p) {
+        plan: keepFirst(async (p) => {
           if (p.capacity === null) return { stop: 'The loader did not report the eMMC size, which the install layout needs. Nothing was written.' };
           if (!p.head) return { stop: 'The partition table could not be read from the eMMC. Nothing was written.' };
           try {
@@ -129,7 +148,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
             if (e instanceof StageError) return { stop: e.message };
             throw e;
           }
-        },
+        }),
         confirm,
       }, hooks);
     } else if (job.kind === 'vhd') {
@@ -137,7 +156,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
       result = await writeRegions(runner, {
         loader, readHead: true, spotCheck: job.spotCheck, resetAfter: job.resetAfter,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
-        async plan(p) {
+        plan: keepFirst(async (p) => {
           if (p.capacity === null) return { stop: 'The loader did not report the eMMC size, which the install layout needs. Nothing was written.' };
           if (!p.head) return { stop: 'The partition table could not be read from the eMMC. Nothing was written.' };
           try {
@@ -153,7 +172,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
             if (e instanceof StageError) return { stop: e.message };
             throw e;
           }
-        },
+        }),
         confirm,
       }, hooks);
     } else if (job.kind === 'whole') {
@@ -161,7 +180,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
       result = await writeRegions(runner, {
         loader, readHead: false, spotCheck: true, resetAfter: job.resetAfter, checkHeadBytes: TRUSTED_READ_BYTES,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
-        plan: async (p) => planWhole(image, job.label, p.capacity),
+        plan: keepFirst(async (p) => planWhole(image, job.label, p.capacity)),
         confirm,
       }, hooks);
     } else if (job.kind === 'upgrade') {
@@ -183,7 +202,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
       result = await writeRegions(runner, {
         loader, readHead: false, spotCheck: true, resetAfter: job.resetAfter, checkHeadBytes: TRUSTED_READ_BYTES, before,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
-        plan: async (p) => {
+        plan: keepFirst(async (p) => {
           const r = planFactoryRegions(file, pkg, p.capacity);
           if ('stop' in r) return r;
           // As RKDevTool's "Upgrade Firmware": the partition table from parameter.txt, then the loader, then the partitions.
@@ -192,7 +211,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
             { what: 'Writing the boot loader', files: [{ name: 'MiniLoaderAll.bin', data: r.loader }], args: ([f]) => ['ul', f] },
           );
           return { regions: r.regions, summary: r.summary };
-        },
+        }),
         confirm,
       }, hooks);
     } else {
@@ -202,10 +221,10 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
       result = await writeRegions(runner, {
         loader, readHead: board.firmwareStorage === 'emmc', spotCheck: job.spotCheck, resetAfter: job.resetAfter,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
-        plan: async (p) => {
+        plan: keepFirst(async (p) => {
           const r = await firmwareRegions(board, target, image, p);
           return 'stop' in r ? r : { regions: r.regions, summary: { kind: 'firmware', ...r.summary } };
-        },
+        }),
         confirm,
       }, hooks);
     }

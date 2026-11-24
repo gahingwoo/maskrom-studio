@@ -371,6 +371,26 @@ ipcMain.handle('upgrade:save-nvdata', (_e, board: BoardId, data: Uint8Array) => 
   }
 });
 
+/** Before a write over MaskROM: the partition table and UEFI settings, with a note of what each is. */
+ipcMain.handle('backup:save-before-write', (_e, board: BoardId, files: Array<{ name: string; data: Uint8Array }>, notes: string[]) => {
+  try {
+    if (!woaBoard(board)) return { error: 'Unknown board.' };
+    if (!Array.isArray(files) || files.length === 0 || files.length > 4) return { error: 'Nothing to keep.' };
+    for (const f of files) {
+      if (!/^[a-z0-9.-]{1,64}\.bin$/.test(f?.name ?? '') || !(f.data instanceof Uint8Array) || f.data.length > 1 << 20) return { error: 'Not a backup file.' };
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dir = join(nvdataDir(), `${board}-before-write-${stamp}`);
+    mkdirSync(dir, { recursive: true });
+    for (const f of files) writeFileSync(join(dir, f.name), f.data);
+    const text = (Array.isArray(notes) ? notes : []).map((l) => String(l).replace(/[\r\n]/g, ' ')).join('\n');
+    writeFileSync(join(dir, 'backup.txt'), `${text}\n`);
+    return { path: shownPath(dir) };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
+
 // --- restoring Armbian or a factory image ----------------------------------
 
 const armbianFound = new Map<string, ArmbianImage>();

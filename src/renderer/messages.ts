@@ -381,6 +381,8 @@ export const MESSAGES: Dict = {
     '启动项、Windows 启动项和菜单设置都会保留：先从开发板读取并保存到本电脑，再和新固件一起写回。'),
   'upgrade.reset.desc': d('The settings go back to the defaults. The firmware finds Windows again on its own, but your boot order and menu settings are lost.',
     '设置恢复为默认值。固件会自己重新找到 Windows，但启动顺序和菜单设置会丢失。'),
+  'backup.where': d('Before writing, the partition table and the UEFI settings that were on the eMMC were saved to {path} (with backup.txt: board, time, SHA-256 of each file).',
+    '写入之前，eMMC 上原来的分区表和 UEFI 设置已保存到 {path}（附 backup.txt：开发板、时间、每个文件的 SHA-256）。'),
   'upgrade.backupSaved': d('UEFI settings saved to {path}', 'UEFI 设置已保存到 {path}'),
   'review.upgrade.written': d('The new image from sector 64 to the end of its 32 MiB, in one write.', '新映像从第 64 扇区写到 32 MiB 末尾，一次写完。'),
   'review.upgrade.kept': d('UEFI settings', 'UEFI 设置'),

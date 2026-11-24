@@ -7,6 +7,11 @@ an entry by moving it to "Tested" with the date and what was seen.
 
 ## Untested
 
+- **The copy before a write** (ux-decisions D6): Armbian, a factory image,
+  the firmware and a Windows install on both boards each leave a folder in
+  nvdata-backups with gpt-sectors-0-33.bin, nvdata-sector-43648-384.bin
+  (when the board had settings) and backup.txt; the SHA-256 in it match the
+  files; the folder is named on the confirmation card and the result.
 - **Staged Windows onto an SD card or NVMe drive from macOS**
   (stage-everywhere): the password dialog once, the write and read-back
   through rawdisk `--regions` with a real card reader and a USB NVMe
