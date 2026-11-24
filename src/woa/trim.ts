@@ -18,7 +18,8 @@
 // on by default and makes Windows ignore DisableRealtimeMonitoring and
 // DisableAntiSpyware, offline or not, so the option could not be kept.
 //
-// How to undo: docs/DESIGN.md ("Trimming Windows").
+// How to undo: docs/dev/design.md ("Trimming Windows"). The rem line written
+// onto the board below names docs/DESIGN.md, which stays as a pointer.
 
 export interface TrimOptions {
   /** Inbox apps that start or update in the background: News, Weather, Teams, Phone Link, Clipchamp, ... */

@@ -435,7 +435,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       # A fine-grained token with contents and pull-requests write on
-      # gahingwoo/homebrew-tap (docs/release.md). Without it this job does nothing.
+      # gahingwoo/homebrew-tap (docs/dev/release.md). Without it this job does nothing.
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -462,4 +462,4 @@ jobs:
             --title "$cask ${GITHUB_REF_NAME#v}" --body "Written by maskrom-studio's release workflow for $GITHUB_REF_NAME (scripts/bump-cask.mjs)."
       - name: No tap token
         if: env.TAP_TOKEN == ''
-        run: echo "HOMEBREW_TAP_TOKEN is not set; the cask is not updated (docs/release.md)."
+        run: echo "HOMEBREW_TAP_TOKEN is not set; the cask is not updated (docs/dev/release.md)."

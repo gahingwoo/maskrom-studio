@@ -14,7 +14,7 @@
 // The firmware boots \EFI\Boot\bootaa64.efi from the first FAT volume on
 // the eMMC that has it, which is WOA-STAGE-BOOT, because the new table has
 // no other. WinPE runs the install, and the install deletes both staging
-// partitions and extends Windows over them. See docs/DESIGN.md.
+// partitions and extends Windows over them. See docs/dev/design.md.
 
 import { FatVolume } from './fat32';
 import {

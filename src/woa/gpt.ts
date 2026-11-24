@@ -4,7 +4,7 @@
 // The edk2-rk3576 eMMC images carry a primary GPT only (sectors 0 to 33);
 // their backup header is never written, because the image is 32 MiB and the
 // backup belongs at the end of the disk. Over Maskrom the end of the disk
-// cannot be read back reliably anyway (docs/DESIGN.md, the 32 MiB read
+// cannot be read back reliably anyway (docs/dev/design.md, the 32 MiB read
 // limit), so everything here
 // works from the primary table, and a new table is always written whole:
 // protective MBR, primary header and entries, and the backup entries and
