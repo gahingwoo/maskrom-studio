@@ -20,6 +20,9 @@ import type { Region } from './stage-layout';
 
 /** Reads this far from the start of the storage come back as written; past it, maybe not. */
 export const TRUSTED_READ_BYTES = 32 * 1024 * 1024;
+
+/** The start of the reason when the board left the USB bus during a job (the page shows how to get it back). */
+export const BOARD_GONE = 'The board was disconnected.';
 const FILLER = 0xcc;
 const SAMPLE = 64 * 1024;
 
@@ -172,7 +175,7 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
         waited += 500;
       }
       if (!seen) {
-        return { ok: false, written, reason: 'The board did not come back after the loader was sent.',
+        return { ok: false, written, reason: `${BOARD_GONE} It did not come back after the loader was sent.`,
           detail: 'Unplug the USB cable, put the board in MaskROM mode again and retry.' };
       }
       if (capacity === null) hooks.log('The loader runs but did not report the storage size (rfi).');
@@ -290,6 +293,12 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
   } catch (e) {
     if (e instanceof Stop) {
       const partly = written > 0 ? ' The eMMC is only partly written: run the same write again.' : '';
+      // A command that failed because the board went away (cable pulled, board reset) says so.
+      if (e.message !== 'Cancelled.' && !hooks.cancelled()) {
+        let gone = false;
+        try { gone = parseList((await r.run(['ld'])).lines) === 'none'; } catch { gone = true; }
+        if (gone) return { ok: false, reason: `${BOARD_GONE}${partly}`, detail: e.message, written };
+      }
       return { ok: false, reason: `${e.message}${partly}`, written };
     }
     return { ok: false, reason: 'rkdeveloptool stopped with an error.', detail: String((e as Error)?.message ?? e), written };

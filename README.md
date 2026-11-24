@@ -156,6 +156,7 @@ npm start
 ```sh
 npm test                               # layout, GPT, FAT32, exFAT, UDF, WIM, MaskROM through the WASM against a pretend board
 node scripts/electron-woa-e2e.mjs      # the staged install inside Electron against a pretend TaishanPi 3M
+node scripts/electron-retry-e2e.mjs    # a board that goes away: Try again, Report a problem
 node scripts/electron-maskrom-e2e.mjs  # Roxora Imager's MaskROM path inside Electron
 node --test test/webflash/*.test.js    # modules copied from edk2-webflash
 node scripts/shots.mjs dev/shots       # screenshots, light and dark

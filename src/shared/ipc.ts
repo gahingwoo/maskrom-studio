@@ -192,6 +192,10 @@ export interface ImagerApi {
   /** Keep a copy of the board's UEFI settings (nvdata) on this computer; returns its path. */
   saveNvdata(board: BoardId, data: Uint8Array): Promise<{ path: string } | { error: string }>;
   /** Keep what a write is about to replace (partition table, UEFI settings) in a folder of its own; returns the folder. */
+  /** Open a new GitHub issue for what went wrong (scrubbed in the main process). */
+  reportProblem(f: { board?: string | null; mode?: string; task?: string | null; step?: string | null; error?: string | null; detail?: string | null; log?: string[] }): Promise<void>;
+  /** Save the whole log, scrubbed, to a file the user picks. */
+  saveLog(f: { board?: string | null; mode?: string; task?: string | null; step?: string | null; error?: string | null; detail?: string | null; log?: string[] }): Promise<{ path: string } | { error: string } | null>;
   saveBeforeWrite(board: BoardId, files: Array<{ name: string; data: Uint8Array }>, notes: string[]): Promise<{ path: string } | { error: string }>;
   /** Serve the chosen Windows file to the Maskrom worker. */
   serveWindows(token: string): Promise<Served | { error: string }>;

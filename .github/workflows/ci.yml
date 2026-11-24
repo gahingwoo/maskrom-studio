@@ -62,6 +62,8 @@ jobs:
         run: xvfb-run -a node scripts/electron-maskrom-e2e.mjs
       - name: Staged Windows install inside Electron against a pretend TaishanPi 3M
         run: xvfb-run -a node scripts/electron-woa-e2e.mjs
+      - name: A board that goes away, Try again and Report a problem inside Electron
+        run: xvfb-run -a node scripts/electron-retry-e2e.mjs
       - name: Scrolling and text selection inside Electron at small window sizes
         run: xvfb-run -a node scripts/electron-scroll-e2e.mjs
       - name: Screenshots

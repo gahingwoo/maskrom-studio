@@ -503,6 +503,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
     [t('about.pictures'), <>{t('about.pictures.value')} {link(`https://github.com/gahingwoo/maskrom-studio/blob/${BUILD.commit}/resources/desktops/README.md`, t('about.details'))}</>],
     [t('about.madeBy'), link('https://gahingwoo.com', 'Ga Hing Woo (Jiaxing Hu)')],
     [t('about.source'), link('https://github.com/gahingwoo/maskrom-studio', 'github.com/gahingwoo/maskrom-studio')],
+    [t('report.open'), <Button variant="link" isInline id="about-report" onClick={() => { api.reportProblem({ mode: 'about' }).catch(() => {}); }}>{t('report.about')}</Button>],
     [t('about.basedOn'), <>{t('about.basedOn.value')} {link('https://github.com/roxora-os/imager', 'github.com/roxora-os/imager')}</>],
   ];
   // On the document body, as PatternFly's Modal does, so the backdrop covers the masthead too.

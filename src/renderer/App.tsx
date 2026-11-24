@@ -43,7 +43,7 @@ interface Run {
   stages: Stage[];
   log: string[];
   confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | UpgradeSummary | null;
-  result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[]; help?: 'noBoard' } | null;
+  result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[]; help?: 'noBoard' | 'gone'; reason?: string } | null;
   /** Where the partition table and UEFI settings were kept before the write (pre-write-backup.ts). */
   backup?: string;
 }
@@ -288,7 +288,7 @@ export function App() {
   // --- running -----------------------------------------------------------------
   const update = (f: (r: Run) => Run) => setRun((cur) => (cur ? f(cur) : cur));
   const setStage = (id: string, patch: Partial<Stage>) => update((r) => ({ ...r, stages: r.stages.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
-  const addLog = (line: string) => update((r) => ({ ...r, log: [...r.log.slice(-600), line] }));
+  const addLog = (line: string) => update((r) => ({ ...r, log: [...r.log.slice(-5000), line] }));
   const finish = (result: Run['result']) => update((r) => ({ ...r, result, confirm: null }));
 
   const withProgress = async <R,>(id: string, fn: () => Promise<R>): Promise<R> => {
@@ -313,8 +313,9 @@ export function App() {
       }
       return { ok: true, title: okTitle, ...(text ? { text } : {}), ...(next ? { next } : {}) };
     }
-    return { ok: false, title: errorText(r.reason), ...('detail' in r && r.detail ? { detail: r.detail } : {}),
-      ...(/^No board in MaskROM mode was found/.test(r.reason) ? { help: 'noBoard' as const } : {}) };
+    return { ok: false, title: errorText(r.reason), reason: r.reason, ...('detail' in r && r.detail ? { detail: r.detail } : {}),
+      ...(/^No board in MaskROM mode was found/.test(r.reason) ? { help: 'noBoard' as const }
+        : /^The board was disconnected/.test(r.reason) || /LIBUSB_ERROR_NO_DEVICE/.test('detail' in r && r.detail ? r.detail : '') ? { help: 'gone' as const } : {}) };
   };
 
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
@@ -390,7 +391,13 @@ export function App() {
 
   const storageWord = (b: WoaBoard, tk: Task) => t(tk === 'windows' || b.firmwareStorage === 'emmc' ? 'storage.emmc' : 'storage.spinor');
 
-  const start = async () => {
+  // Every failure ends on the run page with Try again, never in a run that waits for nothing.
+  const start = () => startJob().catch((e: unknown) => {
+    const reason = String((e as Error)?.message ?? e);
+    setRun((r) => ({ ...(r ?? { title: t('run.stopped'), stages: [], log: [], confirm: null }), confirm: null,
+      result: { ok: false, title: errorText(reason), reason } }));
+  });
+  const startJob = async () => {
     if (!board || !task) return;
     if (driveTask) {
       const isArmbian = task === 'armbian';
@@ -516,6 +523,14 @@ export function App() {
   };
   // After a failure the wizard opens where the run was started (Confirm or Review), with every choice kept.
   const [wizardStart, setWizardStart] = useState(1);
+  // What a problem report says (shared/report.ts scrubs it in the main process).
+  const reportFacts = () => {
+    const failed = run?.stages.find((x) => x.percent !== 100);
+    return {
+      board: board?.name ?? null, mode: mode ?? '?', task: run?.title ?? null, step: failed?.label ?? null,
+      error: run?.result?.reason ?? run?.result?.title ?? null, detail: run?.result?.detail ?? null, log: run?.log ?? [],
+    };
+  };
   const closeRun = (again = false) => {
     for (const tok of servedTokens.current) api.releaseServed(tok);
     servedTokens.current = [];
@@ -1457,6 +1472,19 @@ export function App() {
                 <CardBody><List component="ol" type={OrderType.number}>{run.result.next.map((n) => <ListItem key={n}>{n}</ListItem>)}</List></CardBody>
               </Card>
             )}
+            {run.result?.help === 'gone' && board && (
+              <Card>
+                <CardTitle>{t('gone.title')}</CardTitle>
+                <CardBody>
+                  <Stack hasGutter>
+                    <Content component="p">{t('gone.text')}</Content>
+                    <List component="ol" type={OrderType.number}>{maskromSteps(board).map((x) => <ListItem key={x}>{x}</ListItem>)}</List>
+                    <MaskromLive board={board.name} />
+                    <Content component="p">{t('gone.retry')}</Content>
+                  </Stack>
+                </CardBody>
+              </Card>
+            )}
             {run.result?.help === 'noBoard' && (
               <Card>
                 <CardTitle>{t('noboard.title')}</CardTitle>
@@ -1479,6 +1507,10 @@ export function App() {
                     <ActionListGroup>
                       <ActionListItem><Button variant="primary" onClick={() => closeRun(true)}>{t('run.again')}</Button></ActionListItem>
                       <ActionListItem><Button variant="secondary" onClick={() => closeRun()}>{t('run.backToSteps')}</Button></ActionListItem>
+                    </ActionListGroup>
+                    <ActionListGroup>
+                      <ActionListItem><Button variant="link" id="report-problem" onClick={() => { api.reportProblem(reportFacts()).catch(() => {}); }}>{t('report.open')}</Button></ActionListItem>
+                      <ActionListItem><Button variant="link" id="save-log" onClick={() => { api.saveLog(reportFacts()).then((r) => { if (r && 'path' in r) addLog(t('report.saved', { path: r.path })); }).catch(() => {}); }}>{t('report.save')}</Button></ActionListItem>
                     </ActionListGroup>
                   </ActionList>
                 )}

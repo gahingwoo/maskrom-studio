@@ -7,6 +7,13 @@ an entry by moving it to "Tested" with the date and what was seen.
 
 ## Untested
 
+- **Pulling the cable during a write** (retry-report): on both boards,
+  during the loader and during wl: "The board was disconnected" with the
+  MaskROM steps, the live line green again after re-entering MaskROM, Try
+  again finishing the write; the same with an SD card pulled from the
+  reader (the drive message). Report a problem opens a prefilled GitHub
+  issue with nothing personal in it on Windows, macOS and Linux; Save full
+  log writes the file.
 - **Live MaskROM line** (ux-decisions D2): on the Get ready page and the
   MaskROM card, the line turns green within two seconds of the board
   entering MaskROM (TaishanPi 3M pads, CM5-IO button) on Linux, macOS and

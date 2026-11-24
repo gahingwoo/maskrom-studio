@@ -4,7 +4,8 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, net, screen, session, shell, type WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, release as osRelease, tmpdir, type as osType, userInfo } from 'node:os';
+import { fullLog, issueUrl, type ReportFacts, type Who } from '../shared/report';
 import { dirname, join } from 'node:path';
 import * as drivelist from 'drivelist';
 import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
@@ -842,6 +843,38 @@ ipcMain.handle('woa:write-stick', (e, device: string) => exclusive(async (signal
     return { ok: false, reason: String((err as Error).message ?? err) };
   }
 }, { ok: false, reason: 'Another write is running.' }));
+
+// --- reporting a problem -------------------------------------------------------------
+
+const reporter = (): Who => ({ home: homedir(), user: (() => { try { return userInfo().username; } catch { return ''; } })() });
+declare const __BUILD_COMMIT__: string;
+const reportFacts = (f: Partial<ReportFacts>): ReportFacts => ({
+  version: app.getVersion(), commit: typeof __BUILD_COMMIT__ === 'string' ? __BUILD_COMMIT__ : 'unknown',
+  os: `${osType()} ${osRelease()}`, arch: process.arch,
+  board: typeof f.board === 'string' ? f.board : null, mode: typeof f.mode === 'string' ? f.mode : '?',
+  task: typeof f.task === 'string' ? f.task : null, step: typeof f.step === 'string' ? f.step : null,
+  error: typeof f.error === 'string' ? f.error : null, detail: typeof f.detail === 'string' ? f.detail : null,
+  log: Array.isArray(f.log) ? f.log.map(String).slice(-5000) : [],
+});
+
+/** Open a new GitHub issue with what the page knows, scrubbed. */
+ipcMain.handle('report:open', (_e, f: Partial<ReportFacts>) => shell.openExternal(issueUrl(reportFacts(f), reporter())));
+
+/** The whole log, scrubbed, into a file the user picks (to attach to the issue). */
+ipcMain.handle('report:save-log', async (_e, f: Partial<ReportFacts>): Promise<{ path: string } | { error: string } | null> => {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const r = await dialog.showSaveDialog(win!, {
+    title: 'Save the log', defaultPath: join(app.getPath('documents'), `maskrom-studio-log-${stamp}.txt`),
+    filters: [{ name: 'Text', extensions: ['txt'] }],
+  });
+  if (r.canceled || !r.filePath) return null;
+  try {
+    writeFileSync(r.filePath, fullLog(reportFacts(f), reporter()));
+    return { path: shownPath(r.filePath) };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
 
 ipcMain.handle('job:cancel', () => { job?.abort(); });
 
