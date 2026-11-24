@@ -45,7 +45,7 @@ async function check(page, tag, at = [450, 330], within = null) {
   } else console.log(`${tag}: fits, nothing to scroll`);
 }
 
-for (const [w, h] of [[900, 600], [1024, 700], [720, 480]]) {
+for (const [w, h] of [[900, 600], [1024, 700], [720, 560]]) {
   const app = await electron.launch({ args: ['.'], env });
   const page = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [w, h]);

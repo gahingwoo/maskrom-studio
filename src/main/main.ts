@@ -87,11 +87,13 @@ function askUsb(wc: WebContents, choices: UsbChoice[]): Promise<string> {
 function createWindow() {
   // Never larger than the screen's work area (a 1366x768 laptop at 125%
   // has 1093x614 to give): a window taller than the screen hides its bottom,
-  // and no scrolling inside it can reach that.
+  // and no scrolling inside it can reach that. At least 560 high (UX audit
+  // D7): at 480 the content had about 250 px and the confirm page's "erased"
+  // row needed scrolling.
   const area = screen.getPrimaryDisplay().workAreaSize;
   win = new BrowserWindow({
     width: Math.min(1100, area.width), height: Math.min(780, area.height),
-    minWidth: Math.min(720, area.width), minHeight: Math.min(480, area.height),
+    minWidth: Math.min(720, area.width), minHeight: Math.min(560, area.height),
     show: false,
     title: 'Maskrom Studio',
     icon: join(resourcesDir, 'icons', 'png', 'maskrom-studio-256.png'),
