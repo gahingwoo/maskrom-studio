@@ -110,6 +110,15 @@ function createWindow() {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(ORIGIN)) e.preventDefault(); });
+  // Closing the window in the middle of a write leaves the board, card or drive half written: ask first.
+  win.on('close', (e) => {
+    if (!busy || HIDDEN || !win) return;
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'warning', buttons: [busy.stay, busy.leave], defaultId: 0, cancelId: 0, noLink: true, title: busy.title, message: busy.title, detail: busy.text,
+    });
+    if (choice === 0) e.preventDefault();
+    else busy = null;
+  });
   if (!HIDDEN) win.once('ready-to-show', () => win?.show());
   win.loadURL(`${ORIGIN}/index.html`);
 }
@@ -865,6 +874,8 @@ ipcMain.on('app:info', (e) => {
   };
 });
 ipcMain.on('theme', (_e, t: 'light' | 'dark') => { nativeTheme.themeSource = t; });
+let busy: { title: string; text: string; stay: string; leave: string } | null = null;
+ipcMain.on('app:busy', (_e, ask: typeof busy) => { busy = ask; });
 
 app.whenReady().then(() => {
   afterUpdateCleanup();

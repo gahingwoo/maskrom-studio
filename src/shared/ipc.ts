@@ -228,4 +228,6 @@ export interface ImagerApi {
   copyText?(text: string): Promise<boolean>;
   openExternal(url: string): Promise<void>;
   setTheme(theme: 'light' | 'dark'): void;
+  /** A write is running (the words to ask with before the window closes), or null once it has ended. */
+  setBusy?(ask: { title: string; text: string; stay: string; leave: string } | null): void;
 }

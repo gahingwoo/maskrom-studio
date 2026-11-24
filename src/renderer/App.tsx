@@ -494,7 +494,14 @@ export function App() {
       [{ id: 'fw', get: () => api.prepareFirmware(board.id) }], null);
   };
 
+  // While a write runs, closing the window asks first (main.ts), in the page's language.
+  const running = !!run && !run.result;
+  useEffect(() => {
+    api.setBusy?.(running ? { title: t('stop.title'), text: t('stop.close'), stay: t('stop.stay'), leave: t('stop.leave') } : null);
+  }, [running, t]);
+  const [stopAsk, setStopAsk] = useState(false);
   const cancel = () => {
+    setStopAsk(false);
     if (worker.current) {
       worker.current.terminate();
       worker.current = null;
@@ -1453,7 +1460,7 @@ export function App() {
               </Card>
             )}
             <StackItem>
-              {!run.result ? <Button variant="secondary" onClick={cancel}>{t('cancel')}</Button>
+              {!run.result ? <Button variant="secondary" onClick={() => setStopAsk(true)}>{t('cancel')}</Button>
                 : run.result.ok ? <Button variant="primary" onClick={() => closeRun()}>{t('done')}</Button>
                 : (
                   <ActionList>
@@ -1507,6 +1514,14 @@ export function App() {
         <ModalFooter>
           <Button variant="primary" onClick={() => { setModeAsk(null); toSimple(); }}>{t('mode.reset.go')}</Button>
           <Button variant="link" onClick={() => setModeAsk(null)}>{t('cancel')}</Button>
+        </ModalFooter>
+      </Modal>
+      <Modal isOpen={stopAsk && running} onClose={() => setStopAsk(false)} variant="small" aria-labelledby="stop-title">
+        <ModalHeader title={t('stop.title')} labelId="stop-title" />
+        <ModalBody>{t('stop.text')}</ModalBody>
+        <ModalFooter>
+          <Button variant="danger" onClick={cancel}>{t('stop.go')}</Button>
+          <Button variant="link" onClick={() => setStopAsk(false)}>{t('stop.stay')}</Button>
         </ModalFooter>
       </Modal>
       <AboutModal open={about} onClose={() => setAbout(false)} />

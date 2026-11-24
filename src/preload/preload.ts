@@ -55,6 +55,7 @@ const api: ImagerApi = {
   onUpdateProgress: (cb) => on<{ bytes: number; total: number }>('update:progress', cb),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   setTheme: (t) => ipcRenderer.send('theme', t),
+  setBusy: (ask) => ipcRenderer.send('app:busy', ask),
 };
 
 contextBridge.exposeInMainWorld('imager', api);
