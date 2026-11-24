@@ -57,7 +57,8 @@ an entry by moving it to "Tested" with the date and what was seen.
   Prerelease (0.3.0-tspi3m.1 era releases) and CI once edk2-rk3576 has a
   `ci` release; the app updating itself from the `ci` release on each OS.
 
-- **Simple mode** (simple-mode): each of the four tasks on both boards
+- **Simple mode** (simple-mode): each of its three tasks (the factory
+  restore is in Advanced mode only until it is verified) on both boards
   from a new install; the flashing-mode instructions as written (TaishanPi
   3M pads and F4, CM5-IO button); switching modes keeps the board; the
   dialog when Advanced choices are reset.

@@ -593,7 +593,7 @@ export function App() {
             <Radio id="task-armbian" name="task" label={t('task.armbian')} isChecked={task === 'armbian'} isDisabled={onBoard}
               onChange={() => setTask('armbian')} description={onBoard ? t('task.restore.here') : t('task.armbian.short')} />
             <Radio id="task-factory" name="task" label={t('task.factory')} isChecked={task === 'factory'} isDisabled={onBoard}
-              onChange={() => setTask('factory')} description={onBoard ? t('task.restore.here') : t('task.factory.short')} />
+              onChange={() => setTask('factory')} description={onBoard ? t('task.restore.here') : `${t('task.factory.short')} ${t('task.factory.untested')}`} />
           </FormGroup>
         )}
       </Form>
@@ -1123,7 +1123,7 @@ export function App() {
   );
 
   // --- Simple mode -------------------------------------------------------------
-  const SIMPLE_TASKS: Task[] = ['windows', 'armbian', 'factory', 'upgrade'];
+  const SIMPLE_TASKS: Task[] = ['windows', 'armbian', 'upgrade'];
   // Simple mode installs to the built-in storage: the boards with an eMMC.
   const SIMPLE_BOARDS: BoardId[] = WOA_BOARDS.filter((b) => b.emmc).map((b) => b.id);
   const advancedOnly = WOA_BOARDS.filter((b) => !b.emmc).map((b) => b.name).join(', ');
@@ -1201,7 +1201,7 @@ export function App() {
         <FormGroup role="radiogroup" fieldId="s-task" aria-label={t('s.step.what')} isStack>
           {simpleChoice('windows', t('s.what.windows'), t('s.what.windows.desc'), !board.emmc)}
           {simpleChoice('armbian', t('s.what.armbian'), t('s.what.armbian.desc'), !ARMBIAN_RESTORE[board.id])}
-          {simpleChoice('factory', t('s.what.factory'), t('s.what.factory.desc'), !ARMBIAN_RESTORE[board.id])}
+          {/* The factory restore is in Advanced mode only until it has run on a board (UX audit D1). */}
           {simpleChoice('upgrade', t('s.what.upgrade'), t('s.what.upgrade.desc'), board.firmwareStorage !== 'emmc')}
         </FormGroup>
         {task === 'windows' && (
@@ -1264,21 +1264,6 @@ export function App() {
                 need: armbianFound.minBytes ? formatBytes(armbianFound.minBytes) : '?' })
                 : armbian && typeof armbian === 'object' && 'error' in armbian ? errorText(armbian.error) : armbian === 'looking' ? t('s.armbian.checking') : ''}
             </HelperTextItem></HelperText></FormHelperText>
-          </FormGroup>
-        )}
-        {task === 'factory' && (
-          <FormGroup fieldId="s-factory" label={term(t('s.factory.term'), t('s.factory.term.help'))}>
-            <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
-              <FlexItem><Button id="s-factory" variant="secondary" onClick={chooseFactory}>{t('s.factory.choose')}</Button></FlexItem>
-              <FlexItem><Button variant="link" isInline component="a" href={factoryLink} target="_blank">{t('restore.factory.where')}</Button></FlexItem>
-            </Flex>
-            {(factory || factoryError) && (
-              <FormHelperText><HelperText>
-                {factoryError ? <HelperTextItem variant="error">{t('s.factory.bad')} {factoryError}</HelperTextItem>
-                  : factory!.refuse ? <HelperTextItem variant="error">{t('s.factory.bad')} {msg(factory!.refuse)}</HelperTextItem>
-                  : <HelperTextItem variant="success">{t('s.factory.ok', { model: factory!.model, version: factory!.version })}</HelperTextItem>}
-              </HelperText></FormHelperText>
-            )}
           </FormGroup>
         )}
         {task === 'upgrade' && (

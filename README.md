@@ -25,12 +25,13 @@ Two modes, switched in the masthead or in Settings.
 
 **Simple** (the default for a new install): four steps with the
 recommended choices: the board, what to do (install Windows, install
-Armbian, restore the factory system, update the boot firmware), how to put
-the board in flashing mode, and a confirmation that says what is erased.
+Armbian, update the boot firmware; restoring the factory system is in
+Advanced mode only until it has been verified on a board), how to put the
+board in flashing mode, and a confirmation that says what is erased.
 
 | | |
 |---|---|
-| ![Simple mode, step 1: pictures of the LCKFB TaishanPi 3M and the ArmSoM CM5-IO](docs/imgs/simple-board.png) Choose the board | ![Simple mode, step 2: install Windows, install Linux (Armbian), restore the factory system, update the boot firmware; a Windows file chosen and ready to install](docs/imgs/simple-what.png) What to do |
+| ![Simple mode, step 1: pictures of the LCKFB TaishanPi 3M and the ArmSoM CM5-IO](docs/imgs/simple-board.png) Choose the board | ![Simple mode, step 2: install Windows, install Linux (Armbian), update the boot firmware; a Windows file chosen and ready to install](docs/imgs/simple-what.png) What to do |
 | ![Simple mode, step 3: how to put the TaishanPi 3M in flashing mode, with a photo of the MSK pads, and what will be erased](docs/imgs/simple-ready.png) Get ready | ![Simple mode, step 4: board, what, from, what is erased, how it is checked, what happens next, and a box to tick before Start](docs/imgs/simple-confirm.png) Confirm |
 
 **Advanced**: every option (firmware variants, disk layout, SD cards and
