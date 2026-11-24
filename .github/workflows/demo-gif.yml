@@ -1,0 +1,90 @@
+name: README walkthrough GIF
+
+# Records the README's walkthrough (scripts/demo-gif.mjs: Simple mode from
+# the board to a finished firmware update, in the built app under xvfb,
+# against the pretend board of test/electron/fake-board-worker.ts, no USB)
+# in English and Chinese. A push to main force-pushes demo-en.gif and
+# demo-zh-CN.gif as the single commit of the orphan branch readme-media,
+# which the READMEs show. Every recording differs by a few bytes, so
+# committing them to main would add most of a MiB to its history on each
+# push; the orphan branch is replaced instead, so only the newest pair is
+# kept. Not the "ci" release: release.yml deletes and recreates it on every
+# push, and the app reads it as its CI update tier. Pull requests only
+# upload the GIFs as an artifact.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wasm:
+    uses: ./.github/workflows/wasm.yml
+
+  record:
+    needs: wasm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: rkdeveloptool-wasm
+          path: vendor/rkdeveloptool-wasm
+      - name: ffmpeg and a Chinese font
+        run: |
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT update -qq
+          sudo apt-get $APT install -y -qq --no-install-recommends ffmpeg fonts-noto-cjk
+      - run: npm run build
+      - name: Record
+        run: xvfb-run -a node scripts/demo-gif.mjs out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-gif
+          path: out/*.gif
+          if-no-files-found: error
+
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: record
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: readme-media
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: demo-gif
+          path: ${{ runner.temp }}/gif
+      - name: Replace the readme-media branch
+        env:
+          GIF: ${{ runner.temp }}/gif
+        run: |
+          set -eu
+          git fetch -q --depth=1 origin +readme-media:refs/remotes/origin/readme-media 2>/dev/null || true
+          git checkout -q --orphan readme-media
+          git rm -rfq .
+          cp "$GIF"/demo-en.gif "$GIF"/demo-zh-CN.gif .
+          git add demo-en.gif demo-zh-CN.gif
+          if git rev-parse -q --verify refs/remotes/origin/readme-media >/dev/null \
+             && [ "$(git write-tree)" = "$(git rev-parse 'refs/remotes/origin/readme-media^{tree}')" ]; then
+            echo "GIFs unchanged"; exit 0
+          fi
+          git config user.name gahingwoo
+          git config user.email gahing@gahingwoo.com
+          git commit -q -s -m "README walkthrough GIFs from ${GITHUB_SHA::7} [skip ci]" \
+            -m "Recorded by the README walkthrough GIF workflow. This branch holds one commit and is replaced every time."
+          git push -q -f origin HEAD:readme-media

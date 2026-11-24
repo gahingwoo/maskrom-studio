@@ -35,6 +35,8 @@ boot firmware), put the board in flashing mode as shown, and confirm what is
 erased. Restoring the factory system is in Advanced mode only until it has
 been run on a board.
 
+![Simple mode from start to finish: choose the TaishanPi 3M, update the boot firmware, get ready, confirm, and the write against a pretend board](https://github.com/gahingwoo/maskrom-studio/raw/readme-media/demo-en.gif)
+
 | | |
 |---|---|
 | ![Simple mode, step 1: pictures of the LCKFB TaishanPi 3M and the ArmSoM CM5-IO](docs/imgs/simple-board.png) Choose the board | ![Simple mode, step 2: install Windows, install Linux (Armbian), update the boot firmware](docs/imgs/simple-what.png) What to do |
