@@ -23,10 +23,11 @@ function balanced(script: string): boolean {
 }
 
 describe('the recommended set', () => {
-  it('only stops background work: Edge, the Store and Chrome are left alone', () => {
-    expect(RECOMMENDED_TRIM.removeEdge).toBe(false);
+  it('stops background work, swaps Edge for Chrome, keeps drivers out of Windows Update, and leaves the Store', () => {
+    expect(RECOMMENDED_TRIM.removeEdge).toBe(true);
+    expect(RECOMMENDED_TRIM.chrome).toBe(true);
+    expect(RECOMMENDED_TRIM.wuDrivers).toBe(true);
     expect(RECOMMENDED_TRIM.removeStore).toBe(false);
-    expect(RECOMMENDED_TRIM.chrome).toBe(false);
     expect(anyTrim(RECOMMENDED_TRIM)).toBe(true);
     expect(anyTrim(NO_TRIM)).toBe(false);
     expect(anyTrim(undefined)).toBe(false);
@@ -41,6 +42,12 @@ describe('the recommended set', () => {
 
 describe('woa-trim.cmd', () => {
   const rec = trimCmd(RECOMMENDED_TRIM);
+  const noEdge = trimCmd({ ...RECOMMENDED_TRIM, removeEdge: false });
+  it('keeps Windows Update from installing drivers, and changes nothing else of it', () => {
+    expect(rec).toContain('Policies\\Microsoft\\Windows\\WindowsUpdate" /v ExcludeWUDriversInQualityUpdate /t REG_DWORD /d "1"');
+    expect(rec.match(/WindowsUpdate"/g)?.length).toBe(1);
+    expect(trimCmd({ ...NO_TRIM, apps: true })).not.toContain('ExcludeWUDriversInQualityUpdate');
+  });
   it('removes the listed apps by name, without pipes inside the loop', () => {
     expect(rec).toContain('/Get-ProvisionedAppxPackages');
     expect(rec).toContain('Microsoft.BingNews');
@@ -48,7 +55,8 @@ describe('woa-trim.cmd', () => {
     const loop = rec.slice(rec.indexOf('for /f'), rec.indexOf('reg load'));
     expect(loop).not.toMatch(/\|/);
     expect(rec).not.toContain('Microsoft.WindowsStore');
-    expect(rec).not.toContain('Microsoft.MicrosoftEdge.Stable');
+    expect(noEdge).not.toContain('Microsoft.MicrosoftEdge.Stable');
+    expect(rec).toContain('Microsoft.MicrosoftEdge.Stable');
   });
   it('sets the documented policies in the loaded hives and unloads all three', () => {
     for (const v of ['DisableFileSyncNGSC /t REG_DWORD /d "1"', 'TurnOffWindowsCopilot /t REG_DWORD /d "1"', 'AllowNewsAndInterests /t REG_DWORD /d "0"',
@@ -72,7 +80,7 @@ describe('woa-trim.cmd', () => {
     expect(balanced(all)).toBe(true);
   });
   it('removes Edge only when asked, and stops Edge Update from bringing it back', () => {
-    expect(rec).not.toContain('rd /s /q');
+    expect(noEdge).not.toContain('rd /s /q');
     const edge = trimCmd({ ...NO_TRIM, removeEdge: true });
     expect(edge).toContain(`Install${EDGE_APP_ID} /t REG_DWORD /d "0"`);
     expect(edge).toContain('DoNotUpdateToEdgeWithChromium /t REG_DWORD /d "1"');

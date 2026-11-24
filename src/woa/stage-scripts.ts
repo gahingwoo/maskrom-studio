@@ -108,6 +108,7 @@ reg unload HKLM\WOAOFF >> "%LOG%" 2>&1
 rem --- 4b. first start: SetupComplete.cmd, the answer file, OpenSSH -----------
 mkdir W:\Windows\Setup\Scripts 2>nul
 copy /y "%STAGE%\SetupComplete.cmd" W:\Windows\Setup\Scripts\SetupComplete.cmd >nul || goto :faillog
+if exist "%STAGE%\woa-selftest.ps1" copy /y "%STAGE%\woa-selftest.ps1" W:\Windows\Setup\Scripts\woa-selftest.ps1 >nul
 if exist "%STAGE%\unattend.xml" (
   echo Setting up the account, so Windows skips its setup screens.
   mkdir W:\Windows\Panther 2>nul
@@ -280,6 +281,7 @@ for /l %%i in (%NPART%,-1,1) do (
   if "!OFF!"=="%W_fw_offset%" set KEEP=1
   if "!OFF!"=="%W_boot_offset%" set KEEP=1
   if "!OFF!"=="%W_data_offset%" set KEEP=1
+  if "!OFF!"=="%W_linux_offset%" set KEEP=1
   if not defined OFF set KEEP=1
   if not defined KEEP (
     >> X:\woa-stage\dp.txt echo select partition %%i
@@ -353,6 +355,11 @@ echo.
 echo Done. The board restarts into Windows in 15 seconds. The first start
 echo takes a few minutes and restarts once. The log is in
 echo C:\Windows\Logs\woa-stage.log.
+if defined W_linux_offset if not "%W_linux_offset%"=="none" (
+  echo.
+  echo Armbian is on the eMMC too. To start it, choose "Armbian (U-Boot^)" in
+  echo the firmware's boot manager; the boot after that is Windows again.
+)
 ping -n 16 127.0.0.1 >nul
 wpeutil reboot
 goto :end

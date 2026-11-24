@@ -9,6 +9,9 @@
 //                     its collect.cmd replaced by the launcher
 //   dataFirst..       WOA-STAGE-DATA: exFAT with the Windows image and the
 //                     install script
+//   linuxFirst..      Armbian, when asked for: its root partition, which the
+//                     install keeps (armbian-hybrid.ts); its U-Boot FIT goes
+//                     into the firmware's slot at 0x10000
 //   end-33..end-1     backup GPT
 //
 // The firmware boots \EFI\Boot\bootaa64.efi from the first FAT volume on
@@ -28,7 +31,9 @@ import type { WindowsTarget, WoaBoard } from './boards';
 import { certsCmd, trustedCerts } from './certs';
 import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { anyTrim, CHROME_MSI, trimCmd } from './trim';
+import { SELFTEST_FILE, selfTestScript } from './selftest';
 import { layoutIni, planLayout, WHOLE_DISK, type Layout, type LayoutChoice } from './windows-layout';
+import { ATTR_LEGACY_BOOTABLE, resizeLeavesTableAlone, SLOT_LBA, SLOT_SECTORS, TYPE_LINUX_ROOT_ARM64, type ArmbianParts } from './armbian-hybrid';
 
 const ALIGN = 2048; // 1 MiB
 /** Windows 11 23H2 applied with /Compact takes about 10 GB; leave room for updates and a page file. */
@@ -84,6 +89,12 @@ export interface StageInput {
   extras?: Array<{ path: string; data: Uint8Array }>;
   /** How the disk is shared after the install; default: Windows takes all of it. */
   layout?: LayoutChoice;
+  /**
+   * Armbian next to Windows (eMMC only): its root partition goes into a
+   * partition of `partitionBytes` at the end of the disk, its U-Boot FIT
+   * into the firmware's slot. The layout is then planned on the space before it.
+   */
+  armbian?: { parts: ArmbianParts; partitionBytes: number };
 }
 
 export interface StagePlan {
@@ -103,6 +114,8 @@ export interface StagePlan {
   layout: Layout;
   /** Thumbprints of the certificates the installed Windows will trust. */
   certificates: string[];
+  /** The Armbian partition, when there is one. */
+  armbian: { firstLba: number; bytes: number; guid: string } | null;
 }
 
 export class StageError extends Error {}
@@ -204,6 +217,7 @@ export function planStage(o: StageInput): StagePlan {
   const generated = [
     ...(certs.length ? [{ name: 'woa-certs.cmd', source: bytesSource(crlf(certsCmd(certs))) }] : []),
     { name: 'SetupComplete.cmd', source: bytesSource(crlf(setupComplete(setup))) },
+    { name: SELFTEST_FILE, source: bytesSource(crlf(selfTestScript({ appVersion: o.appVersion }))) },
     ...(setup.skipSetup ? [{ name: 'unattend.xml', source: bytesSource(crlf(unattendXml(setup.skipSetup))) }] : []),
     ...(anyTrim(setup.trim) ? [{ name: 'woa-trim.cmd', source: bytesSource(crlf(trimCmd(setup.trim!))) }] : []),
     ...(setup.ssh && setup.sshKey.trim() ? [{ name: 'ssh-key/administrators_authorized_keys', source: bytesSource(crlf(`${setup.sshKey.trim()}\n`)) }] : []),
@@ -216,7 +230,22 @@ export function planStage(o: StageInput): StagePlan {
     ...extras.filter((e) => setup.ssh || !e.path.startsWith('openssh/')).map((e) => ({ name: e.path, source: bytesSource(e.data) })),
   ];
   const choice = o.layout ?? setup.layout ?? WHOLE_DISK;
-  const freeBytes = (lastUsable + 1 - windowsFirst) * SECTOR;
+  // Armbian's partition: at the very end, so Windows and the staging space come before it.
+  let linuxFirst = lastUsable + 1;
+  let linuxSectors = 0;
+  const linuxGuid = o.armbian ? randomGuid(o.rand) : '';
+  if (o.armbian) {
+    if (target !== 'emmc') throw new StageError('Armbian next to Windows goes on the eMMC only. Nothing was written.');
+    if (choice.linuxReserveBytes > 0) throw new StageError('Space kept for Linux and an Armbian install cannot both be chosen. Nothing was written.');
+    const root = o.armbian.parts.root.size;
+    if (o.armbian.partitionBytes < root) {
+      throw new StageError(`The Armbian partition (${(o.armbian.partitionBytes / 1e9).toFixed(1)} GB) is smaller than Armbian's root file system (${(root / 1e9).toFixed(1)} GB). Nothing was written.`);
+    }
+    linuxSectors = alignUp(Math.ceil(o.armbian.partitionBytes / SECTOR));
+    linuxFirst = alignDown(lastUsable + 1 - linuxSectors);
+    if (!resizeLeavesTableAlone(linuxFirst + linuxSectors - 1, diskSectors)) throw new StageError('The Armbian partition would not end at the end of the eMMC.');
+  }
+  const freeBytes = (linuxFirst - windowsFirst) * SECTOR;
   const layout = planLayout(freeBytes, choice);
   if ('problem' in layout) throw new StageError(`${layout.problem} Nothing was written.`);
   const iniFor = (bootFirst: number, dataFirst: number) => stageIni({
@@ -238,12 +267,13 @@ export function planStage(o: StageInput): StagePlan {
     skip_setup: setup.skipSetup ? 1 : 0,
     ssh: setup.ssh ? 1 : 0,
     certificates: certs.map((c) => c.thumbprint).join(' ') || 'none',
+    linux_offset: o.armbian ? linuxFirst * SECTOR : 'none',
     ...layoutIni((bootFirst - windowsFirst) * SECTOR, layout, choice.windowsBytes === null),
   });
   const when = o.now ?? new Date();
   const first = buildExfat({ files: files(iniFor(0, 0)), label: 'WOASTAGE', partitionOffset: 0, serial, when });
   const dataSectors = first.volumeSectors;
-  const dataFirst = alignDown(lastUsable + 1 - dataSectors);
+  const dataFirst = alignDown(linuxFirst - dataSectors);
   const bootFirst = dataFirst - bootSectors;
   const windowsBytes = (bootFirst - windowsFirst) * SECTOR;
   if (windowsBytes < MIN_WINDOWS_BYTES) {
@@ -270,6 +300,7 @@ export function planStage(o: StageInput): StagePlan {
     parts: [
       { type: TYPE_BASIC_DATA, guid: bootGuid, firstLba: bootFirst, lastLba: bootFirst + bootSectors - 1, name: 'WOA-STAGE-BOOT' },
       { type: TYPE_BASIC_DATA, guid: dataGuid, firstLba: dataFirst, lastLba: dataFirst + dataSectors - 1, name: 'WOA-STAGE-DATA' },
+      ...(o.armbian ? [{ type: TYPE_LINUX_ROOT_ARM64, guid: linuxGuid, firstLba: linuxFirst, lastLba: linuxFirst + linuxSectors - 1, name: 'Armbian', attributes: ATTR_LEGACY_BOOTABLE }] : []),
     ],
   });
 
@@ -278,14 +309,21 @@ export function planStage(o: StageInput): StagePlan {
     regions.push({ lba: bootFirst + a / SECTOR, source: sliceSource(pe, a, b - a), label: 'WinPE' });
   }
   regions.push({ lba: dataFirst, source: concatSource(data.pieces), label: 'Windows image' });
+  if (o.armbian) {
+    regions.push({ lba: linuxFirst, source: o.armbian.parts.root, label: 'Armbian root file system' });
+    if (o.armbian.parts.fit.size > SLOT_SECTORS * SECTOR) throw new StageError('Armbian\'s U-Boot is larger than the firmware\'s slot.');
+    regions.push({ lba: SLOT_LBA, source: o.armbian.parts.fit, label: 'Armbian U-Boot (firmware slot)' });
+  }
   regions.push({ lba: gpt.backupStart, source: bytesSource(gpt.backup), label: 'backup partition table' });
   regions.push({ lba: 0, source: bytesSource(gpt.primary), label: 'partition table' });
   for (const r of regions) {
     if (r.source.size % SECTOR) throw new StageError(`${r.label} is not a whole number of sectors`);
-    if (r.lba !== 0 && r.lba < windowsFirst) throw new StageError(`${r.label} would overwrite the firmware`);
+    const inSlot = !!o.armbian && r.lba === SLOT_LBA && r.lba + r.source.size / SECTOR <= SLOT_LBA + SLOT_SECTORS;
+    if (r.lba !== 0 && r.lba < windowsFirst && !inSlot) throw new StageError(`${r.label} would overwrite the firmware`);
   }
   return {
     regions, diskGuid, bootFirst, dataFirst, windowsBytes, removed, ini, layout, certificates: certs.map((c) => c.thumbprint),
+    armbian: o.armbian ? { firstLba: linuxFirst, bytes: linuxSectors * SECTOR, guid: linuxGuid } : null,
     totalBytes: regions.reduce((s, r) => s + r.source.size, 0),
   };
 }

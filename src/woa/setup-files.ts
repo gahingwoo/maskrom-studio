@@ -27,6 +27,7 @@
 // minutes on a fresh install here and is not used. The default shell stays
 // sshd's default, cmd.exe.
 
+import { selfTestRunOnce } from './selftest';
 import type { LayoutChoice } from './windows-layout';
 import { chromeFirstStart, type TrimOptions } from './trim';
 
@@ -174,7 +175,7 @@ export function setupComplete(o: SetupOptions): string {
       'rem OpenSSH server: the release files are already in Program Files\\OpenSSH.',
       'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ProgramFiles%\\OpenSSH\\install-sshd.ps1" >> "%LOG%" 2>&1',
       'sc.exe config sshd start= auto >> "%LOG%" 2>&1',
-      'netsh advfirewall firewall add rule name="OpenSSH Server (sshd)" dir=in action=allow protocol=TCP localport=22 profile=any >> "%LOG%" 2>&1',
+      'netsh advfirewall firewall add rule name="OpenSSH Server (sshd)" dir=in action=allow protocol=TCP localport=22 profile=private,domain >> "%LOG%" 2>&1',
       'if exist "%ProgramFiles%\\OpenSSH\\administrators_authorized_keys" (',
       '  mkdir "%ProgramData%\\ssh" 2>nul',
       '  move /y "%ProgramFiles%\\OpenSSH\\administrators_authorized_keys" "%ProgramData%\\ssh\\administrators_authorized_keys" >> "%LOG%" 2>&1',
@@ -198,11 +199,14 @@ export function setupComplete(o: SetupOptions): string {
       'if exist "%ProgramFiles%\\RK3576\\setup\\firstboot.cmd" call "%ProgramFiles%\\RK3576\\setup\\firstboot.cmd" >> "%LOG%" 2>&1',
     );
   }
+  l.push(...selfTestRunOnce());
   l.push(
     'rem The answer file holds the password (encoded, not encrypted): remove every copy.',
     'del /f /q "%WINDIR%\\Panther\\unattend.xml" 2>nul',
     'del /f /q "%WINDIR%\\Panther\\Unattend\\unattend.xml" 2>nul',
     'del /f /q "%WINDIR%\\System32\\Sysprep\\unattend.xml" 2>nul',
+    'rem And once more after the first sign-in, in case setup left a copy under Panther after this ran.',
+    'reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v WoaUnattendCleanup /t REG_SZ /d "cmd.exe /c del /f /q %WINDIR%\\Panther\\unattend.xml %WINDIR%\\Panther\\Unattend\\unattend.xml %WINDIR%\\Panther\\unattend-original.xml %WINDIR%\\System32\\Sysprep\\unattend.xml" /f >> "%LOG%" 2>&1',
     'echo done >> "%LOG%"',
   );
   return `${l.join('\n')}\n`;

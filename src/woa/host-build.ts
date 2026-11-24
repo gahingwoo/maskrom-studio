@@ -11,6 +11,7 @@ import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { stageIni, StageError, winpeVolume, type DiskTarget } from './stage-layout';
 import { crlf, HOST_BUILD } from './stage-scripts';
 import { anyTrim, trimCmd } from './trim';
+import { SELFTEST_FILE, selfTestScript } from './selftest';
 
 export interface HostBuildInput {
   target: DiskTarget;
@@ -66,6 +67,7 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
     { path: 'host-build.cmd', data: crlf(HOST_BUILD) },
     { path: 'host-build.ini', data: new TextEncoder().encode(stageIni(ini)) },
     { path: 'SetupComplete.cmd', data: crlf(setupComplete(o.setup)) },
+    { path: SELFTEST_FILE, data: crlf(selfTestScript({ appVersion: o.appVersion })) },
     ...(certs.length ? [{ path: 'woa-certs.cmd', data: crlf(certsCmd(certs)) }] : []),
     ...(o.setup.skipSetup ? [{ path: 'unattend.xml', data: crlf(unattendXml(o.setup.skipSetup)) }] : []),
     ...(anyTrim(o.setup.trim) ? [{ path: 'woa-trim.cmd', data: crlf(trimCmd(o.setup.trim!)) }] : []),

@@ -8,6 +8,8 @@ import { parsePrimaryGpt } from '../src/woa/gpt';
 import { woaBoard } from '../src/woa/boards';
 import { bytesSource, type ByteSource } from '../src/woa/pieces';
 import { LAUNCHER } from '../src/woa/stage-scripts';
+import { readArmbianImage, SLOT_LBA, resizeLeavesTableAlone } from '../src/woa/armbian-hybrid';
+import { fakeArmbian } from './armbian-fixture';
 
 const has = (cmd: string, args: string[]) => { const r = spawnSync(cmd, args); return r.status !== null && !r.error; };
 const tools = has('mkfs.vfat', ['--help']) && has('mcopy', ['--version']) && has('sgdisk', ['--version']) && has('sfdisk', ['--version']);
@@ -143,6 +145,48 @@ describe('staged install layout', () => {
     expect(whole.ini).toMatch(/\r\nwindows_create_mb=0\r\nwindows_extend_mb=all\r\ndata_fs=none\r\n/);
     expect(() => planStage({ board, diskBytes: 62008590336, head, winpe, image, rand, appVersion: 't',
       setup: { skipSetup: null, ssh: false, sshKey: '', layout: { windowsBytes: 20 * GiB, rest: 'unallocated', dataLabel: 'x', linuxReserveBytes: 0 } } })).toThrow(/at least 32\.0 GB/);
+    execFileSync('rm', ['-rf', dir]);
+  }, 60000);
+
+  it('puts Armbian at the end of the eMMC, its U-Boot in the firmware slot, and the staging space before it', () => {
+    if (!tools) return;
+    const dir = mkdtempSync(join(tmpdir(), 'stage-armbian-'));
+    const winpe = fileSource(fakeWinpe(dir));
+    const GiB = 1024 ** 3;
+    const diskBytes = 62008590336;
+    const parts = readArmbianImage(bytesSource(fakeArmbian()));
+    const plan = planStage({ board, diskBytes, head, winpe, image, rand, appVersion: 't',
+      setup: { skipSetup: null, ssh: false, sshKey: '', layout: { windowsBytes: 32 * GiB, rest: 'unallocated', dataLabel: 'Data', linuxReserveBytes: 0 } },
+      armbian: { parts, partitionBytes: 24 * GiB } });
+    const t = parsePrimaryGpt(plan.regions[plan.regions.length - 1].source.read(0, 34 * 512));
+    expect(t.partitions.map((p) => p.name).slice(-3)).toEqual(['WOA-STAGE-BOOT', 'WOA-STAGE-DATA', 'Armbian']);
+    const a = t.partitions.find((p) => p.name === 'Armbian')!;
+    expect(a.type).toBe('b921b045-1df0-41c3-af44-4c6f280d3fae');
+    expect(a.attributes).toBe(4n);
+    expect((a.lastLba - a.firstLba + 1) * 512).toBe(24 * GiB);
+    expect(a.lastLba).toBeLessThanOrEqual(Math.floor(diskBytes / 512) - 34);
+    expect(resizeLeavesTableAlone(a.lastLba, Math.floor(diskBytes / 512))).toBe(true);
+    expect(plan.armbian).toEqual({ firstLba: a.firstLba, bytes: 24 * GiB, guid: a.guid });
+    // Staging and Windows before Armbian; nothing overlaps.
+    const data = t.partitions.find((p) => p.name === 'WOA-STAGE-DATA')!;
+    expect(data.lastLba).toBeLessThan(a.firstLba);
+    expect(plan.ini).toContain(`\r\nlinux_offset=${a.firstLba * 512}\r\n`);
+    expect(plan.layout.windowsBytes).toBe(32 * GiB);
+    const root = plan.regions.find((r) => r.label === 'Armbian root file system')!;
+    expect(root.lba).toBe(a.firstLba);
+    expect(root.source.size).toBe(parts.root.size);
+    const slot = plan.regions.find((r) => r.label.startsWith('Armbian U-Boot'))!;
+    expect(slot.lba).toBe(SLOT_LBA);
+    expect(slot.source.size).toBe(parts.fit.size);
+    // Too small for the root file system, an SD target, and a Linux reserve as well are refused.
+    expect(() => planStage({ board, diskBytes, head, winpe, image, rand, appVersion: 't', armbian: { parts, partitionBytes: 1 << 20 } })).toThrow(/smaller than/);
+    expect(() => planStage({ board, diskBytes, head, winpe, image, rand, appVersion: 't',
+      setup: { skipSetup: null, ssh: false, sshKey: '', layout: { windowsBytes: 32 * GiB, rest: 'unallocated', dataLabel: 'Data', linuxReserveBytes: GiB } },
+      armbian: { parts, partitionBytes: 8 * GiB } })).toThrow(/cannot both/);
+    // Windows bigger than what is left before Armbian.
+    expect(() => planStage({ board, diskBytes, head, winpe, image, rand, appVersion: 't',
+      setup: { skipSetup: null, ssh: false, sshKey: '', layout: { windowsBytes: 40 * GiB, rest: 'unallocated', dataLabel: 'Data', linuxReserveBytes: 0 } },
+      armbian: { parts, partitionBytes: 24 * GiB } })).toThrow(/at most/);
     execFileSync('rm', ['-rf', dir]);
   }, 60000);
 

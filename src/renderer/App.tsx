@@ -7,7 +7,7 @@ import {
   CardHeader, CardTitle, Checkbox, Gallery, Popover, CodeBlock, CodeBlockCode, Content, DescriptionList, DescriptionListDescription, DescriptionListGroup,
   DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form, FormGroup, FormSection, FormHelperText, HelperText, HelperTextItem,
   List, ListItem, Modal, ModalBody, ModalFooter, ModalHeader, OrderType, PageSection, Progress, ProgressMeasureLocation,
-  Radio, Stack, StackItem, Switch, TextArea, TextInput, Title, Wizard, WizardFooterWrapper, WizardStep, useWizardContext,
+  Radio, Slider, Stack, StackItem, Switch, TextArea, TextInput, Title, Wizard, WizardFooterWrapper, WizardStep, useWizardContext,
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon';
@@ -28,6 +28,7 @@ import { ARMBIAN_RESTORE, DESKTOPS, distroWords, simpleOffers, variantWords, typ
 import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
 import { MaskromLive } from './maskrom-live';
+import { MIN_ARMBIAN_BYTES, minArmbianBytes } from '../woa/armbian-hybrid';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
@@ -49,7 +50,8 @@ interface Run {
   backup?: string;
 }
 interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }>;
-  layout?: { windowsBytes: number; data: { fs: string; label: string; bytes: number } | null; unallocatedBytes: number }; chosen?: boolean }
+  layout?: { windowsBytes: number; data: { fs: string; label: string; bytes: number } | null; unallocatedBytes: number }; chosen?: boolean;
+  armbian?: { bytes: number; label: string } | null }
 interface WholeSummary { kind: 'whole'; label: string; capacity: number | null; bytes: number; clearsBackupGpt: boolean }
 interface FactorySummary { kind: 'factory'; capacity: number | null; chip: string; model: string; version: string; partitions: Array<{ name: string; lba: number; bytes: number }>; skipped: string[]; bytes: number }
 interface UpgradeSummary { kind: 'upgrade'; manufacturer: string | null; capacity: number | null; installed: string | null; next: string | null; settings: 'kept' | 'reset' | 'none'; backup: string | null; nvdataLba: number; nvdataSectors: number; lba: number; bytes: number }
@@ -110,7 +112,8 @@ export function App() {
   const [windows, setWindows] = useState<WindowsChoice | null>(null);
   const [windowsError, setWindowsError] = useState<string | null>(null);
   const [index, setIndex] = useState<number | null>(null);
-  const [skip, setSkip] = useState(DEFAULT_SETUP.skipSetup !== null);
+  // A local account and no OOBE by default (decided 2026-11-25); Simple mode has no account fields, so there it is OOBE.
+  const [skip, setSkip] = useState(true);
   const [account, setAccount] = useState<Account>(EMPTY_ACCOUNT);
   const [password2, setPassword2] = useState('');
   const [ssh, setSsh] = useState(DEFAULT_SETUP.ssh);
@@ -136,6 +139,11 @@ export function App() {
   const [armbianId, setArmbianId] = useState<string | null>(null);
   const [restoreTo, setRestoreTo] = useState<'emmc' | 'drive'>('emmc');
   const [armbian, setArmbian] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
+  // Armbian next to Windows on the eMMC (armbian-hybrid.ts): off until asked for, no image preselected.
+  const [withArmbian, setWithArmbian] = useState(false);
+  const [hybridId, setHybridId] = useState<string | null>(null);
+  const [hybridFound, setHybridFound] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
+  const [armbianGb, setArmbianGb] = useState('24');
   const [factory, setFactory] = useState<FactoryChoice | null>(null);
   const [factoryError, setFactoryError] = useState<string | null>(null);
   const [upgrade, setUpgrade] = useState<UpgradeImage | 'loading' | null>(null);
@@ -178,7 +186,7 @@ export function App() {
   const restoreTask = task === 'armbian' || task === 'factory';
   // What Armbian publishes for the board (its image index), then the chosen image's .sha, .asc and sizes.
   useEffect(() => {
-    if (task !== 'armbian' || !boardId || !ARMBIAN_RESTORE[boardId]) return;
+    if ((task !== 'armbian' && !(task === 'windows' && withArmbian)) || !boardId || !ARMBIAN_RESTORE[boardId]) return;
     let live = true;
     setArmbianOffers('looking');
     setArmbian(null);
@@ -189,7 +197,7 @@ export function App() {
       setArmbianId((id) => (id && r.offers.some((o) => o.id === id) ? id : simpleOffers(r.offers).recommended));
     });
     return () => { live = false; };
-  }, [task, boardId]);
+  }, [task, boardId, withArmbian]);
   useEffect(() => {
     if (task !== 'armbian' || !boardId || !armbianId || !Array.isArray(armbianOffers)) return;
     let live = true;
@@ -246,7 +254,10 @@ export function App() {
   // board's usual eMMC size, or the chosen drive's; the plan on the real size is checked again when writing.
   const staged = method === 'stage';
   const gbToBytes = (v: string) => (/^\d+(\.\d+)?$/.test(v.trim()) ? Math.round(Number(v) * 1024) * MiB : NaN);
-  const layoutChoice: LayoutChoice | undefined = !staged || layoutMode === 'whole' ? undefined : {
+  // Armbian next to Windows: the eMMC, staged over MaskROM, on a board whose firmware has "Armbian (U-Boot)".
+  const hybridPossible = !!board?.armbianOnce && !!board && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && staged && dest === 'emmc' && !onBoard;
+  const hybridOn = hybridPossible && withArmbian;
+  const layoutChoice: LayoutChoice | undefined = !staged || layoutMode === 'whole' || hybridOn ? undefined : {
     windowsBytes: gbToBytes(winGb), rest, dataLabel, linuxReserveBytes: linuxGb.trim() === '' ? 0 : gbToBytes(linuxGb),
   };
   const layoutDisk = dest === 'emmc' ? (board?.emmc?.bytes ?? null) : (drives?.find((x) => x.device === disk)?.size ?? null);
@@ -260,12 +271,28 @@ export function App() {
   const trim = mode === 'simple' ? (trimSimple ? RECOMMENDED_TRIM : NO_TRIM) : trimPick;
   const toolsThere = !!releases?.winpe?.tools;
   const rkTools = rkToolsOn && toolsThere;
-  const setup: SetupOptions = { skipSetup: skip ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}),
+  const skipOn = skip && mode !== 'simple';
+  const setup: SetupOptions = { skipSetup: skipOn ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}),
     ...(anyTrim(trim) ? { trim } : {}), ...(rkTools ? { rkTools: true } : {}) };
-  const accountErr = skip ? accountProblem(account) : null;
-  const passwordMismatch = skip && account.password !== password2;
+  const accountErr = skipOn ? accountProblem(account) : null;
+  const passwordMismatch = skipOn && account.password !== password2;
   const keyErr = ssh ? sshKeyProblem(sshKey) : null;
-  const setupOk = !accountErr && !passwordMismatch && !keyErr && !layoutErr;
+  const hybridChoice = hybridFound && typeof hybridFound === 'object' && 'file' in hybridFound && hybridFound.id === hybridId ? hybridFound : null;
+  const armbianBytes = gbToBytes(armbianGb);
+  const armbianMin = hybridChoice ? minArmbianBytes(hybridChoice.imageBytes ?? 0, hybridChoice.desktop) : MIN_ARMBIAN_BYTES;
+  const armbianMax = layoutFree ? Math.floor((layoutFree - (ESP_MIB + MSR_MIB + 2) * MiB - MIN_WINDOWS_CHOSEN) / GiB) * GiB : null;
+  const hybridErr = !hybridOn ? null : Number.isNaN(armbianBytes) ? t('layout.number')
+    : armbianBytes < armbianMin ? t('hybrid.size.small', { min: `${(armbianMin / GiB).toFixed(0)} GB` })
+      : armbianMax !== null && armbianBytes > armbianMax ? t('hybrid.size.large', { max: `${(armbianMax / GiB).toFixed(0)} GB` }) : null;
+  const hybridReady = !hybridOn || (!!hybridChoice && !hybridErr);
+  const setupOk = !accountErr && !passwordMismatch && !keyErr && !layoutErr && hybridReady;
+  useEffect(() => {
+    if (!hybridOn || !boardId || !hybridId) { setHybridFound(null); return; }
+    let live = true;
+    setHybridFound('looking');
+    api.findArmbian(boardId, hybridId).then((r) => { if (live) setHybridFound(r); });
+    return () => { live = false; };
+  }, [hybridOn, boardId, hybridId]);
 
   const refreshDrives = (min = 600e6) => { setDrives(null); api.listDrives(min).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
   const onPc = task === 'windows' && dest !== 'emmc';
@@ -489,6 +516,7 @@ export function App() {
         { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
         { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
         ...(ssh || drivers || trim.chrome || rkTools ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
+        ...(hybridOn ? [{ id: 'armbian', label: t('run.restore.armbian'), percent: null }] : []),
         { id: 'board', label: t('run.board'), percent: null },
         { id: 'write', label: t('run.write'), percent: 0 },
         { id: 'check', label: t('run.check'), percent: null },
@@ -500,9 +528,11 @@ export function App() {
         winpe: { url: s.winpe.url, size: s.winpe.size },
         image: { url: s.image.url, size: s.image.size, extents: windows!.extents, name: windows!.imageName, imageSize: windows!.imageSize,
           sha256: hash.sha256, index: ed.index, edition: ed.name, build: ed.build ?? 0 },
+        ...(hybridOn && s.armbian ? { armbian: { url: s.armbian.url, size: s.armbian.size, partitionBytes: armbianBytes, label: hybridChoice?.file ?? s.armbian.name } } : {}),
       }), [
         { id: 'winpe', get: () => api.prepareWinpe() },
         { id: 'image', get: () => api.serveWindows(windows!.token) },
+        ...(hybridOn ? [{ id: 'armbian', get: () => api.prepareArmbian(board.id, hybridId!) }] : []),
       ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools });
       return;
     }
@@ -909,6 +939,12 @@ export function App() {
     const rows: Array<[string, string]> = [];
     if (dest === 'emmc') rows.push([t('layout.part.firmware'), t('layout.size.kept', { size: '64 MiB' })]);
     rows.push([t('layout.part.esp'), '260 MiB'], [t('layout.part.msr'), '16 MiB']);
+    if (hybridOn) {
+      const win = layoutFree && !Number.isNaN(armbianBytes) ? layoutFree - (ESP_MIB + MSR_MIB) * MiB - armbianBytes : null;
+      rows.push([t('layout.part.windows'), win !== null && win > 0 ? GBs(win) : t('layout.size.rest')]);
+      rows.push([t('layout.part.armbian'), Number.isNaN(armbianBytes) ? '?' : GBs(armbianBytes)]);
+      return rows;
+    }
     if (!layoutChoice) { rows.push([t('layout.part.windows'), t('layout.size.rest')]); return rows; }
     if (layoutPlan && !('problem' in layoutPlan)) {
       rows.push([t('layout.part.windows'), GBs(layoutPlan.windowsBytes)]);
@@ -926,15 +962,53 @@ export function App() {
       ))}
     </DescriptionList>
   );
+  const hybridOffers = offerList;
+  const hybridGroup = hybridPossible && (
+    <FormSection title={t('hybrid.title')} titleElement="h3">
+      <Checkbox id="hybrid-on" label={t('hybrid.on')} description={t('hybrid.on.desc')} isChecked={withArmbian}
+        onChange={(_e, v) => { setWithArmbian(v); if (v) setHybridId(null); }} />
+      {hybridOn && (
+        <>
+          <FormGroup role="radiogroup" fieldId="hybrid-image" label={t('hybrid.image')} isRequired isStack>
+            {armbianOffers === 'looking' && <Content component="p">{t('restore.list.looking')}</Content>}
+            {armbianOffers && typeof armbianOffers === 'object' && 'error' in armbianOffers && <Alert isInline variant="danger" title={errorText(armbianOffers.error)} />}
+            {hybridOffers.map((o) => (
+              <Radio key={o.id} id={`hybrid-${o.id}`} name="hybrid-image" isChecked={hybridId === o.id} onChange={() => setHybridId(o.id)}
+                label={`${offerWords(o)}, ${distroWords(o.distro)}`}
+                description={t('hybrid.image.desc', { kernel: o.kernel, branch: o.branch, size: formatBytes(o.size) })} />
+            ))}
+            <FormHelperText><HelperText><HelperTextItem variant={hybridId ? 'default' : 'warning'}>{hybridId ? t('hybrid.image.help') : t('why.hybrid.pick')}</HelperTextItem></HelperText></FormHelperText>
+          </FormGroup>
+          {hybridFound === 'looking' && <Content component="p">{t('restore.looking')}</Content>}
+          {hybridFound && typeof hybridFound === 'object' && 'error' in hybridFound && <Alert isInline variant="danger" title={errorText(hybridFound.error)} />}
+          {hybridChoice && <Content component="p" className="muted">{t('hybrid.found', { file: hybridChoice.file, image: hybridChoice.imageBytes === null ? '?' : formatBytes(hybridChoice.imageBytes) })}</Content>}
+          <FormGroup label={t('hybrid.size')} fieldId="hybrid-size" isRequired>
+            {armbianMax !== null && armbianMax > armbianMin && (
+              <Slider id="hybrid-slider" value={Number.isNaN(armbianBytes) ? armbianMin / GiB : armbianBytes / GiB} min={Math.floor(armbianMin / GiB)} max={armbianMax / GiB} step={1}
+                showBoundaries onChange={(_e, v) => setArmbianGb(String(Math.round(v)))} aria-label={t('hybrid.size')} />
+            )}
+            <TextInput id="hybrid-size" value={armbianGb} onChange={(_e, v) => setArmbianGb(v)} type="text" inputMode="decimal" validated={hybridErr ? 'error' : 'default'} />
+            <FormHelperText><HelperText><HelperTextItem variant={hybridErr ? 'error' : 'default'}>{hybridErr
+              ?? t('hybrid.size.help', { min: `${(armbianMin / GiB).toFixed(0)} GB`, max: armbianMax === null ? '?' : `${(armbianMax / GiB).toFixed(0)} GB` })}</HelperTextItem></HelperText></FormHelperText>
+          </FormGroup>
+          <FormGroup role="radiogroup" fieldId="hybrid-default" label={t('hybrid.default')} isStack>
+            <Radio id="hybrid-default-windows" name="hybrid-default" label="Windows" isChecked onChange={() => undefined} description={t('hybrid.default.windows')} />
+            <Radio id="hybrid-default-armbian" name="hybrid-default" label="Armbian" isChecked={false} isDisabled onChange={() => undefined} description={t('hybrid.default.armbian')} />
+          </FormGroup>
+          <Alert isInline variant="info" title={t('hybrid.first.title')}>{t('hybrid.first.text')}</Alert>
+        </>
+      )}
+    </FormSection>
+  );
   const layoutGroup = staged && (
     <FormSection title={t('layout.label')} titleElement="h3">
-      <FormGroup role="radiogroup" fieldId="layout" label={t('layout.size')} isStack>
+      {!hybridOn && <FormGroup role="radiogroup" fieldId="layout" label={t('layout.size')} isStack>
         <Radio id="layout-whole" name="layout" label={t('layout.whole')} isChecked={layoutMode === 'whole'} onChange={() => setLayoutMode('whole')} description={t('layout.whole.desc')} />
         <Radio id="layout-custom" name="layout" label={t('layout.custom')} isChecked={layoutMode === 'custom'} isDisabled={!customPossible}
           onChange={() => { setLayoutMode('custom'); if (!winGb && layoutMaxWin) setWinGb(String(Math.max(32, Math.floor(layoutMaxWin / GiB / 2)))); }}
           description={customPossible ? t('layout.custom.desc', { min: GBs(MIN_WINDOWS_CHOSEN) }) : t('layout.custom.tooSmall', { min: GBs(MIN_WINDOWS_CHOSEN) })} />
-      </FormGroup>
-      {layoutMode === 'custom' && (
+      </FormGroup>}
+      {layoutMode === 'custom' && !hybridOn && (
         <>
           <FormGroup label={t('layout.windowsSize')} fieldId="layout-win" isRequired>
             <TextInput id="layout-win" value={winGb} onChange={(_e, v) => setWinGb(v)} type="text" inputMode="decimal" validated={layoutErr ? 'error' : 'default'} />
@@ -1007,6 +1081,7 @@ export function App() {
             <FormHelperText><HelperText><HelperTextItem variant={keyErr ? 'error' : 'default'}>{keyErr ? t(keyErr) : t('setup.ssh.key.help')}</HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
         )}
+        {hybridGroup}
         {layoutGroup}
         <FormGroup label={t('setup.drivers')} fieldId="drivers" role="group">
           <Content component="p">{t('setup.drivers.always')}</Content>
@@ -1061,23 +1136,25 @@ export function App() {
       reviewRows = reviewRows.concat(([
         [t('review.windows'), edition ? t('review.windows.value', { edition: edition.name, build: `${edition.build}${edition.spBuild ? `.${edition.spBuild}` : ''}`, file: windows!.fileName }) : t('review.notChosen')],
         [t('review.winpe'), releases?.winpe ? `woa-rk3576 ${releases.winpe.tier.label} (${releases.winpe.file})${tierWord(releases.winpe.tier)}` : t('review.unavailable')],
-        [t('review.setup'), skip ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
+        [t('review.setup'), skipOn ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
         [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
         [t('review.trim'), anyTrim(trim) ? TRIM_KEYS.filter((k) => trim[k]).map((k) => t(`trim.${k}`)).join('; ') : t('review.trim.none')],
         [t('review.tools'), rkTools ? t('tools.on') : t('review.trim.none')],
         [t('review.target'), t(`review.target.${dest}.${method}`)],
+        ...(hybridOn ? [[t('review.armbian'), hybridChoice ? t('review.armbian.value', { what: `${offerWords(hybridChoice)}, ${distroWords(hybridChoice.distro)}`, version: hybridChoice.version, kernel: hybridChoice.kernel }) : t('review.notChosen')] as [string, string]] : []),
         ...(staged ? [[t('layout.label'), layoutDisk ? layoutRows().map(([k, v]) => `${k}: ${v}`).join('; ') : t('layout.preview.later')] as [string, string]] : []),
         [t('review.erased'), dest === 'emmc' ? t('review.erased.windows') : disk ? t('review.erased.disk', { drive: drives?.find((x) => x.device === disk)?.description ?? disk }) : t('review.disk.choose')],
         ...(method === 'stage' ? [
           [t('review.written'), t('review.written.windows', { size: windows ? formatBytes(windows.imageSize + 560e6) : '' }) + (onBoard || dest !== 'emmc' ? '' : t('review.written.maskrom'))],
           [t('review.checked'), onBoard || dest !== 'emmc' ? t('review.checked.here') : t('review.checked.maskrom')],
-          [t('review.then'), t('review.then.windows')],
+          [t('review.then'), t('review.then.windows') + (hybridOn ? ` ${t('review.then.armbian')}` : '')],
         ] as Array<[string, string]> : [
           [t('review.checked'), dest === 'emmc' ? t('review.checked.host.emmc') : t('review.checked.host.disk')],
         ] as Array<[string, string]>),
       ] as Array<[string, string]>));
       if (!edition) why = t('why.windows');
+      else if (hybridOn && !hybridId) why = t('why.hybrid.pick');
       else if (!setupOk) why = t('why.setup');
       if (!releases?.winpe) why = t('why.winpe');
       if (onBoard && here?.emmcRefusal) why = msg(here.emmcRefusal);
@@ -1449,6 +1526,7 @@ export function App() {
           data: c.layout.data ? t('confirm.layout.data', { size: GB(c.layout.data.bytes), fs: c.layout.data.fs === 'ntfs' ? 'NTFS' : 'exFAT', label: c.layout.data.label }) : '',
           free: c.layout.unallocatedBytes >= 512 * MiB ? t('confirm.layout.free', { size: GB(c.layout.unallocatedBytes) }) : '',
         }) : t('confirm.windowsGets.value', { size: GB(c.windowsBytes) })],
+        ...(c.armbian ? [[t('confirm.armbian'), t('confirm.armbian.value', { size: GB(c.armbian.bytes), file: c.armbian.label })] as [string, string]] : []),
         [t('confirm.sent'), formatBytes(c.totalBytes)],
       ]} />
     </Stack>

@@ -12,7 +12,7 @@
 // The lists are our own, written from Microsoft's documentation; nothing is
 // taken from tiny11builder, whose repository carries no licence.
 //
-// Left alone on purpose: Windows Update, activation, the Store (unless its
+// Left alone on purpose: Windows Update (but for its drivers, wuDrivers), activation, the Store (unless its
 // own option is chosen), Defender, WebView2, the drivers. Defender's
 // real-time protection is not offered: on 22621/22631 Tamper Protection is
 // on by default and makes Windows ignore DisableRealtimeMonitoring and
@@ -48,22 +48,29 @@ export interface TrimOptions {
   removeEdge: boolean;
   /** Install Google Chrome (arm64, Google's MSI) on the first start and make it the default browser for new users. */
   chrome: boolean;
+  /**
+   * Windows Update installs no drivers (ExcludeWUDriversInQualityUpdate 1):
+   * the RK3576 drivers are test-signed builds a Windows Update match could
+   * replace. Everything else of Windows Update stays as Windows has it.
+   */
+  wuDrivers: boolean;
 }
 
 /** Nothing trimmed. */
 export const NO_TRIM: TrimOptions = {
   apps: false, onedrive: false, copilot: false, widgets: false, edgeBackground: false, suggestions: false,
   telemetry: false, searchDelayed: false, sysmain: false, classicMenu: false, removeStore: false, removeEdge: false, chrome: false,
+  wuDrivers: false,
 };
 
 /**
  * The recommended set (Simple mode's switch, Advanced mode's starting
- * point): what only stops background work. Not the Store, not Edge, not
- * Chrome: those change what the user has.
+ * point): what stops background work, plus (decided 2026-11-25) Edge
+ * replaced by Chrome, and no drivers from Windows Update. Not the Store.
  */
 export const RECOMMENDED_TRIM: TrimOptions = {
   ...NO_TRIM, apps: true, onedrive: true, copilot: true, widgets: true, edgeBackground: true, suggestions: true,
-  telemetry: true, searchDelayed: true, sysmain: true, classicMenu: true,
+  telemetry: true, searchDelayed: true, sysmain: true, classicMenu: true, removeEdge: true, chrome: true, wuDrivers: true,
 };
 
 export const TRIM_KEYS = Object.keys(NO_TRIM) as Array<keyof TrimOptions>;
@@ -191,6 +198,10 @@ export function trimCmd(o: TrimOptions): string {
       ...['SilentInstalledAppsEnabled', 'SystemPaneSuggestionsEnabled', 'SoftLandingEnabled', 'PreInstalledAppsEnabled', 'OemPreInstalledAppsEnabled',
         'SubscribedContent-338388Enabled', 'SubscribedContent-338389Enabled', 'SubscribedContent-353694Enabled', 'SubscribedContent-353696Enabled']
         .map((v) => reg(`${DU}\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager`, v, 'REG_DWORD', 0)));
+  }
+  if (o.wuDrivers) {
+    l.push('rem Windows Update: no drivers (Policy CSP Update/ExcludeWUDriversInQualityUpdate); the rest of Windows Update unchanged.',
+      reg(`${SW}\\Policies\\Microsoft\\Windows\\WindowsUpdate`, 'ExcludeWUDriversInQualityUpdate', 'REG_DWORD', 1));
   }
   if (o.telemetry) {
     l.push('rem Diagnostic data: Required, the lowest level Pro honours (Policy CSP System/AllowTelemetry).',

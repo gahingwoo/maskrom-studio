@@ -36,6 +36,12 @@ export interface WoaBoard {
   sdBoot: SdBoot;
   /** Windows has started on this board (with the released firmware). */
   windowsBooted: boolean;
+  /**
+   * The firmware has the one-shot boot option "Armbian (U-Boot)" (edk2-rk3576
+   * RK_ARMBIAN_ONCE_ENABLE, docs/ARMBIAN-CHAINLOAD.md), and the eMMC has room
+   * for Windows and Armbian: Armbian can be installed next to Windows.
+   */
+  armbianOnce: boolean;
   /** How to get into MaskROM: a button, or two pads to short (with F4 in the firmware once it runs). */
   maskromEntry: 'button' | 'pads';
   /** Where the board maker publishes the factory images (update.img); none for boards without a factory restore. */
@@ -69,6 +75,7 @@ export const WOA_BOARDS: WoaBoard[] = [
     windowsTargets: ['emmc', 'sd'],
     sdBoot: 'spl-on-emmc',
     windowsBooted: true,
+    armbianOnce: true,
     maskromEntry: 'pads',
     factoryPage: {
       en: 'https://wiki.lckfb.com/en/tspi-3-rk3576/img-download/finished-image.html',
@@ -85,6 +92,8 @@ export const WOA_BOARDS: WoaBoard[] = [
     windowsTargets: ['emmc', 'sd', 'nvme'],
     sdBoot: 'bootrom-emmc-first',
     windowsBooted: true,
+    // Its SPL is not built with ArmbianOnce yet, and its 31 GB eMMC has no room for both.
+    armbianOnce: false,
     maskromEntry: 'button',
     factoryPage: { en: 'https://docs.armsom.org/armsom-cm5-io', zh: 'https://docs.armsom.org/zh/armsom-cm5-io' },
     compatible: ['armsom,cm5-io'],
@@ -98,6 +107,8 @@ export const WOA_BOARDS: WoaBoard[] = [
     sdBoot: 'spi-firmware',
     // Its ACPI tables are not in a release yet.
     windowsBooted: false,
+    // The SPL is on the SPI NOR flash: no one-shot U-Boot (docs/ARMBIAN-CHAINLOAD.md).
+    armbianOnce: false,
     maskromEntry: 'button',
     compatible: ['radxa,rock-4d'],
     smbios: ['ROCK 4D'],

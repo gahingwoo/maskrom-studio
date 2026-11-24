@@ -59,10 +59,11 @@ describe('the answer file', () => {
 });
 
 describe('SetupComplete.cmd and SSH', () => {
-  it('registers sshd from Program Files, opens port 22 on every profile, locks the key file down, removes the answer file', () => {
+  it('registers sshd from Program Files, opens port 22 on the private and domain profiles, locks the key file down, removes the answer file', () => {
     const s = setupComplete({ skipSetup: null, ssh: true, sshKey: '' });
     expect(s).toContain('install-sshd.ps1');
-    expect(s).toContain('localport=22 profile=any');
+    expect(s).toContain('localport=22 profile=private,domain');
+    expect(s).toMatch(/RunOnce" \/v WoaUnattendCleanup .*Panther\\unattend\.xml/);
     expect(s).toContain('/inheritance:r /grant "*S-1-5-32-544:F" /grant "*S-1-5-18:F"');
     expect(s).toContain('Panther\\unattend.xml');
     expect(s).not.toMatch(/Add-WindowsCapability/);
