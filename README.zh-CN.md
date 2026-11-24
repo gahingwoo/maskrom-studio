@@ -27,6 +27,10 @@
 
 更多截图（含深色主题）：[docs/screenshots.md](docs/screenshots.md)。
 
+发布类型（在“设置”中，应用自身的更新和要写入的固件、WinPE 分开设置）：**稳定版**（最新的正式版本）、**预发布版**（包括预发布版本）、**CI 构建**（main 分支最新一次成功构建，tag 为 `ci`，未经测试）。简单模式始终使用稳定版固件。
+
+macOS 可用 Homebrew：先 `brew trust gahingwoo/tap`，再 `brew install --cask gahingwoo/tap/maskrom-studio@nightly`（CI 构建）；有正式版本后可改用 `maskrom-studio`（稳定版）或 `maskrom-studio@beta`（预发布版），三者只能装一个。
+
 ## 能做什么
 
 - **把 Windows 11 装到 eMMC。** 你提供一个 Windows 11 23H2 ARM64 的 ISO（或其中的 install.wim / install.esd）。开发板进入 MaskROM 模式后，应用把 [woa-rk3576](https://github.com/gahingwoo/woa-rk3576) 的 WinPE 和你的 Windows 映像写进 eMMC 上固件之后的空闲空间。开发板随后从 eMMC 启动这个 WinPE，用 DISM 把 Windows 装到 eMMC 上，加入 RK3576 驱动，删掉暂存空间，再重启进入 Windows。原理和取舍见 [docs/DESIGN.md](docs/DESIGN.md)（英文）。

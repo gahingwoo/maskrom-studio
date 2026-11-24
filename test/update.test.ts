@@ -220,3 +220,25 @@ describe('the file for this install', () => {
     expect(assetSha256(asset('x', `md5:${'a'.repeat(64)}`))).toBeNull();
   });
 });
+
+import { brewCaskName, brewCommand } from '../src/shared/update';
+import { brewSteps } from '../src/main/update-mac';
+describe('the tap\'s three casks', () => {
+  const none = { realpath: (p: string) => p, readdir: () => { throw new Error('none'); } };
+  it('tells which cask installed the app', () => {
+    expect(brewCaskName('/opt/homebrew/Caskroom/maskrom-studio@nightly/latest/Maskrom Studio.app', none)).toBe('maskrom-studio@nightly');
+    expect(brewCaskName('/usr/local/Caskroom/maskrom-studio@beta/0.2.0-beta.1/Maskrom Studio.app', none)).toBe('maskrom-studio@beta');
+    const linked = {
+      realpath: (p: string) => (p.includes('Caskroom') ? '/Applications/Maskrom Studio.app' : p),
+      readdir: (p: string) => (p === '/opt/homebrew/Caskroom/maskrom-studio@nightly' ? ['latest'] : p.endsWith('/latest') ? ['Maskrom Studio.app'] : (() => { throw new Error('no'); })()),
+    };
+    expect(brewCaskName('/Applications/Maskrom Studio.app', linked)).toBe('maskrom-studio@nightly');
+    expect(brewCaskName('/Applications/Maskrom Studio.app', none)).toBeNull();
+  });
+  it('upgrades the nightly cask greedily, the others plainly', () => {
+    expect(brewCommand('maskrom-studio@nightly')).toBe('brew upgrade --cask --greedy maskrom-studio@nightly');
+    expect(brewCommand()).toBe('brew upgrade --cask maskrom-studio');
+    expect(brewSteps('/b', 'maskrom-studio@nightly').upgrade).toEqual(['/b', 'upgrade', '--cask', '--greedy', 'maskrom-studio@nightly']);
+    expect(brewSteps('/b', 'maskrom-studio@beta').upgrade).toEqual(['/b', 'upgrade', '--cask', 'maskrom-studio@beta']);
+  });
+});

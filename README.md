@@ -111,10 +111,20 @@ one, then remove the old app (the .deb and .rpm do that themselves).
 
 ## Install
 
-Packages for Windows (x64), macOS and Linux (AppImage, .deb, .rpm; x86_64
-and arm64) go on the
-[releases](https://github.com/gahingwoo/maskrom-studio/releases) page
-once there is a release. What each system asks on first start, and the
+Packages for Windows (x64 and arm64), macOS and Linux (AppImage, .deb,
+.rpm; x86_64 and arm64) go on the
+[releases](https://github.com/gahingwoo/maskrom-studio/releases) page.
+There is no tagged release yet: the pre-release tagged `ci` holds the
+latest build of main, untested. On macOS, Homebrew:
+`brew trust gahingwoo/tap`, then `brew install --cask
+gahingwoo/tap/maskrom-studio@nightly` (the `maskrom-studio` and
+`maskrom-studio@beta` casks follow tagged releases).
+
+Release tiers, in Settings, for the app's own updates and, separately, for
+the firmware and WinPE it writes: **Stable** (the newest release that is
+not a pre-release), **Prerelease** (pre-releases included) and **CI** (the
+rolling `ci` release of the latest successful build of main, untested).
+Simple mode always writes Stable firmware. What each system asks on first start, and the
 drivers for Maskrom (WinUSB through Zadig on Windows, a udev rule on Linux):
 [docs/install.md](docs/install.md).
 

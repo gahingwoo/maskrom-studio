@@ -51,7 +51,18 @@ itself (with libwdi, which Zadig is built on) has not been tested yet.
 
 ## macOS
 
-Open the DMG and drag Maskrom Studio to Applications. On first launch macOS
+With Homebrew, from the tap gahingwoo/tap, one cask per release tier:
+
+```sh
+brew trust gahingwoo/tap
+brew install --cask gahingwoo/tap/maskrom-studio           # Stable
+brew install --cask gahingwoo/tap/maskrom-studio@beta      # Prerelease
+brew install --cask gahingwoo/tap/maskrom-studio@nightly   # CI: the latest build of main, untested
+```
+
+Install one of the three; they conflict with each other. The stable and beta
+casks appear once a tagged release exists. Or by hand: open the DMG and drag
+Maskrom Studio to Applications. On first launch macOS
 may say the app cannot be opened, because it is not notarized:
 
 - macOS 15 and later: open the app once, click Done, then System Settings,
@@ -102,10 +113,15 @@ an **Update** button. Closing the notice hides that version; Settings still
 offers it. No notice appears while a write is running. In Settings:
 
 - **Check for a new version once a day** turns the check off or on.
-- **Also offer beta versions (pre-releases)** is off by default. Normal
-  releases are offered to everyone; betas only with this switch on. If the
-  version you run is itself a beta and no newer normal release exists, the
-  app says so and offers nothing.
+- **Release tier**, Stable by default:
+  - **Stable**: the newest release that is not a pre-release.
+  - **Prerelease**: the newest release, pre-releases (vX.Y.Z-beta.N) included.
+  - **CI**: the rolling release tagged `ci`, rebuilt from every successful
+    build of main and untested; offered when it was built from another
+    commit than the copy you run.
+- **Firmware and WinPE** in Settings uses the same three tiers for the
+  edk2-rk3576 firmware and the woa-rk3576 WinPE the writes use (see
+  [network.md](network.md)). Simple mode always uses Stable.
 - **Check now** asks at once and answers in words: the new version, "You
   have the newest version", or that GitHub could not be reached.
 
@@ -117,7 +133,7 @@ cancelled. What happens then depends on how the app was installed:
 
 | Installed as | Update |
 | --- | --- |
-| macOS, Homebrew cask | The app runs Homebrew for you, as your user: `brew update`, then `brew upgrade --cask maskrom-studio`. Its output is in the dialog. Then **Restart now**. If Homebrew is not found or fails, the dialog shows its error and the command to copy. Homebrew only has a new version once its tap lists it, which can be a little after the release. |
+| macOS, Homebrew cask | The app runs Homebrew for you, as your user: `brew update`, then `brew upgrade --cask` with the cask that installed it (`maskrom-studio`, `maskrom-studio@beta`, or `--greedy maskrom-studio@nightly`, which is version :latest). Its output is in the dialog. Then **Restart now**. If Homebrew is not found or fails, the dialog shows its error and the command to copy. Homebrew only has a new version once its tap lists it, which can be a little after the release. |
 | macOS, DMG or install.sh | The DMG for this Mac's CPU goes to the Downloads folder, is mounted out of sight, and its app is copied in place of the running one (into `~/Applications` if the app's folder cannot be written). Then **Restart now**. The old app is kept until the new one is in place. If that is not possible the DMG is opened and you drag the app yourself. |
 | Windows, installer | The setup program is downloaded and started, and Maskrom Studio closes so that it can be replaced. |
 | Linux, AppImage | The new AppImage is downloaded into the same folder and put in place of the old file in one step. Restart the app. |

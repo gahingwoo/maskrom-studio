@@ -20,7 +20,7 @@ import { existsSync, mkdtempSync, readdirSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
-  APT_COMMAND, APT_PACKAGE, aptRepoCarries, assetSha256, BREW_COMMAND, brewCaskOwns, checkDue, installKind, judgeChannel,
+  APT_COMMAND, APT_PACKAGE, aptRepoCarries, assetSha256, brewCaskName, brewCommand, checkDue, installKind, judgeChannel,
   pickAsset,
   type AppRelease, type InstallKind, type ReleaseAsset, type UpdateCheck, type UpdateResult,
 } from '../shared/update';
@@ -52,14 +52,17 @@ export function afterUpdateCleanup(): void {
 
 let install: { kind: InstallKind; arch: string } | null = null;
 /** How this copy was installed, and for which CPU. Looked up once. */
-export function detectInstall(): { kind: InstallKind; arch: string } {
+export /** The tap's cask this copy came from, when Homebrew installed it. */
+let brewCask: string | null = null;
+
+function detectInstall(): { kind: InstallKind; arch: string } {
   if (install) return install;
   const exe = app.getPath('exe');
   const platform = process.platform;
   const dpkg = platform === 'linux' && !process.env.APPIMAGE && owns('dpkg-query', ['-S', exe]);
   const kind = installKind({
     platform, packaged: app.isPackaged, appImage: process.env.APPIMAGE,
-    brew: platform === 'darwin' && brewCaskOwns(exe.replace(/\/Contents\/MacOS\/[^/]+$/, ''), { realpath: realpathSync, readdir: readdirSync }),
+    brew: platform === 'darwin' && (brewCask = brewCaskName(exe.replace(/\/Contents\/MacOS\/[^/]+$/, ''), { realpath: realpathSync, readdir: readdirSync })) !== null,
     nsis: platform === 'win32' && existsSync(join(dirname(exe), 'Uninstall Maskrom Studio.exe')),
     dpkg,
     rpm: platform === 'linux' && !process.env.APPIMAGE && owns('rpm', ['-qf', exe]),
@@ -162,7 +165,7 @@ async function bundleVersion(): Promise<string | null> {
 /** Download and install what the last check offered. Called only after the user confirmed. */
 export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
   // The screenshots: as on a Mac without Homebrew.
-  if (FAKE) return { ok: false, reason: 'Homebrew was not found on this Mac. You can update in Terminal:', command: BREW_COMMAND };
+  if (FAKE) return { ok: false, reason: 'Homebrew was not found on this Mac. You can update in Terminal:', command: brewCommand(brewCask ?? undefined) };
   const o = offered;
   if (!o) return { ok: false, reason: 'Check for a new version again.' };
   if (running) return { ok: false, reason: 'An update is already being downloaded.' };
@@ -174,13 +177,13 @@ export async function installUpdate(wc: WebContents): Promise<UpdateResult> {
     running = new AbortController();
     try {
       const brew = await findBrew();
-      if (!brew) return { ok: false, reason: 'Homebrew was not found on this Mac. You can update in Terminal:', command: BREW_COMMAND };
+      if (!brew) return { ok: false, reason: 'Homebrew was not found on this Mac. You can update in Terminal:', command: brewCommand(brewCask ?? undefined) };
       const r = await brewUpgrade({
-        brew, runningVersion: app.getVersion(), installedVersion: bundleVersion, onLog: log, signal: running.signal,
+        brew, cask: brewCask ?? undefined, runningVersion: app.getVersion(), installedVersion: bundleVersion, onLog: log, signal: running.signal,
         onStage: (st) => stage(st === 'update' ? 'brew-update' : 'brew-upgrade'),
       });
       if (r.ok) return { ok: true, restart: true, message: `Homebrew installed Maskrom Studio ${o.release.tag_name.replace(/^v/, '')}. Restart to use it.` };
-      return r.cancelled ? { ok: false, reason: r.reason } : { ok: false, reason: `${r.reason} Its output is below. You can also update in Terminal:`, command: BREW_COMMAND };
+      return r.cancelled ? { ok: false, reason: r.reason } : { ok: false, reason: `${r.reason} Its output is below. You can also update in Terminal:`, command: brewCommand(brewCask ?? undefined) };
     } finally {
       running = null;
     }
