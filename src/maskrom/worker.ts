@@ -124,6 +124,6 @@ self.addEventListener('message', async (ev: MessageEvent<WorkerRequest>) => {
     });
     post({ type: 'result', result });
   } catch (e) {
-    post({ type: 'result', result: { ok: false, reason: 'The Maskrom writer could not start.', detail: String((e as Error)?.message ?? e) } });
+    post({ type: 'result', result: { ok: false, reason: 'The MaskROM writer could not start.', detail: String((e as Error)?.message ?? e) } });
   }
 });

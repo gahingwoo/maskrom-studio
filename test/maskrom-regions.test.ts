@@ -1,4 +1,4 @@
-// The staged install's Maskrom writes through the real rkdeveloptool WASM,
+// The staged install's MaskROM writes through the real rkdeveloptool WASM,
 // against the pretend board of fake-rockchip.ts.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ const hooks = (stages: string[]): RegionHooks => ({
 
 const fill = (n: number, v: number) => new Uint8Array(n).fill(v);
 
-describe.skipIf(!haveWasm)('regions over Maskrom', () => {
+describe.skipIf(!haveWasm)('regions over MaskROM', () => {
   it('reads the partition table, writes every region at its sector, checks samples and resets', async () => {
     const board = new FakeBoard({ storages: { 1: 256 * MiB }, defaultStorage: 1 });
     board.storages.get(1)!.write(0, fill(34 * 512, 0x11));

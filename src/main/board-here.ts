@@ -98,4 +98,4 @@ export async function boardHere(root = ''): Promise<BoardHere> {
 }
 
 /** What to do when the SPI NOR flash has no MTD device. */
-export const NO_MTD_HELP = 'Linux shows no SPI NOR flash (no /dev/mtd device of type "nor"). The kernel needs the Rockchip SPI flash controller driver (CONFIG_SPI_ROCKCHIP_SFC, and CONFIG_MTD_SPI_NOR), and the device tree must enable the flash. Without it, write the SPI NOR over Maskrom from another computer.';
+export const NO_MTD_HELP = 'Linux shows no SPI NOR flash (no /dev/mtd device of type "nor"). The kernel needs the Rockchip SPI flash controller driver (CONFIG_SPI_ROCKCHIP_SFC, and CONFIG_MTD_SPI_NOR), and the device tree must enable the flash. Without it, write the SPI NOR over MaskROM from another computer.';

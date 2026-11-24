@@ -1,6 +1,6 @@
 # Not yet tested on a board
 
-What CI checks (unit tests, the Maskrom paths through the WASM against a
+What CI checks (unit tests, the MaskROM paths through the WASM against a
 pretend board, Electron end-to-end runs, screenshots) is not a board. This
 list is what still needs the real hardware, for the combined test. Strike
 an entry by moving it to "Tested" with the date and what was seen.

@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/gahingwoo/maskrom-studio/main/insta
 While no normal release exists yet, the script installs the newest beta and
 says so.
 
-The packages do not include Rockchip's Maskrom loader. The first Maskrom
+The packages do not include Rockchip's MaskROM loader. The first MaskROM
 write downloads its pieces from Rockchip's rkbin repository
 (raw.githubusercontent.com), checks them against pinned SHA-256 sums and keeps
 the loader in the app's user data folder (`loaders/`), so that first write
@@ -37,9 +37,9 @@ the first time.
 
 The zip holds the same app without an installer.
 
-For Maskrom writing Windows needs the WinUSB driver for the board:
+For MaskROM writing Windows needs the WinUSB driver for the board:
 
-1. Put the board in Maskrom mode and connect it (the app's Get ready
+1. Put the board in MaskROM mode and connect it (the app's Get ready
    step in Simple mode, or Review in Advanced mode, shows how; on Windows
    it lists these same steps there).
 2. Download Zadig from https://zadig.akeo.ie/ and run it.
@@ -70,7 +70,7 @@ may say the app cannot be opened, because it is not notarized:
   Privacy and Security, **Open Anyway**.
 - macOS 14 and earlier: right-click the app in Applications, choose Open.
 
-macOS needs no driver for Maskrom writing.
+macOS needs no driver for MaskROM writing.
 
 Writing an SD card or USB drive asks for an administrator's password (or
 Touch ID) once per write, in the dialog of macOS itself. The dialog carries
@@ -85,8 +85,8 @@ eject the drive when the write is done, choose Ignore or Eject.
 
 - `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, openSUSE): install with the
   package manager. They install a udev rule so the board can be written in
-  Maskrom mode without root.
-- AppImage: make it executable and run it. For Maskrom writing add the udev
+  MaskROM mode without root.
+- AppImage: make it executable and run it. For MaskROM writing add the udev
   rule once:
 
   ```sh

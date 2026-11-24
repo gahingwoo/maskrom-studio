@@ -312,7 +312,7 @@ export function App() {
       return { ok: true, title: okTitle, ...(text ? { text } : {}), ...(next ? { next } : {}) };
     }
     return { ok: false, title: errorText(r.reason), ...('detail' in r && r.detail ? { detail: r.detail } : {}),
-      ...(/^No board in Maskrom mode was found/.test(r.reason) ? { help: 'noBoard' as const } : {}) };
+      ...(/^No board in MaskROM mode was found/.test(r.reason) ? { help: 'noBoard' as const } : {}) };
   };
 
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));

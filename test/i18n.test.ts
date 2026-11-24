@@ -49,7 +49,7 @@ describe('i18n', () => {
   it('fills placeholders and translates known messages', () => {
     const t = translator(MESSAGES, 'zh-CN');
     expect(t('task.lead', { board: 'ArmSoM CM5-IO' })).toBe('目标开发板：ArmSoM CM5-IO。');
-    expect(translateMessage('No board in Maskrom mode was found.', MESSAGE_PATTERNS, 'zh-CN')).toBe('没有找到 MaskROM 模式的开发板。');
+    expect(translateMessage('No board in MaskROM mode was found.', MESSAGE_PATTERNS, 'zh-CN')).toBe('没有找到 MaskROM 模式的开发板。');
     expect(translateMessage('Something new.', MESSAGE_PATTERNS, 'zh-CN')).toBe('Something new.');
   });
 });

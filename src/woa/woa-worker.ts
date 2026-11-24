@@ -211,6 +211,6 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
     }
     post({ type: 'result', result });
   } catch (e) {
-    post({ type: 'result', result: { ok: false, written: 0, reason: 'The Maskrom writer could not start.', detail: String((e as Error)?.message ?? e) } });
+    post({ type: 'result', result: { ok: false, written: 0, reason: 'The MaskROM writer could not start.', detail: String((e as Error)?.message ?? e) } });
   }
 });

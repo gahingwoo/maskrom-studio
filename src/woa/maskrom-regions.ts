@@ -135,7 +135,7 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
   try {
     hooks.stage('detect');
     const mode = parseList((await r.run(['ld'])).lines);
-    if (mode === 'none') return { ok: false, reason: 'No board in Maskrom mode was found.', written };
+    if (mode === 'none') return { ok: false, reason: 'No board in MaskROM mode was found.', written };
     if (mode === 'several') return { ok: false, reason: 'More than one Rockchip device is connected. Leave only the board you want to write.', written };
 
     let manufacturer: string | null = null;
@@ -173,7 +173,7 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
       }
       if (!seen) {
         return { ok: false, written, reason: 'The board did not come back after the loader was sent.',
-          detail: 'Unplug the USB cable, put the board in Maskrom mode again and retry.' };
+          detail: 'Unplug the USB cable, put the board in MaskROM mode again and retry.' };
       }
       if (capacity === null) hooks.log('The loader runs but did not report the storage size (rfi).');
     } else {

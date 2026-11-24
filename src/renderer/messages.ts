@@ -849,7 +849,7 @@ export const MESSAGES: Dict = {
  * (src/woa, src/main), shown in Chinese where a pattern knows them.
  */
 export const MESSAGE_PATTERNS: Array<[RegExp, Record<Lang, string>]> = [
-  [/^No board in Maskrom mode was found\./, d('', '没有找到 MaskROM 模式的开发板。')],
+  [/^No board in MaskROM mode was found\./, d('', '没有找到 MaskROM 模式的开发板。')],
   [/^More than one Rockchip device is connected/, d('', '连接了不止一个 Rockchip 设备，请只保留要写入的那块开发板。')],
   [/^The board did not come back after the loader was sent\./, d('', '发送引导组件后开发板没有重新连接。请拔掉 USB 线，重新进入 MaskROM 模式后再试。')],
   [/^Stopped before writing\. Nothing was written\./, d('', '在写入前停止，没有写入任何内容。')],

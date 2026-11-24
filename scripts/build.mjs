@@ -40,7 +40,7 @@ cpSync('src/renderer/index.html', 'build/renderer/index.html');
 cpSync('src/renderer/theme.js', 'build/renderer/theme.js');
 
 if (!existsSync('vendor/rkdeveloptool-wasm/rkdeveloptool.wasm')) {
-  console.error('vendor/rkdeveloptool-wasm/ is missing: run scripts/build-wasm.sh (Maskrom will not work without it)');
+  console.error('vendor/rkdeveloptool-wasm/ is missing: run scripts/build-wasm.sh (MaskROM will not work without it)');
   process.exitCode = 1;
 } else {
   mkdirSync('build/renderer/wasm', { recursive: true });

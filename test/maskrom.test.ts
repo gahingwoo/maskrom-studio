@@ -67,7 +67,7 @@ describe('output parsing', () => {
   });
 });
 
-describe.skipIf(!haveWasm)('Maskrom flash through the WASM rkdeveloptool', () => {
+describe.skipIf(!haveWasm)('MaskROM flash through the WASM rkdeveloptool', () => {
   // An odd size, so the last block is a partial sector.
   const image = new Uint8Array(randomBytes(6 * MiB + 1234));
 
@@ -124,7 +124,7 @@ describe.skipIf(!haveWasm)('Maskrom flash through the WASM rkdeveloptool', () =>
     expect((res as { reason: string }).reason).toMatch(/does not match the release checksum/);
   });
 
-  it('goes on when the board comes back from the loader still looking like Maskrom (RK3576)', async () => {
+  it('goes on when the board comes back from the loader still looking like MaskROM (RK3576)', async () => {
     const board = new FakeBoard({ storages: { 1: 64 * MiB, 9: 16 * MiB }, defaultStorage: 9, loaderLooksLikeMaskrom: true });
     const { runner } = await setup(board);
     const stages: string[] = [];
@@ -158,6 +158,6 @@ describe.skipIf(!haveWasm)('Maskrom flash through the WASM rkdeveloptool', () =>
     board.devices = [];
     const { runner } = await setup(board);
     const res = await flash(runner, plan(image), hooks([]));
-    expect((res as { reason: string }).reason).toBe('No board in Maskrom mode was found.');
+    expect((res as { reason: string }).reason).toBe('No board in MaskROM mode was found.');
   });
 });
