@@ -110,7 +110,8 @@ jobs:
           mkdir -p "$(brew --repository local/check)/Casks"
           cp /tmp/casks/*.rb "$(brew --repository local/check)/Casks/"
           brew style local/check
-          for c in maskrom-studio maskrom-studio@beta maskrom-studio@nightly; do brew audit --cask --strict --no-download --skip-style "local/check/$c" || brew audit --cask --no-download "local/check/$c"; done
+          brew trust local/check || true
+          for c in maskrom-studio maskrom-studio@beta maskrom-studio@nightly; do brew audit --cask --strict "local/check/$c"; done
 
   sd-e2e:
     name: SD write to a loop device
