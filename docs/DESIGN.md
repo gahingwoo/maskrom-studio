@@ -579,6 +579,34 @@ asked, like the upgrade's copies. Putting a copy back is not in the app
 yet: the upgrade carries settings over from the board itself, not from a
 file.
 
+## When something fails
+
+No failure sends the user back to the start. The run page ends with Try
+again (the same job with every choice kept: the board is looked for again,
+the loader sent again, then the write; files already downloaded and
+checked come from the cache, a broken-off download goes on with a Range
+request, and short network failures are tried three times with growing
+waits before an error is shown), Back to the steps (the Review or Confirm
+step, choices kept), Report a problem and Save full log. A start that
+throws ends on the same page instead of a run that waits for nothing.
+
+A board that leaves the USB bus during a job is told apart: after a
+failed rkdeveloptool command the worker runs `ld` once, and when no
+device answers (or the board never came back after the loader) the
+reason is "The board was disconnected." The page then shows the board's
+MaskROM steps and the live MaskROM line, and Try again once it is green.
+
+Report a problem opens github.com/gahingwoo/maskrom-studio/issues/new with
+a title and body (version and commit, OS and CPU, board, mode, task, the
+step that failed, the error, the last 50 lines of the log, cut further
+until the link is under 8000 characters); Save full log writes the whole
+job log to a file to attach. Both are scrubbed in the main process
+(src/shared/report.ts): the home folder becomes ~, the user name <user>,
+and e-mail and IP addresses, USB serial numbers, the app's file tokens and
+anything after password=, token= or key= are removed. About has the same
+link without a log. There are no mirrors for the release downloads
+(GitHub releases; Armbian's redirector already picks a mirror).
+
 ## Shared with Roxora Imager
 
 Written without the board list, to be offered to roxora-os/imager:
