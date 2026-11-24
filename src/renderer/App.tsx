@@ -26,6 +26,7 @@ import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { ARMBIAN_RESTORE, DESKTOPS, distroWords, simpleOffers, variantWords, type ArmbianOffer } from '../woa/armbian-restore';
 import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
+import { MaskromLive } from './maskrom-live';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
@@ -1002,6 +1003,7 @@ export function App() {
         <Stack hasGutter>
           <List component="ol" type={OrderType.number}>{maskromSteps(board).map((s) => <ListItem key={s}>{s}</ListItem>)}</List>
           {board.webflash.maskromNote && <Content component="p">{lang === 'en' ? board.webflash.maskromNote : t(`maskrom.${board.id}.note`)}</Content>}
+          <MaskromLive board={board.name} />
           <DriversNote />
         </Stack>
       </CardBody>
@@ -1319,6 +1321,7 @@ export function App() {
             </List>
             <Content component="p">{t('s.ready.cable')}</Content>
             {board.maskromEntry === 'pads' && <img src={`resources/boards/${board.id}-maskrom.jpg`} alt={t('s.ready.photo')} className="maskrom-photo" />}
+            <MaskromLive board={board.name} />
             <DriversNote />
           </Stack>
         </CardBody>

@@ -7,6 +7,13 @@ an entry by moving it to "Tested" with the date and what was seen.
 
 ## Untested
 
+- **Live MaskROM line** (ux-decisions D2): on the Get ready page and the
+  MaskROM card, the line turns green within two seconds of the board
+  entering MaskROM (TaishanPi 3M pads, CM5-IO button) on Linux, macOS and
+  Windows; on a Windows PC without WinUSB it says the driver is missing
+  and turns green after Zadig; unplugging turns it back. The write right
+  after it still finds the board (the Windows check opens and closes the
+  device once).
 - **The copy before a write** (ux-decisions D6): Armbian, a factory image,
   the firmware and a Windows install on both boards each leave a folder in
   nvdata-backups with gpt-sectors-0-33.bin, nvdata-sector-43648-384.bin
