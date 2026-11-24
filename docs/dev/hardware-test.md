@@ -1,5 +1,8 @@
 # Hardware test
 
+The procedure for a board session. What is still untested, and the results,
+are kept in [testing](testing.md).
+
 Nothing in this app has run on a board yet. Run these on the LCKFB
 TaishanPi 3M first, from a build of `main`, and note the commit.
 

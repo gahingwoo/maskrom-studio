@@ -1,5 +1,10 @@
 # Design: Windows on the eMMC without a USB stick
 
+How Maskrom Studio is built and why: the approaches, the formats it reads,
+what each write does on the board. For using the app, see
+[use](../use.md); for what has and has not run on a board, see
+[testing](testing.md).
+
 Status: first version implemented, not yet run on hardware (2026-11-21).
 
 ## The goal

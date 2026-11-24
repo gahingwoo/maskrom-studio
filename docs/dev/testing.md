@@ -1,5 +1,9 @@
 # Not yet tested on a board
 
+The ledger of what still needs a real board, and what has been seen on one.
+The procedure for a board session is [hardware-test](hardware-test.md); how
+the app works is [design](design.md).
+
 What CI checks (unit tests, the MaskROM paths through the WASM against a
 pretend board, Electron end-to-end runs, screenshots) is not a board. This
 list is what still needs the real hardware, for the combined test. Strike
