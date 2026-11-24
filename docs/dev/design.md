@@ -343,10 +343,19 @@ Added, all chosen on the "Windows setup" page:
   RunOnce value deletes any copy under Panther again after the first
   sign-in), and the
   install script zeroes the staging copy (`fsutil file setzerodata`, best
-  effort) before the staging volume is deleted. With "sign in by itself on
-  every start" Windows keeps the password in the registry, as it does for
-  any automatic sign-in; with it off, only the first start signs in by
-  itself and Windows removes the stored password after that sign-in.
+  effort) before the staging volume is deleted. AutoLogon always has
+  LogonCount 1 (Microsoft's reference requires it), so Windows removes the
+  password it stored for that first sign-in. With "Sign in automatically"
+  the install also copies `woa-autologon.ps1` to `\Windows\Setup\Scripts`
+  (staging copy zeroed too); SetupComplete.cmd limits it to SYSTEM and
+  Administrators and makes a SYSTEM task that runs it half a minute after
+  the first sign-in, when the LogonCount is used up. The script deletes
+  AutoLogonCount, stores the password as the LSA secret DefaultPassword
+  (LsaStorePrivateData, as Sysinternals Autologon does; an empty password
+  gets an empty DefaultPassword value and no secret), deletes the
+  plain-text DefaultPassword value, sets AutoAdminLogon 1, DefaultUserName,
+  DefaultDomainName "." and PasswordLess\Device
+  DevicePasswordLessBuildVersion 0, then deletes its task and itself.
 - **SSH.** On by default. The Win32-OpenSSH 9.5.0.0p1-Beta ARM64 zip
   (pinned URL, size and SHA-256 in `src/woa/setup-files.ts`) is downloaded
   once, unpacked on the PC, staged, and copied by the install script

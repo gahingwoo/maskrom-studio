@@ -95,6 +95,12 @@ Repeat test 2 (or run it once with these on):
   straight to the desktop, signed in. Afterwards
   `C:\Windows\Panther\unattend.xml` must be gone and
   `C:\Windows\Logs\woa-setupcomplete.log` should end with "done".
+- Skip setup with "Sign in automatically": restart twice; both starts
+  reach the desktop signed in. `C:\Windows\Logs\woa-autologon.log` says
+  the sign-in is on and the script deleted; `woa-autologon.ps1` is gone from
+  `C:\Windows\Setup\Scripts`, `schtasks /query /tn "Maskrom Studio
+  automatic sign-in"` finds nothing, and Winlogon has no DefaultPassword
+  value and no AutoLogonCount.
 - SSH on, with your public key: `ssh <user>@<board>` from the PC with the
   key, and with the password. `sc query sshd` RUNNING, `netsh advfirewall
   firewall show rule name="OpenSSH Server (sshd)"`. The key file's ACL:

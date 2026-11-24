@@ -18,6 +18,9 @@ over on the first start.
 - A self-test on Windows' first desktop, with an optional prefilled GitHub
   issue.
 - How to get a Windows 11 23H2 ARM64 image with UUP dump (docs).
+- "Sign in automatically" for a Windows install that skips setup: signs in
+  on every start, with the password kept as an LSA secret instead of plain
+  text in the registry.
 
 ## First version
 

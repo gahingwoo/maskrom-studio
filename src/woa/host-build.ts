@@ -7,7 +7,7 @@
 import { certsCmd, trustedCerts } from './certs';
 import { FatVolume } from './fat32';
 import type { ByteSource } from './pieces';
-import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
+import { AUTOLOGON_FILE, autoLogonScript, setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { stageIni, StageError, winpeVolume, type DiskTarget } from './stage-layout';
 import { crlf, HOST_BUILD } from './stage-scripts';
 import { anyTrim, trimCmd } from './trim';
@@ -70,6 +70,7 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
     { path: SELFTEST_FILE, data: crlf(selfTestScript({ appVersion: o.appVersion })) },
     ...(certs.length ? [{ path: 'woa-certs.cmd', data: crlf(certsCmd(certs)) }] : []),
     ...(o.setup.skipSetup ? [{ path: 'unattend.xml', data: crlf(unattendXml(o.setup.skipSetup)) }] : []),
+    ...(o.setup.skipSetup?.autoLogonAlways ? [{ path: AUTOLOGON_FILE, data: crlf(autoLogonScript(o.setup.skipSetup)) }] : []),
     ...(anyTrim(o.setup.trim) ? [{ path: 'woa-trim.cmd', data: crlf(trimCmd(o.setup.trim!)) }] : []),
     ...(o.setup.ssh && o.setup.sshKey.trim() ? [{ path: 'ssh-key/administrators_authorized_keys', data: crlf(`${o.setup.sshKey.trim()}\n`) }] : []),
     ...o.extras.filter((e) => o.setup.ssh || !e.path.startsWith('openssh/')),
