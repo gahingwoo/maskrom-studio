@@ -10,8 +10,13 @@ board straight from a PC over USB, with no USB stick, writes and upgrades
 the boards' [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI
 firmware, and puts a board back to Armbian or a factory image.
 
-Boards: LCKFB TaishanPi 3M and ArmSoM CM5-IO (Windows and firmware), Radxa
-ROCK 4D (firmware only; it has no eMMC).
+Boards, and where Windows can go on each:
+
+| Board | Firmware on | Windows on | MaskROM |
+|---|---|---|---|
+| LCKFB TaishanPi 3M | eMMC | eMMC, SD card (no M.2 slot, so no NVMe) | no button: MSK pads, or F4 in the firmware |
+| ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe (M.2) | button |
+| Radxa ROCK 4D | SPI NOR flash | NVMe (M.2), SD card; it has no eMMC. Windows has not started on it yet (ACPI not ready) | button |
 
 Status: first version, not yet run on hardware. See
 [docs/hardware-test.md](docs/hardware-test.md).
@@ -48,7 +53,8 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
   eMMC with DISM, adds the RK3576 drivers, deletes the staging space and
   restarts into Windows. How and why: [docs/DESIGN.md](docs/DESIGN.md).
 - **Other targets.** Windows also goes onto an SD card in the PC's reader
-  or an NVMe drive in a USB enclosure, which then goes into the board. On
+  or an NVMe drive in a USB enclosure, which then goes into the board,
+  where the board has one (table above). On
   a Windows PC the app can instead build the finished Windows itself with
   DISM, for these and for the eMMC (written over Maskrom from a virtual
   disk), so the board starts straight into Windows.

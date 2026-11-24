@@ -34,12 +34,11 @@ import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/chann
 import type { BoardId } from '../woa/boards';
 import { fileSource, type BoardJob } from '../helper/board-write';
 import { hostBuildFiles } from '../woa/host-build';
-import { MIN_DISK_BYTES } from '../woa/stage-layout';
+import { MIN_DISK_BYTES, targetRefusal } from '../woa/stage-layout';
 import { woaBoard } from '../woa/boards';
 import type { HostBuildRequest, HostBuildResult } from '../shared/ipc';
 
 /** The eMMC size the Windows host build makes its virtual disk for (the boards' eMMC as seen). */
-const EMMC_BYTES: Partial<Record<BoardId, number>> = { tspi3m: 62008590336, cm5io: 31272730624 };
 import { OPENSSH, type SetupOptions } from '../woa/setup-files';
 import { unzip } from '../woa/zip';
 import { inflateRawSync } from 'node:zlib';
@@ -589,13 +588,14 @@ ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (
     mkdirSync(dir, { recursive: true });
     const vhdPath = join(dir, 'woa-emmc.vhd');
     const board = woaBoard(req.boardId);
-    if (req.target === 'emmc' && !board?.windows) return { ok: false, reason: 'This board has no eMMC for Windows.' };
+    if (!board) return { ok: false, reason: `There is no board ${req.boardId}.` };
+    if (!board.windowsTargets.includes(req.target)) return { ok: false, reason: targetRefusal(board, req.target) };
     const winpeSrc = fileSource(pe.path);
     let files;
     try {
       files = hostBuildFiles({
         target: req.target, mode: req.target === 'emmc' ? 'vhd' : 'disk',
-        ...(req.target === 'emmc' ? { vhdPath, vhdBytes: EMMC_BYTES[req.boardId] } : { diskNumber, diskBytes }),
+        ...(req.target === 'emmc' ? { vhdPath, vhdBytes: board.emmc!.bytes } : { diskNumber, diskBytes }),
         source: img.container === 'iso' ? { path: img.path, kind: 'iso', inner: `sources\\${img.imageName}` } : { path: img.path, kind: 'wim', inner: '' },
         index: ed.index, edition: ed.name, build: ed.build ?? 0, winpe: winpeSrc, setup: req.setup, extras, appVersion: app.getVersion(),
       });

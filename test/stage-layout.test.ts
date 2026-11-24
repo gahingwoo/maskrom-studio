@@ -146,7 +146,9 @@ describe('staged install layout', () => {
     execFileSync('rm', ['-rf', dir]);
   }, 60000);
 
-  it('refuses the ROCK 4D', () => {
-    expect(() => planStage({ board: woaBoard('rock4d')!, diskBytes: 62008590336, head, winpe: bytesSource(new Uint8Array(1)), image, rand, appVersion: 't' })).toThrow(/NVMe/);
+  it('refuses a target the board does not have', () => {
+    const tiny = { head, winpe: bytesSource(new Uint8Array(1)), image, rand, appVersion: 't' };
+    expect(() => planStage({ board: woaBoard('rock4d')!, diskBytes: 62008590336, ...tiny })).toThrow(/eMMC on the Radxa ROCK 4D\. The Radxa ROCK 4D has no eMMC/);
+    expect(() => planStage({ board: woaBoard('tspi3m')!, target: 'nvme', diskBytes: 256e9, ...tiny })).toThrow(/NVMe drive on the LCKFB TaishanPi 3M/);
   });
 });

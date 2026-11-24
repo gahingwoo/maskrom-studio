@@ -47,4 +47,12 @@ an entry by moving it to "Tested" with the date and what was seen.
   3M pads and F4, CM5-IO button); switching modes keeps the board; the
   dialog when Advanced choices are reset.
 
+- **Windows targets per board** (board-targets): only the targets in
+  boards.ts are offered (TaishanPi 3M: eMMC, SD card; CM5-IO: eMMC, SD
+  card, NVMe; ROCK 4D: NVMe, SD card). Windows from an SD card has not run
+  on any board; NVMe on the ROCK 4D waits for its ACPI tables. The ROCK
+  4D's MaskROM steps in Chinese (USB-A to USB-A cable) are new text.
+- **Mode menu** (board-targets): the masthead menu, the dialog when going
+  back to Simple, and Settings' copy, on a real screen at 100% and 125%.
+
 ## Tested

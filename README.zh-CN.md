@@ -6,7 +6,13 @@
 
 从早期版本升级：第一次启动时，早期版本数据文件夹里的设置、主题和语言、UEFI 设置副本会被复制过来。应用 ID 变了，所以不会原地更新：请安装本版本后再删除旧应用（Linux 的 .deb/.rpm 会自动替换）。
 
-支持的开发板：立创泰山派 3M（LCKFB TaishanPi 3M）和 ArmSoM CM5-IO（Windows 和固件），Radxa ROCK 4D（只有固件，它没有 eMMC）。
+支持的开发板，以及每块板上 Windows 可以装到哪里：
+
+| 开发板 | 固件位置 | Windows 可装到 | MaskROM |
+|---|---|---|---|
+| 立创泰山派 3M（LCKFB TaishanPi 3M） | eMMC | eMMC、SD 卡（没有 M.2 插槽，所以不支持 NVMe） | 没有按键：短接 MSK 焊盘，或在固件中按 F4 |
+| ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe（M.2） | 有按键 |
+| Radxa ROCK 4D | SPI NOR 闪存 | NVMe（M.2）、SD 卡；它没有 eMMC。Windows 还没有在这块板上启动过（ACPI 未完成） | 有按键 |
 
 现状：第一个版本，还没有在实际开发板上跑过。测试步骤见 [docs/hardware-test.md](docs/hardware-test.md)（英文）。
 
@@ -34,7 +40,7 @@ macOS 可用 Homebrew：先 `brew trust gahingwoo/tap`，再 `brew install --cas
 ## 能做什么
 
 - **把 Windows 11 装到 eMMC。** 你提供一个 Windows 11 23H2 ARM64 的 ISO（或其中的 install.wim / install.esd）。开发板进入 MaskROM 模式后，应用把 [woa-rk3576](https://github.com/gahingwoo/woa-rk3576) 的 WinPE 和你的 Windows 映像写进 eMMC 上固件之后的空闲空间。开发板随后从 eMMC 启动这个 WinPE，用 DISM 把 Windows 装到 eMMC 上，加入 RK3576 驱动，删掉暂存空间，再重启进入 Windows。原理和取舍见 [docs/DESIGN.md](docs/DESIGN.md)（英文）。
-- **其他安装位置。** Windows 也可以装到插在电脑读卡器里的 SD 卡，或装在 USB 硬盘盒里的 NVMe 硬盘，写好后再装到开发板上。在 Windows 电脑上，还可以由应用直接用 DISM 生成装好的 Windows（适用于这两种位置，也适用于 eMMC：先生成虚拟磁盘，再通过 MaskROM 写入），开发板开机直接进入 Windows。
+- **其他安装位置。** Windows 也可以装到插在电脑读卡器里的 SD 卡，或装在 USB 硬盘盒里的 NVMe 硬盘，写好后再装到开发板上（只限有这个位置的开发板，见上表）。在 Windows 电脑上，还可以由应用直接用 DISM 生成装好的 Windows（适用于这两种位置，也适用于 eMMC：先生成虚拟磁盘，再通过 MaskROM 写入），开发板开机直接进入 Windows。
 - **装好的 Windows 直接可用。** 自带 RK3576 驱动并信任其测试证书；可以再加一个驱动文件夹（显示、触摸屏等）；默认开启 OpenSSH 服务器（22 端口）；按 UTC 读取主板时钟，每次开机后联网校时（板子的 RTC 不可靠，时间不对时测试签名的驱动会装不上）；首次启动可以走 Windows 自己的设置向导（OOBE），也可以完全跳过：填好用户名和密码，开机直接进桌面。
 - **UEFI 固件。** 从 edk2-rk3576 最新发布中取固件，按网页刷写工具 [flash.gahingwoo.com](https://flash.gahingwoo.com/) 完全相同的方式写入（“完整映像”或“保留分区”），通过 MaskROM。
 - **不一定占满整个磁盘。** Windows 可以只用设定的大小（至少 32 GB），剩下的空间可以不分配、建成 NTFS 或 exFAT 数据分区，或在末尾留给以后装 Linux；写入前会显示分区布局。

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pickLang, translateMessage, translator } from '../src/shared/i18n';
 import { MESSAGE_PATTERNS, MESSAGES } from '../src/renderer/messages';
+import { WOA_BOARDS } from '../src/woa/boards';
 
 const src = (f: string) => readFileSync(join(__dirname, '..', 'src', 'renderer', f), 'utf8');
 
@@ -27,6 +28,22 @@ describe('i18n', () => {
       if (v.en) expect(v['zh-CN'], k).not.toBe('');
       expect(`${v.en}${v['zh-CN']}`, k).not.toMatch(/[\u2013\u2014]/);
     }
+  });
+
+  it('has the board keys App.tsx builds from boards.ts', () => {
+    const keys: string[] = [];
+    for (const b of WOA_BOARDS) {
+      keys.push(`board.fw.${b.firmwareStorage}`, `board.maskrom.${b.maskromEntry}`, ...b.windowsTargets.map((x) => `where.${x}`), ...b.windowsTargets.map((x) => `dest.${x}`));
+      if (b.windowsTargets.includes('sd')) keys.push(`dest.sd.desc.${b.sdBoot}`);
+      // English from edk2-webflash, Chinese here, step by step.
+      b.webflash.maskrom.forEach((_s, i) => keys.push(`maskrom.${b.id}.${i + 1}`));
+      if (b.webflash.maskromNote) keys.push(`maskrom.${b.id}.note`);
+      if (b.factoryPage) keys.push(`restore.factory.${b.id}`, `sd.boot.${b.sdBoot}.title`, `sd.boot.${b.sdBoot}.armbian`, `sd.boot.${b.sdBoot}.uefi`, `next.drive.${b.sdBoot}`);
+      if (b.emmc) keys.push(`s.ready.${b.id}.1`);
+    }
+    expect(keys.filter((k) => !MESSAGES[k])).toEqual([]);
+    expect(translateMessage('Windows is not installed to an NVMe drive on the LCKFB TaishanPi 3M. Nothing was written.', MESSAGE_PATTERNS, 'zh-CN'))
+      .toBe('LCKFB TaishanPi 3M 不支持把 Windows 装到 NVMe 硬盘。没有写入任何内容。');
   });
 
   it('fills placeholders and translates known messages', () => {

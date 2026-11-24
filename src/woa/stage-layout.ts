@@ -24,7 +24,7 @@ import {
 import { buildExfat } from './exfat';
 import { bytesSource, concatSource, patchedSource, sliceSource, type ByteSource } from './pieces';
 import { crlf, INSTALL, LAUNCHER } from './stage-scripts';
-import type { WoaBoard } from './boards';
+import type { WindowsTarget, WoaBoard } from './boards';
 import { certsCmd, trustedCerts } from './certs';
 import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { layoutIni, planLayout, WHOLE_DISK, type Layout, type LayoutChoice } from './windows-layout';
@@ -56,7 +56,7 @@ export interface StageImage {
  * Where Windows goes. The eMMC keeps the edk2-rk3576 firmware partition; an
  * SD card or an NVMe drive gets a fresh GPT with Windows from 1 MiB on.
  */
-export type DiskTarget = 'emmc' | 'sd' | 'nvme';
+export type DiskTarget = WindowsTarget;
 
 /** The smallest SD card or NVMe drive a staged install is offered for. */
 export const MIN_DISK_BYTES = 30e9;
@@ -130,15 +130,23 @@ export function stageIni(f: Record<string, string | number>): string {
   return `${lines.join('\r\n')}\r\n`;
 }
 
+const TARGET_WORDS: Record<DiskTarget, string> = { emmc: 'the eMMC', sd: 'an SD card', nvme: 'an NVMe drive' };
+
+/** Why Windows cannot go to this target on this board (boards.ts windowsTargets). */
+export function targetRefusal(board: WoaBoard, target: DiskTarget): string {
+  const why = target === 'emmc' && !board.emmc ? ` The ${board.name} has no eMMC.` : '';
+  return `Windows is not installed to ${TARGET_WORDS[target]} on the ${board.name}.${why} Nothing was written.`;
+}
+
 export function planStage(o: StageInput): StagePlan {
   const target = o.target ?? 'emmc';
   const diskSectors = Math.floor(o.diskBytes / SECTOR);
   let fw: GptPartition | null = null;
   let removed: GptPartition[] = [];
   let table: ReturnType<typeof parsePrimaryGpt> | null = null;
+  if (!o.board.windowsTargets.includes(target)) throw new StageError(targetRefusal(o.board, target));
   if (target === 'emmc') {
-    if (!o.board.windows) throw new StageError(o.board.windowsNote ?? 'Windows is not offered for this board.');
-    const { minBytes, maxBytes } = o.board.windows;
+    const { minBytes, maxBytes } = o.board.emmc!;
     if (o.diskBytes < minBytes || o.diskBytes > maxBytes) {
       throw new StageError(`The eMMC is ${o.diskBytes} bytes, not the size of the ${o.board.name}'s eMMC (${minBytes / 1e9} to ${maxBytes / 1e9} GB). Nothing was written.`);
     }

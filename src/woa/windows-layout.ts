@@ -103,8 +103,6 @@ export function layoutIni(gapBytes: number, l: Layout, whole: boolean): Record<s
   };
 }
 
-/** The eMMC sizes seen on the boards (CLAUDE.md, boards.ts): the page's preview before the board answers. */
-export const NOMINAL_EMMC_BYTES: Record<string, number> = { tspi3m: 62008590336, cm5io: 31272730624 };
 
 /** Space for Windows and the rest on a disk: after the firmware partition on the eMMC (sector 131072), from 1 MiB elsewhere, up to the backup GPT. */
 export function freeBytesOf(diskBytes: number, emmc: boolean): number {

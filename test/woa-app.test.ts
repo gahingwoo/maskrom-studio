@@ -22,7 +22,18 @@ describe('boards (edk2-webflash data)', () => {
     ]);
     expect(firmwareTargets(woaBoard('cm5io')!).find((x) => x.id === 'uefi-keep')!.lba).toBe(64);
     expect(firmwareTargets(woaBoard('rock4d')!).map((x) => x.id)).toEqual(['uefi']);
-    expect(WOA_BOARDS.filter((b) => b.windows).map((b) => b.id)).toEqual(['tspi3m', 'cm5io']);
+    expect(WOA_BOARDS.filter((b) => b.emmc).map((b) => b.id)).toEqual(['tspi3m', 'cm5io']);
+  });
+
+  it('offers Windows only where each board can take it', () => {
+    // The TaishanPi 3M has no M.2 slot; the ROCK 4D has no eMMC.
+    expect(Object.fromEntries(WOA_BOARDS.map((b) => [b.id, b.windowsTargets]))).toEqual({
+      tspi3m: ['emmc', 'sd'], cm5io: ['emmc', 'sd', 'nvme'], rock4d: ['nvme', 'sd'],
+    });
+    for (const b of WOA_BOARDS) expect(b.windowsTargets.includes('emmc')).toBe(!!b.emmc);
+    expect(WOA_BOARDS.map((b) => [b.id, b.maskromEntry, b.sdBoot])).toEqual([
+      ['tspi3m', 'pads', 'spl-on-emmc'], ['cm5io', 'button', 'bootrom-emmc-first'], ['rock4d', 'button', 'spi-firmware'],
+    ]);
   });
 
   it('recognises a board by device tree or SMBIOS', () => {

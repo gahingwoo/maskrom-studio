@@ -15,7 +15,7 @@ import { formatBytes } from '../shared/format';
 import type { ArmbianChoice, FactoryChoice, ReleaseTier, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
-import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WoaBoard } from '../woa/boards';
+import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WindowsTarget, type WoaBoard } from '../woa/boards';
 import type { WebflashTarget } from '../web/webflash/boards';
 import type { WoaJob, WoaWorkerEvent, WoaWorkerRequest } from '../woa/woa-worker';
 import type { RegionResult, RegionStage } from '../woa/maskrom-regions';
@@ -24,7 +24,7 @@ import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateMod
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
-import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, NOMINAL_EMMC_BYTES, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
+import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
@@ -185,10 +185,16 @@ export function App() {
     const original = (tg[field] as string | undefined) ?? '';
     return lang === 'en' ? original : (t(`fw.${b.id}.${tg.id}.${field}`) || original);
   };
-  const maskromSteps = (b: WoaBoard): string[] => b.webflash.maskrom.map((s, i) => {
-    if (lang === 'en') return s;
-    const key = b.id === 'tspi3m' ? `maskrom.tspi3m.${i + 1}` : `maskrom.button.${i + 1}`;
-    return t(key) || s;
+  const maskromSteps = (b: WoaBoard): string[] => b.webflash.maskrom.map((s, i) => (lang === 'en' ? s : t(`maskrom.${b.id}.${i + 1}`) || s));
+  // "the eMMC, an SD card or an NVMe drive", from the board's list (boards.ts).
+  const whereText = (targets: WindowsTarget[]): string => {
+    const w = targets.map((x) => t(`where.${x}`));
+    if (lang === 'en') return w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} or ${w[w.length - 1]}`;
+    const z = w.length < 2 ? w.join('') : `${w.slice(0, -1).join('、')}或${w[w.length - 1]}`;
+    return z.replace(/([\u4e00-\u9fff])([A-Za-z0-9])/g, '$1 $2').replace(/([A-Za-z0-9])([\u4e00-\u9fff])/g, '$1 $2');
+  };
+  const boardDesc = (b: WoaBoard): string => t(b.windowsBooted ? 'board.desc' : 'board.desc.untried', {
+    firmware: t(`board.fw.${b.firmwareStorage}`), where: whereText(b.windowsTargets), maskrom: t(`board.maskrom.${b.maskromEntry}`),
   });
   const checkText = (e: EditionInfo): string | null => (e.check.level === 'ok' ? null : t(`win.check.${e.check.code}`, e.check.vars));
   // The tier a release came from (Settings): nothing for Stable, a word for the others.
@@ -215,7 +221,7 @@ export function App() {
   const layoutChoice: LayoutChoice | undefined = !staged || layoutMode === 'whole' ? undefined : {
     windowsBytes: gbToBytes(winGb), rest, dataLabel, linuxReserveBytes: linuxGb.trim() === '' ? 0 : gbToBytes(linuxGb),
   };
-  const layoutDisk = dest === 'emmc' ? (board ? NOMINAL_EMMC_BYTES[board.id] ?? null : null) : (drives?.find((x) => x.device === disk)?.size ?? null);
+  const layoutDisk = dest === 'emmc' ? (board?.emmc?.bytes ?? null) : (drives?.find((x) => x.device === disk)?.size ?? null);
   const layoutFree = layoutDisk ? freeBytesOf(layoutDisk, dest === 'emmc') : null;
   const layoutMaxWin = layoutFree ? Math.floor((layoutFree - (ESP_MIB + MSR_MIB + 2) * MiB) / MiB) * MiB : null;
   const customPossible = layoutMaxWin === null || layoutMaxWin >= MIN_WINDOWS_CHOSEN;
@@ -364,7 +370,7 @@ export function App() {
         stages: [{ id: 'write', label: isArmbian ? t('run.drive.armbian.stage') : t('run.drive.uefi.stage'), percent: 0 }] });
       const r = await withProgress('write', () => api.writeDrive(isArmbian
         ? { kind: 'armbian', board: board.id, branch, device: stick! } : { kind: 'uefi-sd', board: board.id, device: stick! }));
-      finish(resultOf(r, isArmbian ? t('result.drive.armbian') : t('result.drive.uefi'), [t(`next.drive.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}`)]));
+      finish(resultOf(r, isArmbian ? t('result.drive.armbian') : t('result.drive.uefi'), [t(`next.drive.${board.sdBoot}`, { board: board.name })]));
       return;
     }
     if (task === 'stick') {
@@ -491,11 +497,11 @@ export function App() {
         <FormGroup role="radiogroup" fieldId="board" label={t('board.label')} isStack>
           {WOA_BOARDS.map((b) => (
             <Radio key={b.id} id={`board-${b.id}`} name="board" label={b.name} isChecked={boardId === b.id}
-              description={b.windows ? t(b.id === 'tspi3m' ? 'board.desc.windows.pads' : 'board.desc.windows.button') : t('board.desc.spi')}
+              description={boardDesc(b)}
               onChange={() => {
                 setBoardId(b.id);
                 if (b.id !== here?.boardId) setVia('maskrom');
-                if (task === 'windows' && !b.windows) setTask(null);
+                if (!b.windowsTargets.includes(dest)) setDest(b.windowsTargets[0]);
                 if (task === 'uefi-keep' && b.firmwareStorage !== 'emmc') setTask(null);
                 if (task === 'uefi-sd' && !releases?.firmware?.sdcard?.[b.id]) setTask(null);
                 if ((task === 'armbian' || task === 'factory') && !ARMBIAN_RESTORE[b.id]) setTask(null);
@@ -526,9 +532,10 @@ export function App() {
       {tierNotice}
       <Form onSubmit={(e) => e.preventDefault()}>
         <FormGroup role="radiogroup" fieldId="task-win" label={t('task.group.windows')} isStack>
-          <Radio id="task-windows" name="task" label={t('task.windows.any')} isChecked={task === 'windows'} isDisabled={onBoard && !board.windows}
-            onChange={() => { setTask('windows'); if (!board.windows) setDest('nvme'); }} description={board.windows ? t('task.windows.short') : t('task.windows.rock4d')} />
-          {board.windows && (
+          <Radio id="task-windows" name="task" label={t('task.windows.any')} isChecked={task === 'windows'} isDisabled={onBoard && !board.emmc}
+            onChange={() => { setTask('windows'); if (!board.windowsTargets.includes(dest)) setDest(board.windowsTargets[0]); }}
+            description={t('task.windows.short', { where: whereText(board.windowsTargets) })} />
+          {board.emmc && (
             <Radio id="task-stick" name="task" label={t('task.stick')} isChecked={task === 'stick'} isDisabled={onBoard}
               onChange={() => { setTask('stick'); refreshDrives(); }} description={t('task.stick.short')} />
           )}
@@ -545,7 +552,7 @@ export function App() {
           {sdRelease && (
             <Radio id="task-uefi-sd" name="task" label={t('task.uefiSd')} isChecked={task === 'uefi-sd'} isDisabled={onBoard}
               onChange={() => { setTask('uefi-sd'); setStick(null); refreshDrives(); }}
-              description={t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.uefi`)} />
+              description={t(`sd.boot.${board.sdBoot}.uefi`, { board: board.name })} />
           )}
         </FormGroup>
         {ARMBIAN_RESTORE[board.id] && (
@@ -560,21 +567,22 @@ export function App() {
       {task === 'windows' && (
         <Form onSubmit={(e) => e.preventDefault()}>
           <FormGroup role="radiogroup" fieldId="dest" label={t('dest.label')} isStack>
-            <Radio id="dest-emmc" name="dest" label={t('dest.emmc')} isChecked={dest === 'emmc'} isDisabled={!board.windows}
-              onChange={() => setDest('emmc')} description={board.windows ? t('dest.emmc.desc') : t('task.windows.rock4d')} />
-            <Radio id="dest-sd" name="dest" label={t('dest.sd')} isChecked={dest === 'sd'} isDisabled={onBoard}
-              onChange={() => { setDest('sd'); setDisk(null); refreshDrives(30e9); }} description={t(`dest.sd.desc.${board.id === 'tspi3m' ? 'tspi3m' : 'other'}`)} />
-            <Radio id="dest-nvme" name="dest" label={t('dest.nvme')} isChecked={dest === 'nvme'} isDisabled={onBoard}
-              onChange={() => { setDest('nvme'); setDisk(null); refreshDrives(30e9); }} description={t('dest.nvme.desc')} />
+            {/* Only the places this board can take Windows (boards.ts windowsTargets). */}
+            {board.windowsTargets.map((x) => (x === 'emmc'
+              ? <Radio key={x} id="dest-emmc" name="dest" label={t('dest.emmc')} isChecked={dest === 'emmc'} onChange={() => setDest('emmc')} description={t('dest.emmc.desc')} />
+              : <Radio key={x} id={`dest-${x}`} name="dest" label={t(`dest.${x}`)} isChecked={dest === x} isDisabled={onBoard}
+                onChange={() => { setDest(x); setDisk(null); refreshDrives(30e9); }}
+                description={x === 'sd' ? t(`dest.sd.desc.${board.sdBoot}`, { board: board.name }) : t('dest.nvme.desc', { board: board.name })} />))}
           </FormGroup>
           <FormGroup role="radiogroup" fieldId="method" label={t('method.label')} isStack>
             <Radio id="method-stage" name="method" label={t('method.stage')} isChecked={method === 'stage'} onChange={() => setMethod('stage')}
-              description={t('method.stage.desc')} isDisabled={onPc && api.platform === 'darwin'} />
+              description={t(board.emmc ? 'method.stage.desc' : 'method.stage.desc.noEmmc')} isDisabled={onPc && api.platform === 'darwin'} />
             <Radio id="method-host" name="method" label={t('method.host')} isChecked={method === 'host'} onChange={() => setMethod('host')}
               isDisabled={!WIN_HOST || onBoard} description={WIN_HOST ? t('method.host.desc') : t('method.host.notHere')} />
           </FormGroup>
-          {board.id === 'rock4d' && <Alert isInline variant="warning" title={t('rock4d.acpi.title')}>{t('rock4d.acpi.text')}</Alert>}
-          {onPc && api.platform === 'darwin' && <Alert isInline variant="warning" title={t('host.macDisk')} />}
+          {!board.windowsBooted && <Alert isInline variant="warning" title={t('untried.title', { board: board.name })}>{t('untried.text')}</Alert>}
+          {onPc && api.platform === 'darwin' && <Alert isInline variant="warning"
+            title={t(board.emmc ? 'host.macDisk' : 'host.macDisk.noEmmc', { where: whereText(board.windowsTargets.filter((x) => x !== 'emmc')) })} />}
         </Form>
       )}
       {onBoard && task === 'windows' && here?.emmcRefusal && (
@@ -634,8 +642,7 @@ export function App() {
   );
 
   const armbianFound = armbian && typeof armbian === 'object' && 'file' in armbian ? armbian : null;
-  const factoryLink = board?.id === 'cm5io' ? 'https://docs.armsom.org/armsom-cm5-io'
-    : lang === 'en' ? 'https://wiki.lckfb.com/en/tspi-3-rk3576/img-download/finished-image.html' : 'https://wiki.lckfb.com/zh-hans/tspi-3-rk3576/img-download/finished-image.html';
+  const factoryLink = board?.factoryPage ? (lang === 'en' ? board.factoryPage.en : board.factoryPage.zh) : undefined;
   const chooseFactory = async () => {
     setFactoryError(null);
     const r = await api.pickFactory();
@@ -661,7 +668,7 @@ export function App() {
             </FormGroup>
           </Form>
           {restoreTo === 'drive' && (
-            <Alert isInline variant="info" title={t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.title`)}>{t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.armbian`)}</Alert>
+            <Alert isInline variant="info" title={t(`sd.boot.${board.sdBoot}.title`, { board: board.name })}>{t(`sd.boot.${board.sdBoot}.armbian`, { board: board.name })}</Alert>
           )}
           {armbian === 'looking' && <Content component="p">{t('restore.looking')}</Content>}
           {armbian && typeof armbian === 'object' && 'error' in armbian && <Alert isInline variant="danger" title={msg(armbian.error)} />}
@@ -686,7 +693,7 @@ export function App() {
       {task === 'factory' && (
         <>
           <Content component="p" className="muted">{t('restore.factory.emmcOnly')}</Content>
-          <Content component="p">{t(`restore.factory.${board.id === 'cm5io' ? 'cm5io' : 'tspi3m'}`)}{' '}
+          <Content component="p">{t(`restore.factory.${board.id}`)}{' '}
             <Button variant="link" isInline component="a" href={factoryLink} target="_blank">{t('restore.factory.where')}</Button></Content>
           <Alert isInline variant="custom" title={t('restore.factory.untested')}>{t('restore.factory.untestedText')}</Alert>
           <Flex><FlexItem><Button variant="secondary" onClick={chooseFactory}>{t('restore.factory.choose')}</Button></FlexItem></Flex>
@@ -922,7 +929,7 @@ export function App() {
       <CardBody>
         <Stack hasGutter>
           <List component="ol" type={OrderType.number}>{maskromSteps(board).map((s) => <ListItem key={s}>{s}</ListItem>)}</List>
-          {board.webflash.maskromNote && <Content component="p">{lang === 'en' ? board.webflash.maskromNote : t('maskrom.tspi3m.note')}</Content>}
+          {board.webflash.maskromNote && <Content component="p">{lang === 'en' ? board.webflash.maskromNote : t(`maskrom.${board.id}.note`)}</Content>}
           <DriversNote />
         </Stack>
       </CardBody>
@@ -977,7 +984,7 @@ export function App() {
           : (sdRelease ? t('review.drive.written.uefi', { tag: releases!.firmware!.tier.label, file: sdRelease.file }) : t('review.unavailable'))],
         [t('review.erased'), drive ? t('review.stick.erased', { drive }) : t('review.drive.choose')],
         [t('review.checked'), t('review.stick.checked')],
-        [t('review.then'), t(`sd.boot.${board.id === 'tspi3m' ? 'tspi3m' : 'cm5io'}.${task === 'armbian' ? 'armbian' : 'uefi'}`)],
+        [t('review.then'), t(`sd.boot.${board.sdBoot}.${task === 'armbian' ? 'armbian' : 'uefi'}`, { board: board.name })],
       ]);
       if (task === 'armbian' && !restoreReady) why = t('why.restore.armbian');
       else if (!stick) why = t('review.drive.choose');
@@ -1048,12 +1055,14 @@ export function App() {
 
   // --- Simple mode -------------------------------------------------------------
   const SIMPLE_TASKS: Task[] = ['windows', 'armbian', 'factory', 'upgrade'];
-  const SIMPLE_BOARDS: BoardId[] = ['tspi3m', 'cm5io'];
+  // Simple mode installs to the built-in storage: the boards with an eMMC.
+  const SIMPLE_BOARDS: BoardId[] = WOA_BOARDS.filter((b) => b.emmc).map((b) => b.id);
+  const advancedOnly = WOA_BOARDS.filter((b) => !b.emmc).map((b) => b.name).join(', ');
   /** What Advanced mode has set that Simple mode would put back to the recommended choice. */
   const nonDefaults = async (): Promise<string[]> => {
     const st = await api.getSettings();
     const out: string[] = [];
-    if (boardId && !SIMPLE_BOARDS.includes(boardId)) out.push(t('mode.reset.board'));
+    if (boardId && !SIMPLE_BOARDS.includes(boardId)) out.push(t('mode.reset.board', { boards: advancedOnly }));
     if (task && !SIMPLE_TASKS.includes(task)) out.push(t('mode.reset.task'));
     if (layoutMode !== 'whole') out.push(t('mode.reset.layout'));
     if (st.firmwareChannel !== 'stable') out.push(t('mode.reset.tier'));
@@ -1112,14 +1121,14 @@ export function App() {
           );
         })}
       </Gallery>
-      <Content component="p" className="muted">{t('s.board.rock4d')}</Content>
+      <Content component="p" className="muted">{t('s.board.advanced', { boards: advancedOnly })}</Content>
     </StepPage>
   );
   const simpleWhatStep = board && (
     <StepPage title={t('s.step.what')} lead={t('s.what.lead', { board: board.name })}>
       <Form onSubmit={(e) => e.preventDefault()}>
         <FormGroup role="radiogroup" fieldId="s-task" aria-label={t('s.step.what')} isStack>
-          {simpleChoice('windows', t('s.what.windows'), t('s.what.windows.desc'), !board.windows)}
+          {simpleChoice('windows', t('s.what.windows'), t('s.what.windows.desc'), !board.emmc)}
           {simpleChoice('armbian', t('s.what.armbian'), t('s.what.armbian.desc'), !ARMBIAN_RESTORE[board.id])}
           {simpleChoice('factory', t('s.what.factory'), t('s.what.factory.desc'), !ARMBIAN_RESTORE[board.id])}
           {simpleChoice('upgrade', t('s.what.upgrade'), t('s.what.upgrade.desc'), board.firmwareStorage !== 'emmc')}
@@ -1179,6 +1188,11 @@ export function App() {
     </StepPage>
   );
   const eraseText = task === 'windows' ? t('s.erase.windows') : task === 'upgrade' ? t('s.erase.upgrade') : t('s.erase.all');
+  // s.ready.<board>.1, .2, ... as many as messages.ts has.
+  const readySteps = (id: BoardId): string[] => {
+    const out: string[] = [];
+    for (let n = 1; ; n++) { const k = `s.ready.${id}.${n}`; const v = t(k); if (v === k) return out; out.push(v); }
+  };
   const simpleReadyStep = board && (
     <StepPage title={t('s.step.ready')} lead={t('s.ready.lead')}>
       <Card isPlain>
@@ -1186,10 +1200,10 @@ export function App() {
         <CardBody>
           <Stack hasGutter>
             <List component="ol" type={OrderType.number}>
-              {(board.id === 'tspi3m' ? [1, 2, 3, 4] : [1, 2, 3]).map((n) => <ListItem key={n}>{t(`s.ready.${board.id}.${n}`)}</ListItem>)}
+              {readySteps(board.id).map((text) => <ListItem key={text}>{text}</ListItem>)}
             </List>
             <Content component="p">{t('s.ready.cable')}</Content>
-            {board.id === 'tspi3m' && <img src="resources/boards/tspi3m-maskrom.jpg" alt={t('s.ready.photo')} className="maskrom-photo" />}
+            {board.maskromEntry === 'pads' && <img src={`resources/boards/${board.id}-maskrom.jpg`} alt={t('s.ready.photo')} className="maskrom-photo" />}
             <DriversNote />
           </Stack>
         </CardBody>
@@ -1214,7 +1228,7 @@ export function App() {
   );
   const simpleWizard = (
     <Wizard navAriaLabel="Steps" isVisitRequired>
-      <WizardStep name={t('s.step.board')} id="s-board" footer={{ isNextDisabled: !board || !SIMPLE_BOARDS.includes(board.id), isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleBoardStep}</WizardStep>
+      <WizardStep name={t('s.step.board')} id="s-board" footer={{ isNextDisabled: !board || !SIMPLE_BOARDS.includes(board.id), isCancelHidden: true, isBackHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleBoardStep}</WizardStep>
       <WizardStep name={t('s.step.what')} id="s-what" isDisabled={!board} footer={{ isNextDisabled: !task || !SIMPLE_TASKS.includes(task) || !simpleReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleWhatStep}</WizardStep>
       <WizardStep name={t('s.step.ready')} id="s-ready" isDisabled={!simpleReady} footer={{ isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleReadyStep}</WizardStep>
       <WizardStep name={t('s.step.confirm')} id="s-confirm" isDisabled={!simpleReady}
@@ -1340,7 +1354,7 @@ export function App() {
       ) : (
         <PageSection type="wizard" isFilled hasBodyWrapper={false} aria-label={t('app.name')}>
           {mode === 'simple' ? simpleWizard : mode === 'advanced' && <Wizard navAriaLabel="Steps" isVisitRequired>
-            <WizardStep name={t('step.board')} id="board" footer={{ isNextDisabled: !board, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{boardStep}</WizardStep>
+            <WizardStep name={t('step.board')} id="board" footer={{ isNextDisabled: !board, isCancelHidden: true, isBackHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{boardStep}</WizardStep>
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
             {windowsNeeded && (<WizardStep name={t('step.windows')} id="windows" footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>)}
             {windowsNeeded && (<WizardStep name={t('step.setup')} id="setup" isDisabled={!edition} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>)}

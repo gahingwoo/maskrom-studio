@@ -178,6 +178,9 @@ for (const o of [{ theme: 'dark' }, { lang: 'zh-CN' }]) await session(`simple ${
 // Advanced to Simple with a non-default choice: the dialog that lists what goes back.
 await session('mode switch', {}, async (page, shot) => {
   await toTask(page, 'uefi-keep');
+  await page.click('#mode-toggle');
+  await page.waitForSelector('#mode-simple');
+  await shot('mode-menu');
   await page.click('#mode-simple');
   await page.waitForSelector('#mode-title');
   await page.waitForTimeout(400);

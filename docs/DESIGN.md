@@ -194,6 +194,13 @@ second is offered where it can be done properly.
 | SD card in the PC's reader | fresh GPT, Windows from 1 MiB | Linux, Windows hosts | Windows host: DISM onto the card |
 | NVMe in a USB enclosure | fresh GPT, Windows from 1 MiB | Linux, Windows hosts | Windows host: DISM onto the drive |
 
+Which of these a board offers is `windowsTargets` in src/woa/boards.ts, the
+one place the page and the checks in stage-layout.ts and main.ts read it
+from: the TaishanPi 3M takes the eMMC and an SD card (its mini-PCIe slot is
+no M.2 slot, so no NVMe), the CM5-IO the eMMC, an SD card and NVMe, the
+ROCK 4D (no eMMC, firmware on SPI NOR) NVMe and an SD card. Every sentence
+on the page that names targets is made from that list.
+
 **Staged onto an SD card or NVMe drive.** The same layout as on the eMMC
 without the firmware partition, written to the drive on the PC through the
 elevated writer (etcher-sdk's block device, then read back in full). The
@@ -243,6 +250,8 @@ would still need a BCD; that is left for later.
 
 **Booting Windows from an SD card.** The firmware boots the SD slot before
 the eMMC (woa-rk3576 INSTALL.md), so a card with an ESP is found. On the
+ROCK 4D the firmware is on the SPI NOR flash and boots the card the same
+way. On the
 TaishanPi 3M the BootROM reads only the eMMC; the SPL there tries the SD
 card first for the firmware FIT (edk2-rk3576 docs/HARDWARE.md, "the SPL
 tries SD first") and with no card boots the eMMC's. A Windows card has no
@@ -252,10 +261,11 @@ documented behaviour with the card out, not yet seen with a Windows card
 in. A board whose firmware itself lives on the SD card cannot have Windows
 there too. On the CM5-IO an SD card in the slot was the cause of WinPE
 freezes (fixed in firmware at ExitBootServices, n=1), and Windows running
-from an SD card has not been tried on either board.
+from an SD card has not been tried on any of the boards.
 
 **NVMe.** Windows' inbox stornvme drives it; the firmware must boot NVMe
-(Fedora does on the CM5-IO and ROCK 4D) and describe PCIe in ACPI (done
+(Fedora does on the CM5-IO and ROCK 4D; the TaishanPi 3M has no M.2 slot)
+and describe PCIe in ACPI (done
 and verified under Windows on the CM5-IO). The ROCK 4D's ACPI is in
 progress in edk2-rk3576; the app says so and still prepares the drive.
 

@@ -14,6 +14,7 @@ Simple mode:
 | ![Simple mode, flashing mode for the TaishanPi 3M with the MSK pads photo](imgs/simple-ready.png) Get ready, TaishanPi 3M | ![Simple mode, flashing mode for the CM5-IO with its button](imgs/simple-ready-cm5io.png) Get ready, CM5-IO |
 | ![Simple mode, confirm](imgs/simple-confirm.png) Confirm | ![Switching from Advanced to Simple lists what goes back to the recommended choices](imgs/mode-switch.png) Switching to Simple |
 | ![Simple mode at a narrow window: the mode choice is in Settings](imgs/simple-narrow.png) Narrow window | ![Settings at a narrow window with the mode choice](imgs/simple-narrow-settings.png) Mode in Settings |
+| ![The masthead's mode menu: Simple mode, recommended settings; Advanced mode, all options](imgs/mode-menu.png) The mode menu | |
 
 Advanced mode:
 

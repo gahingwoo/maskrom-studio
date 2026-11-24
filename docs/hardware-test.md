@@ -117,6 +117,10 @@ the install, and booted Windows.
   the card, the install onto the card, Windows from the card.
 - **NVMe, staged.** An NVMe drive in a USB enclosure; then in the CM5-IO.
   If the board boots something else, pick the NVMe in the boot manager.
+  (The TaishanPi 3M has no M.2 slot: the app does not offer NVMe for it.)
+- **ROCK 4D, NVMe or SD card.** Only these two are offered (no eMMC). The
+  drive is prepared; Windows is not expected to start until the ROCK 4D's
+  ACPI tables are released.
 - **Windows PC, built here (needs administrator rights).** The same two
   targets with "Finished here": the console of host-build.cmd shows in the
   app; the log stays in the app's data folder (host-build\host-build.log)

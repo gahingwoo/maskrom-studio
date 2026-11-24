@@ -1,10 +1,11 @@
 // How the disk is shared after a staged Windows install (windows-layout.ts).
 import { describe, expect, it } from 'vitest';
-import { ESP_MIB, freeBytesOf, GiB, layoutIni, MiB, MSR_MIB, NOMINAL_EMMC_BYTES, planLayout, WHOLE_DISK } from '../src/woa/windows-layout';
+import { ESP_MIB, freeBytesOf, GiB, layoutIni, MiB, MSR_MIB, planLayout, WHOLE_DISK } from '../src/woa/windows-layout';
+import { woaBoard } from '../src/woa/boards';
 import { INSTALL } from '../src/woa/stage-scripts';
 
-const tspi = freeBytesOf(NOMINAL_EMMC_BYTES.tspi3m, true);
-const cm5 = freeBytesOf(NOMINAL_EMMC_BYTES.cm5io, true);
+const tspi = freeBytesOf(woaBoard('tspi3m')!.emmc!.bytes, true);
+const cm5 = freeBytesOf(woaBoard('cm5io')!.emmc!.bytes, true);
 
 describe('the disk layout', () => {
   it('starts after the firmware partition on the eMMC and at 1 MiB elsewhere', () => {

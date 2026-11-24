@@ -7,11 +7,12 @@ import {
   Alert, Button, Checkbox, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form,
   FormGroup, FormHelperText, FormSection, HelperText, HelperTextItem, List, ListItem, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
-  ModalHeader, Page, Progress, ProgressMeasureLocation, Spinner, Stack, StackItem, Switch, Title, ToggleGroup,
+  MenuToggle, ModalHeader, Page, Progress, Select, SelectList, SelectOption, ProgressMeasureLocation, Spinner, Stack, StackItem, Switch, Title, ToggleGroup,
   ToggleGroupItem, Toolbar, ToolbarContent, ToolbarGroup, ToolbarItem,
 } from '@patternfly/react-core';
 import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon';
 import { GlobeIcon } from '@patternfly/react-icons/dist/esm/icons/globe-icon';
+import { SlidersHIcon } from '@patternfly/react-icons/dist/esm/icons/sliders-h-icon';
 import { TimesIcon } from '@patternfly/react-icons/dist/esm/icons/times-icon';
 import { formatBytes } from '../shared/format';
 import type { ImagerApi } from '../shared/ipc';
@@ -21,6 +22,7 @@ import { APT_COMMAND, type UpdateCheck, type UpdateOffer, type UpdateResult } fr
 import type { Theme } from './theme';
 import { useI18n } from './i18n';
 import { LANG_NAMES, LANGS, type T } from '../shared/i18n';
+import { WOA_BOARDS } from '../woa/boards';
 
 declare global {
   interface Window { imager: ImagerApi }
@@ -55,7 +57,7 @@ export function Shell({ children, onSettings, mode, onMode }: {
             <ToolbarGroup align={{ default: 'alignEnd' }}>
               {mode && onMode && (
                 <ToolbarItem visibility={{ default: 'hidden', md: 'visible' }}>
-                  <ModeToggle mode={mode} onMode={onMode} />
+                  <ModeMenu mode={mode} onMode={onMode} />
                 </ToolbarItem>
               )}
               <ToolbarItem>
@@ -470,7 +472,7 @@ function CreditBadge() {
  * true for the build that shows it.
  */
 export function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const close = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -487,7 +489,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
     [t('about.network'), <>{t('about.network.value')} {link(`https://github.com/gahingwoo/maskrom-studio/blob/${BUILD.commit}/docs/network.md`, t('about.details'))}</>],
     [t('about.kept'), <span className="selectable">{t('about.kept.value', { path: api.dataDir })}</span>],
     [t('about.images'), t('about.images.value')],
-    [t('about.boards'), t('about.boards.value')],
+    [t('about.boards'), WOA_BOARDS.map((b) => b.name).join(lang === 'en' ? ', ' : '、')],
     [t('about.licence'), t('about.licence.value')],
     [t('about.madeBy'), link('https://gahingwoo.com', 'Ga Hing Woo (Jiaxing Hu)')],
     [t('about.source'), link('https://github.com/gahingwoo/maskrom-studio', 'github.com/gahingwoo/maskrom-studio')],
@@ -541,7 +543,32 @@ function ChannelPicker({ id, label, value, help, onChange }: { id: string; label
 
 export type UiMode = 'simple' | 'advanced';
 
-/** Simple | Advanced: a choice between two modes, so a toggle group, as the theme choice. */
+/**
+ * The masthead's mode choice: a plain toggle like the language and Settings buttons next to it, naming
+ * the current mode, that opens a select with both modes and what each one shows.
+ */
+export function ModeMenu({ mode, onMode }: { mode: UiMode; onMode: (m: UiMode) => void }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <Select id="mode-menu" isOpen={open} selected={mode} onOpenChange={setOpen} popperProps={{ position: 'end' }}
+      onSelect={(_e, v) => { setOpen(false); if (v !== mode) onMode(v as UiMode); }}
+      toggle={(ref) => (
+        <MenuToggle ref={ref} id="mode-toggle" variant="plainText" icon={<SlidersHIcon />} isExpanded={open} onClick={() => setOpen(!open)}
+          aria-label={`${t('mode.label')}: ${t(`mode.${mode}.name`)}`}>
+          {t(`mode.${mode}.name`)}
+        </MenuToggle>
+      )}>
+      <SelectList aria-label={t('mode.label')}>
+        {(['simple', 'advanced'] as UiMode[]).map((m) => (
+          <SelectOption key={m} id={`mode-${m}`} value={m} isSelected={mode === m} description={t(`mode.${m}.help`)}>{t(`mode.${m}.name`)}</SelectOption>
+        ))}
+      </SelectList>
+    </Select>
+  );
+}
+
+/** Simple | Advanced in Settings: a choice between two modes, so a toggle group, as the theme choice there. */
 export function ModeToggle({ mode, onMode, idPrefix = 'mode' }: { mode: UiMode; onMode: (m: UiMode) => void; idPrefix?: string }) {
   const { t } = useI18n();
   return (
