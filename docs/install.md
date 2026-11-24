@@ -1,5 +1,7 @@
 # Installing Maskrom Studio
 
+[简体中文](zh-CN/install.md)
+
 Get the package for your system from the
 [releases](https://github.com/gahingwoo/maskrom-studio/releases), or on macOS and
 Linux run:
@@ -95,6 +97,15 @@ eject the drive when the write is done, choose Ignore or Eject.
   ```
 
 Writing an SD card asks for your password (pkexec), as Etcher does.
+
+## Coming from an earlier version
+
+On the first start, the settings, the theme and language, and the saved
+UEFI settings copies are copied over from an earlier version's data folder
+(the app was called WoA RK3576 Imager before 2026-11-23). Its download
+cache stays where it was and can be deleted. The app id changed, so an
+earlier version is not updated in place: install this one, then remove the
+old app (the .deb and .rpm do that themselves).
 
 ## The Windows image
 

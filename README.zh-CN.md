@@ -1,108 +1,78 @@
 # Maskrom Studio
 
-[English](README.md)
+[English](README.md)（本页与英文版内容一致，2026-11-24）
 
-在 Rockchip 开发板上安装、恢复系统和 UEFI 固件。一个桌面应用：在电脑上通过 USB，把 Windows 11 23H2 直接装到 Rockchip RK3576 开发板的 eMMC 上，不需要 U 盘；也可以写入、升级开发板的 [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI 固件，或者把开发板恢复为 Armbian 或出厂映像。
+<img src="resources/icons/maskrom-studio.svg" alt="Maskrom Studio 图标：一块存储芯片，一个箭头向它写入" width="96" height="96">
 
-从早期版本升级：第一次启动时，早期版本数据文件夹里的设置、主题和语言、UEFI 设置副本会被复制过来。应用 ID 变了，所以不会原地更新：请安装本版本后再删除旧应用（Linux 的 .deb/.rpm 会自动替换）。
+一个桌面应用：在电脑上通过 USB（MaskROM 模式），给 Rockchip RK3576 开发板安装、恢复系统和 UEFI 固件：
 
-支持的开发板，以及每块板上 Windows 可以装到哪里：
+- 把 Windows 11 23H2 装到开发板的 eMMC 上，不需要 U 盘；
+- 写入 [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI 固件，或在保留 Windows 和设置的前提下升级固件；
+- 写入 Armbian 或开发板厂商的出厂映像，把开发板恢复回去。
+
+第一次接触这些板子？请从 [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576/blob/main/README.zh-CN.md) 开始：它的说明里有从新板子到 Windows 或 Linux 的完整路径。
+
+**现状（2026-11-24）：** 第一个版本，还没有在实际开发板上跑过。尚未测试的项目列在 [docs/dev/testing.md](docs/dev/testing.md)（英文）。
+
+## 开发板
 
 | 开发板 | 固件位置 | Windows 可装到 | MaskROM |
 |---|---|---|---|
-| 立创泰山派 3M（LCKFB TaishanPi 3M） | eMMC | eMMC、SD 卡（没有 M.2 插槽，所以不支持 NVMe） | 没有按键：短接 MSK 焊盘，或在固件中按 F4 |
+| 立创泰山派 3M（LCKFB TaishanPi 3M） | eMMC | eMMC、SD 卡（没有 M.2 插槽） | 没有按键：短接 MSK 焊盘，或在固件中按 F4 |
 | ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe（M.2） | 有按键 |
-| Radxa ROCK 4D | SPI NOR 闪存 | NVMe（M.2）、SD 卡；它没有 eMMC。Windows 还没有在这块板上启动过（ACPI 未完成） | 有按键 |
+| Radxa ROCK 4D | SPI NOR 闪存 | NVMe（M.2）、SD 卡；没有 eMMC。Windows 暂时还不能在这块板上启动（它的固件没有 ACPI 表） | 有按键 |
 
-现状：第一个版本，还没有在实际开发板上跑过。测试步骤见 [docs/hardware-test.md](docs/hardware-test.md)（英文）。
+## 两种模式
 
-有两种模式，可在顶栏或“设置”中切换。
-
-**简单模式**（新安装时的默认模式）：四个步骤，全部使用推荐设置：选开发板，选要做什么（安装 Windows、安装 Armbian、更新启动固件；恢复原厂系统在板上验证之前只在高级模式里），按说明让开发板进入刷机模式，最后确认会清除哪些内容。
+**简单模式**（默认）：四个步骤，全部使用推荐设置。选开发板，选要做什么（安装 Windows、安装 Armbian、更新启动固件），按说明让开发板进入刷机模式，最后确认会清除哪些内容。恢复出厂系统在板上跑过之前只放在高级模式里。
 
 | | |
 |---|---|
 | ![简单模式第 1 步：立创泰山派 3M 和 ArmSoM CM5-IO 的图片](docs/imgs/simple-board-zh-CN.png) 选开发板 | ![简单模式第 2 步：安装 Windows、安装 Linux（Armbian）、更新启动固件](docs/imgs/simple-what-zh-CN.png) 做什么 |
-| ![简单模式第 3 步：泰山派 3M 进入刷机模式的方法和 MSK 焊盘照片](docs/imgs/simple-ready-zh-CN.png) 准备 | ![设置：更新、下载文件与清除缓存、外观、语言](docs/imgs/settings-zh-CN.png) 设置 |
+| ![简单模式第 3 步：泰山派 3M 进入刷机模式的方法和 MSK 焊盘照片](docs/imgs/simple-ready-zh-CN.png) 准备 | ![简单模式第 4 步：写入什么、清除什么，勾选后才能开始](docs/imgs/simple-confirm-zh-CN.png) 确认 |
 
-**高级模式**：全部选项（固件的各种写法、磁盘布局、SD 卡和 U 盘、发布类型、WinPE 启动 U 盘）。
+**高级模式**：全部选项：固件的各种写法、磁盘布局、SD 卡和 U 盘、发布类型、WinPE 启动 U 盘。
 
 | | |
 |---|---|
-| ![写入内容这一步（高级模式）：Windows、UEFI 固件、Linux 和出厂系统分组](docs/imgs/task-zh-CN.png) 写入内容 | ![Windows 设置：自己设定 Windows 大小（40 GB），exFAT 数据分区，给 Linux 留 8 GB](docs/imgs/windows-setup-zh-CN.png) 磁盘布局 |
+| ![高级模式的写入内容：Windows、UEFI 固件、Linux 和出厂系统](docs/imgs/task-zh-CN.png) 写入内容 | ![Windows 设置里自定磁盘布局：40 GB Windows、exFAT 数据分区、给 Linux 留 8 GB](docs/imgs/windows-setup-zh-CN.png) 磁盘布局 |
+| ![固件升级的确认：已安装 0.4.1，新版本 0.4.2，保留 UEFI 设置](docs/imgs/upgrade-confirm.png) 固件升级 | ![关于 Maskrom Studio](docs/imgs/about-zh-CN.png) 关于 |
 
-更多截图（含深色主题）：[docs/screenshots.md](docs/screenshots.md)。
-
-发布类型（在“设置”中，应用自身的更新和要写入的固件、WinPE 分开设置）：**稳定版**（最新的正式版本）、**预发布版**（包括预发布版本）、**CI 构建**（main 分支最新一次成功构建，tag 为 `ci`，未经测试）。简单模式始终使用稳定版固件。
-
-macOS 可用 Homebrew：先 `brew trust gahingwoo/tap`，再 `brew install --cask gahingwoo/tap/maskrom-studio@nightly`（CI 构建）；有正式版本后可改用 `maskrom-studio`（稳定版）或 `maskrom-studio@beta`（预发布版），三者只能装一个。
+更多截图（含深色主题和中文界面）：[docs/screenshots.md](docs/screenshots.md)。
 
 ## 能做什么
 
-- **把 Windows 11 装到 eMMC。** 你提供一个 Windows 11 23H2 ARM64 的 ISO（或其中的 install.wim / install.esd）。开发板进入 MaskROM 模式后，应用把 [woa-rk3576](https://github.com/gahingwoo/woa-rk3576) 的 WinPE 和你的 Windows 映像写进 eMMC 上固件之后的空闲空间。开发板随后从 eMMC 启动这个 WinPE，用 DISM 把 Windows 装到 eMMC 上，加入 RK3576 驱动，删掉暂存空间，再重启进入 Windows。原理和取舍见 [docs/DESIGN.md](docs/DESIGN.md)（英文）。
-- **其他安装位置。** Windows 也可以装到插在电脑读卡器里的 SD 卡，或装在 USB 硬盘盒里的 NVMe 硬盘，写好后再装到开发板上（只限有这个位置的开发板，见上表）。Windows、Linux、macOS 电脑都可以这样做：开发板从卡或硬盘启动后用 DISM 自行安装 Windows 并加入驱动（20 到 40 分钟）。在 Windows 电脑上，还可以由应用直接用 DISM 生成装好的 Windows（适用于这两种位置，也适用于 eMMC：先生成虚拟磁盘，再通过 MaskROM 写入），开发板开机直接进入 Windows；Linux 和 macOS 上只有“在开发板上安装”这一种方式。
-- **装好的 Windows 直接可用。** 自带 RK3576 驱动并信任其测试证书；可以再加一个驱动文件夹（显示、触摸屏等）；默认开启 OpenSSH 服务器（22 端口）；按 UTC 读取主板时钟，每次开机后联网校时（板子的 RTC 不可靠，时间不对时测试签名的驱动会装不上）；首次启动可以走 Windows 自己的设置向导（OOBE），也可以完全跳过：填好用户名和密码，开机直接进桌面。
-- **UEFI 固件。** 从 edk2-rk3576 最新发布中取固件，按网页刷写工具 [flash.gahingwoo.com](https://flash.gahingwoo.com/) 完全相同的方式写入（“完整映像”或“保留分区”），通过 MaskROM。
-- **不一定占满整个磁盘。** Windows 可以只用设定的大小（至少 32 GB），剩下的空间可以不分配、建成 NTFS 或 exFAT 数据分区，或在末尾留给以后装 Linux；写入前会显示分区布局。
-- **回到 Linux。** 为泰山派 3M 或 CM5-IO 写入 Armbian 发布的任意官方映像（Debian 或 Ubuntu，厂商内核或主线内核，带或不带桌面：GNOME、KDE Plasma，以 Armbian 索引为准），并显示大小和所需空间：从 Armbian 下载，用 SHA-256 和 Armbian 的 OpenPGP 签名校验后写满整个 eMMC；或者写入你从开发板厂商下载的出厂 update.img（本程序会读取并检查，拒绝其他芯片的包，按 RKDevTool“升级固件”的方式写入；尚未在开发板上实测）。两者都会替换 Windows 和 UEFI 固件。
-- **保留 Windows 的固件升级。** 适用于泰山派 3M 和 CM5-IO：显示已安装和新的 edk2-rk3576 版本，把开发板的 UEFI 设置保存到电脑并写回，从不写分区表，写入的内容全部读回比较。
-- **在开发板上直接运行。** 在开发板上的 Linux（从 SD 卡或 U 盘启动）里运行本应用，可以直接写入本机的 eMMC 或 SPI NOR，不需要第二台电脑。
-- **WinPE 启动 U 盘。** 把 woa-rk3576 的 WinPE 映像写到 U 盘，按 woa-rk3576 的 [INSTALL.md](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/INSTALL.md) 手动安装。
+- **把 Windows 11 装到 eMMC。** 提供一个 Windows 11 23H2 ARM64 ISO（或其中的 install.wim / install.esd）。应用通过 MaskROM 把 [woa-rk3576](https://github.com/gahingwoo/woa-rk3576) 的 WinPE 和你的映像写进 eMMC 的空闲空间；开发板随后自己装好 Windows 和 RK3576 驱动，再重启进入 Windows（20 到 40 分钟）。
+- **其他安装位置。** 插在电脑读卡器里的 SD 卡，或装在 USB 硬盘盒里的 NVMe 硬盘，写好后再装到开发板上。在 Windows 电脑上，应用还可以直接用 DISM 生成装好的 Windows。
+- **装好的 Windows 直接可用。** 自带驱动并信任其测试证书，可以加入你自己的驱动文件夹，OpenSSH 监听 22 端口，按 UTC 读取时钟并在每次开机后校时，首次启动向导可以保留或跳过，可以精简后台应用，发行版带有 RK3576 工具（监视小组件、NPU 工具）时一并安装。
+- **不一定占满整个磁盘。** Windows 可以只用设定的大小（至少 32 GB），其余空间建成数据分区，或留给以后装 Linux。
+- **UEFI 固件。** 从 edk2-rk3576 最新发行版取固件，按 [flash.gahingwoo.com](https://flash.gahingwoo.com/) 相同的方式写入（"完整映像"或"保留分区"）；也可以升级固件，保留 Windows 和 UEFI 设置，并把写入的内容全部读回比较。
+- **回到 Linux。** 泰山派 3M 或 CM5-IO 的任意 Armbian 映像，用 SHA-256 和 Armbian 的签名校验；或者出厂 `update.img`（尚未在开发板上跑过）。
+- **在开发板上直接运行。** 在开发板上的 Linux 里运行，直接写入本机的 eMMC 或 SPI NOR，不需要第二台电脑。
+- **WinPE 启动 U 盘。** 把 woa-rk3576 的 WinPE 写到 U 盘，按它的[安装说明](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/zh-CN/install.md)使用。
 
-RK3576 是 ARMv8.0，无法运行 Windows 11 24H2 及更新版本。版本号高于 25999 的映像会在写入之前被拒绝。应用不会下载 Windows。
+RK3576 是 ARMv8.0，跑不了 Windows 11 24H2 及更新版本，这些映像会被拒绝。应用不提供也不下载 Windows：映像和许可证需要你自己准备。
 
-界面有英文和简体中文，默认跟随系统语言，右上角可以切换，选择会被记住。
+每一项的具体步骤：[docs/zh-CN/use.md](docs/zh-CN/use.md)。
 
-## 使用说明：在电脑上把 Windows 装到泰山派 3M
+界面有英文和简体中文，默认跟随系统语言，顶部的切换会记住你的选择。
 
-需要准备：
+## 安装
 
-- 开发板、USB-C 数据线（接板上标有 OTG+DP 的口）、USB 键盘、HDMI 显示器。
-- 一个 Windows 11 23H2 ARM64 的 ISO（版本号 22631）。本应用不提供也不下载 Windows，需要自己下载，并且需要有效的许可证。Microsoft 官网的 ARM64 ISO 只有当前版本，太新，无法使用。可以从 [NTriver](https://ntriver.org/download-windows-11)（中国大陆可用；其中 23H2 ARM64 的是批量许可 Pro 介质和 IoT Enterprise 介质，消费者版只有 x64）获取，或者用 [UUP dump](https://uupdump.net/known.php?q=22631+arm64) 在自己电脑上从 Microsoft 更新服务器生成 ISO。应用的“Windows 映像”一步里也列出了这些地方。
-- eMMC 上已经有 edk2-rk3576 固件，并且是用“完整映像”写的。还没有的话，先在本应用里选“UEFI 固件，完整映像”写一次。
-- SD 卡槽和 USB 口保持空着：固件会先从它们启动，再轮到 eMMC。
+Windows（x64、arm64）、macOS 和 Linux（AppImage、.deb、.rpm；x86_64 和 arm64）的安装包放在 [Releases](https://github.com/gahingwoo/maskrom-studio/releases) 页面。目前还没有正式版：标签为 `ci` 的预发布版是 main 最新的构建，未经测试。macOS 上：先 `brew trust gahingwoo/tap`，再 `brew install --cask gahingwoo/tap/maskrom-studio@nightly`。
 
-步骤：
+各系统首次运行时的提示、MaskROM 驱动（Windows 上用 Zadig 装 WinUSB，Linux 上加 udev 规则）、发布类型和更新：[docs/zh-CN/install.md](docs/zh-CN/install.md)。应用会访问哪些网站、保存什么：[docs/network.md](docs/network.md)（英文）。
 
-1. **开发板**：选择 LCKFB TaishanPi 3M。
-2. **写入内容**：选“把 Windows 11 装到 eMMC”。
-3. **Windows 映像**：点“选择文件”选中 ISO，或者把 ISO 拖进窗口。应用会显示从映像里读到的架构、版本号、启动文件和语言；不是 ARM64 的映像、24H2（26100）及更新的版本、早于 Windows 10 1809（17763）的版本会被拒绝；Windows 11 21H2 和 Windows 10 可以安装，但会提示没有用当前驱动测试过，推荐 23H2。表格里会列出映像中的各个版本，选一个（默认选专业版）。
-4. **Windows 设置**：
-   - 首次启动：保留 Windows 设置向导，或者选“跳过设置向导”，填写用户名、密码（以及可选的计算机名、语言、键盘、时区）。
-   - OpenSSH 服务器：默认开启；可以粘贴一行公钥，用于免密码登录管理员账户。
-   - 更多驱动：可以加一个含 .inf、.cat、.sys 的驱动文件夹，比如 wddm-mali-g52 或 gt9271。
-   - 精简 Windows：默认使用推荐的组合（删除后台运行的应用，关闭 OneDrive 自动设置、Copilot、小组件、推荐应用、Edge 后台运行、SysMain）；高级模式里可以逐项选择，也可以删除 Edge 并安装 Chrome（默认不选）。每一项怎么撤销见 docs/DESIGN.md。
-   - RK3576 工具（监视器小组件、NPU 工具）：WinPE 发行版带有工具包时默认安装。
-5. **确认**：检查要清除和写入的内容，按卡片上的说明让开发板进入 MaskROM：泰山派 3M 没有 MaskROM 按键，断电后短接 MSK 焊盘再上电；已经在运行这个固件的板子，也可以在启动倒计时按 F4。然后点“连接并写入”。
-6. 应用先读取开发板，显示 eMMC 容量和将要删除的分区。确认无误后点“清除并写入”。
-7. 写入完成后开发板自动重启，从 eMMC 进入 WinPE，自行安装 Windows（20 到 40 分钟），完成后再重启进入 Windows。
+## 开发文档（英文）
 
-如果安装中途出错，WinPE 会停下并在屏幕上显示日志，暂存分区会保留：重启开发板就会重新安装。要彻底放弃，用“UEFI 固件，完整映像”重新写一次固件即可。
+- [编译和测试](docs/dev/building.md)
+- [设计](docs/dev/design.md)：怎么工作、为什么这样做
+- [测试](docs/dev/testing.md)：哪些在开发板上跑过、哪些还没有，以及[板上测试步骤](docs/dev/hardware-test.md)
+- [发布](docs/dev/release.md)
+- [历史记录](docs/history/README.md)
 
-装好后：
-
-- 安装日志在 `C:\Windows\Logs\woa-stage.log`。
-- 开启了 SSH 的话，可以 `ssh 用户名@开发板地址` 登录，登录后的 shell 是 cmd.exe。
-- 桌面右下角会显示“测试模式”，这是驱动所需的测试签名模式。
-
-### 密码去了哪里
-
-选择“跳过设置向导”时，密码只写进 eMMC 上的应答文件（按 Windows 自己的方式编码，不是明文，但也不是加密），Windows 设置完成后应答文件会被删除。密码不会出现在任何日志里。勾选“每次开机自动登录”时，Windows 会像平常设置自动登录那样把密码存在注册表里。
-
-## 在开发板上直接运行
-
-在开发板上从 SD 卡或 U 盘启动 Armbian、Fedora 等 Linux，安装 arm64 的 AppImage 或 .deb 后运行。第一页会显示“本机就是开发板”，选“直接写入本机”即可。写入会要求管理员密码，写完全部读回比对。装 Windows 的话，写完后关机，拔掉 SD 卡或 U 盘再开机，开发板就会从 eMMC 进入 WinPE 开始安装。
-
-如果系统本身是从 eMMC 启动的，应用会拒绝写入 eMMC。
-
-## 安装本应用
-
-发布后，各平台的安装包（Windows x64，macOS，Linux 的 AppImage、.deb、.rpm，x86_64 和 arm64）会放在 [Releases](https://github.com/gahingwoo/maskrom-studio/releases) 页面。
-
-- Windows：MaskROM 写入需要 WinUSB 驱动。开发板进入 MaskROM 后，用 [Zadig](https://zadig.akeo.ie/) 为 ID 为 2207 的设备安装 WinUSB，一台电脑只需装一次。
-- Linux：.deb 和 .rpm 自带 udev 规则；用 AppImage 时，需要按应用里的提示添加一次 udev 规则。
-- macOS：不需要驱动。
+本项目派生自 [Roxora Imager](https://github.com/roxora-os/imager)，保留了它的提交历史；`upstream` 远端指向它。开发板列表和固件扇区取自 [edk2-webflash](https://github.com/gahingwoo/edk2-webflash)，原样复制。
 
 ## 许可证
 
-GPL-2.0，作者 Ga Hing Woo。本仓库和安装包都不包含 Rockchip 的 loader，首次使用时从 rkbin 下载并校验；也不包含、不下载 Windows。
+GPL-2.0，作者 Ga Hing Woo。rkdeveloptool 是 GPL-2.0-or-later，libusb 是 LGPL-2.1，etcher-sdk 是 Apache-2.0。本仓库和安装包都不包含 Rockchip 的 loader，首次需要时从 rkbin 下载。不包含、也不下载 Windows。
