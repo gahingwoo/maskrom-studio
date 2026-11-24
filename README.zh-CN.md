@@ -18,11 +18,11 @@
 
 有两种模式，可在顶栏或“设置”中切换。
 
-**简单模式**（新安装时的默认模式）：四个步骤，全部使用推荐设置：选开发板，选要做什么（安装 Windows、安装 Armbian、恢复原厂系统、更新启动固件），按说明让开发板进入刷机模式，最后确认会清除哪些内容。
+**简单模式**（新安装时的默认模式）：四个步骤，全部使用推荐设置：选开发板，选要做什么（安装 Windows、安装 Armbian、更新启动固件；恢复原厂系统在板上验证之前只在高级模式里），按说明让开发板进入刷机模式，最后确认会清除哪些内容。
 
 | | |
 |---|---|
-| ![简单模式第 1 步：立创泰山派 3M 和 ArmSoM CM5-IO 的图片](docs/imgs/simple-board-zh-CN.png) 选开发板 | ![简单模式第 2 步：安装 Windows、安装 Linux（Armbian）、恢复原厂系统、更新启动固件](docs/imgs/simple-what-zh-CN.png) 做什么 |
+| ![简单模式第 1 步：立创泰山派 3M 和 ArmSoM CM5-IO 的图片](docs/imgs/simple-board-zh-CN.png) 选开发板 | ![简单模式第 2 步：安装 Windows、安装 Linux（Armbian）、更新启动固件](docs/imgs/simple-what-zh-CN.png) 做什么 |
 | ![简单模式第 3 步：泰山派 3M 进入刷机模式的方法和 MSK 焊盘照片](docs/imgs/simple-ready-zh-CN.png) 准备 | ![设置：更新、下载文件与清除缓存、外观、语言](docs/imgs/settings-zh-CN.png) 设置 |
 
 **高级模式**：全部选项（固件的各种写法、磁盘布局、SD 卡和 U 盘、发布类型、WinPE 启动 U 盘）。

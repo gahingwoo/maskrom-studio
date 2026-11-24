@@ -11,6 +11,8 @@ function dataDir() {
   put('images/TaishanPi3M-emmc-edk2-0.4.1.img', 1000);
   put('images/armbian/Armbian.img', 3000);
   put('images/armbian/Armbian.img.sha256', 70);
+  // A download that was broken off, kept to go on from (release-download.ts).
+  put('images/winpe.img.xz.part', 300);
   put('loaders/rk3576_spl_loader.bin', 200);
   put('nvdata-backups/tspi3m-nvdata-1.bin', 500);
   put('settings.json', 20);
@@ -21,7 +23,7 @@ describe('the cache', () => {
   it('measures the downloads, the loader pieces and the settings copies apart', () => {
     const d = dataDir();
     const c = cacheInfo(d);
-    expect(c.images).toMatchObject({ bytes: 4070, files: 3, names: ['TaishanPi3M-emmc-edk2-0.4.1.img', 'armbian'] });
+    expect(c.images).toMatchObject({ bytes: 4370, files: 4, names: ['TaishanPi3M-emmc-edk2-0.4.1.img', 'armbian', 'winpe.img.xz.part'] });
     expect(c.loaders).toMatchObject({ bytes: 200, files: 1 });
     expect(c.nvdata).toMatchObject({ bytes: 500, files: 1 });
     rmSync(d, { recursive: true, force: true });
@@ -30,7 +32,7 @@ describe('the cache', () => {
   it('deletes the downloads and loader pieces, keeps the settings copies and the settings', () => {
     const d = dataDir();
     const r = clearCache(d, { nvdata: false, busy: false });
-    expect(r).toMatchObject({ ok: true, freed: 4270 });
+    expect(r).toMatchObject({ ok: true, freed: 4570 });
     expect(existsSync(join(d, 'images'))).toBe(false);
     expect(existsSync(join(d, 'loaders'))).toBe(false);
     expect(existsSync(join(d, 'nvdata-backups', 'tspi3m-nvdata-1.bin'))).toBe(true);
@@ -39,7 +41,7 @@ describe('the cache', () => {
   });
   it('deletes the settings copies only when asked', () => {
     const d = dataDir();
-    expect(clearCache(d, { nvdata: true, busy: false })).toMatchObject({ ok: true, freed: 4770 });
+    expect(clearCache(d, { nvdata: true, busy: false })).toMatchObject({ ok: true, freed: 5070 });
     expect(existsSync(join(d, 'nvdata-backups'))).toBe(false);
     expect(existsSync(join(d, 'settings.json'))).toBe(true);
     rmSync(d, { recursive: true, force: true });
@@ -47,7 +49,7 @@ describe('the cache', () => {
   it('refuses while a write runs, and deletes nothing', () => {
     const d = dataDir();
     expect(clearCache(d, { nvdata: true, busy: true })).toMatchObject({ ok: false, reason: expect.stringMatching(/write is running/) });
-    expect(cacheInfo(d).images.files).toBe(3);
+    expect(cacheInfo(d).images.files).toBe(4);
     rmSync(d, { recursive: true, force: true });
   });
 });

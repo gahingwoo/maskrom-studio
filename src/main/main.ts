@@ -87,11 +87,13 @@ function askUsb(wc: WebContents, choices: UsbChoice[]): Promise<string> {
 function createWindow() {
   // Never larger than the screen's work area (a 1366x768 laptop at 125%
   // has 1093x614 to give): a window taller than the screen hides its bottom,
-  // and no scrolling inside it can reach that.
+  // and no scrolling inside it can reach that. At least 560 high (UX audit
+  // D7): at 480 the content had about 250 px and the confirm page's "erased"
+  // row needed scrolling.
   const area = screen.getPrimaryDisplay().workAreaSize;
   win = new BrowserWindow({
     width: Math.min(1100, area.width), height: Math.min(780, area.height),
-    minWidth: Math.min(720, area.width), minHeight: Math.min(480, area.height),
+    minWidth: Math.min(720, area.width), minHeight: Math.min(560, area.height),
     show: false,
     title: 'Maskrom Studio',
     icon: join(resourcesDir, 'icons', 'png', 'maskrom-studio-256.png'),
@@ -364,6 +366,26 @@ ipcMain.handle('upgrade:save-nvdata', (_e, board: BoardId, data: Uint8Array) => 
     const path = join(nvdataDir(), `${board}-nvdata-${stamp}.bin`);
     writeFileSync(path, data);
     return { path: shownPath(path) };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
+
+/** Before a write over MaskROM: the partition table and UEFI settings, with a note of what each is. */
+ipcMain.handle('backup:save-before-write', (_e, board: BoardId, files: Array<{ name: string; data: Uint8Array }>, notes: string[]) => {
+  try {
+    if (!woaBoard(board)) return { error: 'Unknown board.' };
+    if (!Array.isArray(files) || files.length === 0 || files.length > 4) return { error: 'Nothing to keep.' };
+    for (const f of files) {
+      if (!/^[a-z0-9.-]{1,64}\.bin$/.test(f?.name ?? '') || !(f.data instanceof Uint8Array) || f.data.length > 1 << 20) return { error: 'Not a backup file.' };
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dir = join(nvdataDir(), `${board}-before-write-${stamp}`);
+    mkdirSync(dir, { recursive: true });
+    for (const f of files) writeFileSync(join(dir, f.name), f.data);
+    const text = (Array.isArray(notes) ? notes : []).map((l) => String(l).replace(/[\r\n]/g, ' ')).join('\n');
+    writeFileSync(join(dir, 'backup.txt'), `${text}\n`);
+    return { path: shownPath(dir) };
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
   }

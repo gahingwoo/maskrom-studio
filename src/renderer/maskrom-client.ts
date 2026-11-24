@@ -19,7 +19,7 @@ export function startMaskrom(req: Omit<WorkerRequest, 'type' | 'moduleUrl' | 'wa
     else if (m.type === 'progress') on.progress(m.stage, m.percent);
     else if (m.type === 'result') { resolve(m.result); w.terminate(); }
   };
-  w.onerror = (e) => { resolve({ ok: false, reason: 'The Maskrom writer stopped.', detail: e.message }); w.terminate(); };
+  w.onerror = (e) => { resolve({ ok: false, reason: 'The MaskROM writer stopped.', detail: e.message }); w.terminate(); };
   // Relative to the page: app://local/ in Electron, .../imager/ on the web.
   const at = (p: string) => new URL(p, document.baseURI).href;
   w.postMessage({

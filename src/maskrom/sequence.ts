@@ -156,7 +156,7 @@ export async function flash(r: Runner, plan: FlashPlan, hooks: Hooks): Promise<F
   try {
     hooks.stage('detect');
     const mode = parseList((await r.run(['ld'])).lines);
-    if (mode === 'none') return { ok: false, reason: 'No board in Maskrom mode was found.' };
+    if (mode === 'none') return { ok: false, reason: 'No board in MaskROM mode was found.' };
     if (mode === 'several') return { ok: false, reason: 'More than one Rockchip device is connected. Leave only the board you want to write.' };
 
     // The loader (usbplug) answers rfi; plain Maskrom cannot. On the RK3576
@@ -203,7 +203,7 @@ export async function flash(r: Runner, plan: FlashPlan, hooks: Hooks): Promise<F
         }
         if (!back) {
           return { ok: false, reason: 'The board did not come back after the loader was sent.',
-            detail: 'Unplug the USB cable, put the board in Maskrom mode again and retry.' };
+            detail: 'Unplug the USB cable, put the board in MaskROM mode again and retry.' };
         }
       }
     }

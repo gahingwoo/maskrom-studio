@@ -19,7 +19,7 @@ registry.
 
 ### 1. Stage and self-deploy (chosen)
 
-The PC writes, over Maskrom, into the eMMC behind the firmware partition:
+The PC writes, over MaskROM, into the eMMC behind the firmware partition:
 
 - `WOA-STAGE-BOOT`: woa-rk3576's WinPE FAT32 volume, byte for byte as the
   release ships it, except `woa-debug\collect.cmd`, which is replaced by a
@@ -40,19 +40,19 @@ is in place it deletes the staging partitions and extends Windows over them.
 Apply the image to an NTFS volume inside a disk image on the PC (wimlib, or
 DISM on Windows), inject drivers and registry changes offline (hivex on
 macOS and Linux), make the ESP and BCD, then write the whole result over
-Maskrom.
+MaskROM.
 
 ### Comparison
 
 | | 1. Stage | 2. Build on host |
 |---|---|---|
-| Bytes over Maskrom | WinPE (about 375 MB in use) plus the compressed image (3 to 6 GB) | The applied, uncompressed-on-disk Windows: about 10 to 12 GB of NTFS even with /Compact |
-| Time over Maskrom (USB 2.0, not yet measured; 10 to 25 MB/s assumed) | about 5 to 15 minutes | about 10 to 20 minutes, plus building the image on the PC |
+| Bytes over MaskROM | WinPE (about 375 MB in use) plus the compressed image (3 to 6 GB) | The applied, uncompressed-on-disk Windows: about 10 to 12 GB of NTFS even with /Compact |
+| Time over MaskROM (USB 2.0, not yet measured; 10 to 25 MB/s assumed) | about 5 to 15 minutes | about 10 to 20 minutes, plus building the image on the PC |
 | Time on the board | DISM apply on eMMC, 20 to 40 minutes, unattended | none |
 | Host OS support | Windows, macOS, Linux alike: everything the PC does is plain byte assembly in TypeScript | Windows: DISM needs admin and a mounted VHD. macOS and Linux: wimlib with NTFS-3G (not on macOS by default), hivex for the hives, and DISM's driver injection reimplemented (DriverStore, the DRIVERS hive, boot-start services) |
-| Admin rights on the PC | none (Maskrom over WebUSB; Linux needs the udev rule, Windows the WinUSB driver once) | Windows: yes. Others: no, but native tools to install |
+| Admin rights on the PC | none (MaskROM over WebUSB; Linux needs the udev rule, Windows the WinUSB driver once) | Windows: yes. Others: no, but native tools to install |
 | Proven parts | DISM, bcdboot and the registry edits are deploy-windows.cmd's, which installed Windows on both boards | none of the offline injection has run here |
-| Verification | GPT read back over Maskrom; samples of the rest where the loader allows; on the board DISM /Verify checks every file's hash as it applies, and certutil checks the image's SHA-256 where WinPE has it | Everything would have to be read back over Maskrom, which is unreliable past 32 MiB with this loader |
+| Verification | GPT read back over MaskROM; samples of the rest where the loader allows; on the board DISM /Verify checks every file's hash as it applies, and certutil checks the image's SHA-256 where WinPE has it | Everything would have to be read back over MaskROM, which is unreliable past 32 MiB with this loader |
 | Failure on the board | WinPE stops with the log on screen; the staging partitions stay and a restart retries | the board does not boot; diagnose blind |
 
 Approach 1 sends less over the slow link, needs no administrator rights or
@@ -60,12 +60,12 @@ native tools on any of the three host systems, reuses the deploy logic that
 has already installed Windows on both boards, and moves verification to
 where it can be done: the device. Approach 2 would have to reimplement what
 DISM /Add-Driver does for a boot-critical driver on two host systems, and
-its result could not be read back reliably over Maskrom.
+its result could not be read back reliably over MaskROM.
 
 ## Questions approach 1 had to answer
 
 **How the firmware boots the staged WinPE once.** BootNext cannot be set
-over Maskrom. It does not need to be: edk2-rk3576 creates a boot option per
+over MaskROM. It does not need to be: edk2-rk3576 creates a boot option per
 block device ("eMMC User Data"), and booting it loads
 `\EFI\Boot\bootaa64.efi` from the first FAT volume on that device that has
 it (`BmExpandMediaDevicePath` in MdeModulePkg). The new GPT has exactly one
@@ -99,7 +99,7 @@ staging partitions. After the apply the staging volumes are deleted
 exFAT volume (`src/woa/exfat.ts`). WinPE reads exFAT; the firmware does not
 need to.
 
-**Verification without the 32 MiB read limit.** Over Maskrom the app reads
+**Verification without the 32 MiB read limit.** Over MaskROM the app reads
 back the partition table (sector 0 to 33, inside the trusted 32 MiB), and
 three 64 KiB samples of each region; samples past 32 MiB that do not match
 are counted and reported (as 0xCC filler or otherwise), not taken as a
@@ -141,7 +141,7 @@ ROCK 4D's SPI NOR) and Windows.
   `CONFIG_SPI_ROCKCHIP_SFC` and `CONFIG_MTD_SPI_NOR` shows `/dev/mtd0`.
   Whether Armbian's ROCK 4D kernels (vendor and edge) enable both was not
   checked here. When there is no MTD device the app says what is missing
-  and points to Maskrom. The TaishanPi 3M and CM5-IO keep their firmware
+  and points to MaskROM. The TaishanPi 3M and CM5-IO keep their firmware
   on the eMMC.
 - Windows: the same staged layout, written with plain file I/O through the
   elevated helper (pkexec), then read back in full. The user shuts down,
@@ -159,7 +159,7 @@ one reboot.
 
 - **edk2-webflash** (flash.gahingwoo.com), the flasher proven on these
   boards: its board list (`src/boards.js`: firmware choices, sectors,
-  slices, wording, Maskrom steps) and its `prepare()` (`src/flash.js`) are
+  slices, wording, MaskROM steps) and its `prepare()` (`src/flash.js`) are
   copied unchanged into `src/web/webflash/`, so "whole image" and "keep the
   partitions" write exactly what the web flasher writes. Its command
   sequence (db, wl, rd, no cs) is the one `src/woa/maskrom-regions.ts`
@@ -172,7 +172,7 @@ one reboot.
   safety rules, updates, the pretend Rockusb board for tests.
 - **woa-rk3576**: the WinPE release image, its startnet.cmd hook, and
   deploy-windows.cmd's steps.
-- Base for the Maskrom sequence: Roxora Imager's runner and parsing, with
+- Base for the MaskROM sequence: Roxora Imager's runner and parsing, with
   edk2-webflash's commands. Roxora Imager's own `sequence.ts` adds `cs`,
   which has not run on these boards; the WoA path leaves it out as the web
   flasher does, and identifies the storage by its size from `rfi` instead.
@@ -189,7 +189,7 @@ second is offered where it can be done properly.
 
 | Target | Layout | Staged (default) | Built on the PC |
 |---|---|---|---|
-| eMMC, over Maskrom | firmware partition kept, Windows from 64 MiB | any host | Windows host: DISM into a VHD, then Maskrom |
+| eMMC, over MaskROM | firmware partition kept, Windows from 64 MiB | any host | Windows host: DISM into a VHD, then MaskROM |
 | eMMC, on the board | as above | Linux on the board | no |
 | SD card in the PC's reader | fresh GPT, Windows from 1 MiB | any host | Windows host: DISM onto the card |
 | NVMe in a USB enclosure | fresh GPT, Windows from 1 MiB | any host | Windows host: DISM onto the drive |
@@ -558,6 +558,27 @@ samples are read, and a sample that comes back as 0xCC filler or differs
 is reported, not counted as a failure, because this loader's reads past
 32 MiB are not trustworthy. Nothing claims a full read-back.
 
+## A copy before the eMMC's start is replaced
+
+Every write over MaskROM to an eMMC except the firmware upgrade (which
+keeps its own copy of the settings) replaces the partition table, the
+firmware with its UEFI settings, or both: Armbian and factory images, the
+firmware "whole image" and "keep the partitions", the staged and the
+PC-built Windows. Before planning such a write, the worker
+(src/woa/pre-write-backup.ts) reads sectors 0..33 and, when the eMMC holds
+edk2-rk3576 firmware, its nvdata slot, found from that firmware's own FIT
+(43648, 384 sectors on the current TaishanPi 3M and CM5-IO releases); all
+of it lies in the first 32 MiB, the part MaskROM reads back reliably. The
+page saves the files into `<data>/nvdata-backups/<board>-before-write-
+<time>/` with a backup.txt naming the board, the time, the firmware
+version and each file's SHA-256, and shows the folder on the confirmation
+card and the result. A copy that was read but could not be saved stops
+the write ("Nothing was written"); an eMMC without edk2-rk3576 firmware
+just has no settings to keep. Clear cache deletes these folders only when
+asked, like the upgrade's copies. Putting a copy back is not in the app
+yet: the upgrade carries settings over from the board itself, not from a
+file.
+
 ## Shared with Roxora Imager
 
 Written without the board list, to be offered to roxora-os/imager:
@@ -581,6 +602,29 @@ meant to be shared with Roxora Imager, which had none; the texts are in
 when a key the page uses is missing in either. Messages that come from the
 shared code (src/woa, src/main) are English sentences; known ones are
 shown in Chinese through patterns, unknown ones as they are.
+
+## Terms
+
+Settled in the November 2026 UX audit (D8). The page, the error messages
+that come from src/woa and src/main, the command-line output and these
+documents use them. The mode is written MaskROM everywhere; "Maskrom"
+stays only in the product name Maskrom Studio and in code identifiers.
+
+| English | 中文 | Note |
+|---|---|---|
+| flashing mode / MaskROM mode | 刷机模式（MaskROM） | Simple mode says "flashing mode" with a help popover; Advanced mode says "MaskROM mode"; both side by side where it first appears |
+| built-in storage | 板载存储 | Simple mode; Advanced mode says eMMC |
+| boot firmware / UEFI firmware | 启动固件 / UEFI 固件 | Simple / Advanced mode |
+| factory system package (update.img) | 原厂系统包（update.img） | |
+| image | 映像 | never 镜像 |
+| loader | 引导组件 | |
+| Windows build | 内部版本号 | as Microsoft's Chinese |
+| Windows edition | 版本 | e.g. 专业版 |
+| Windows release (23H2) | 版本 23H2 | |
+| read back / verify | 读回 / 校验 | |
+| erase | 清除 | |
+| Stable / Prerelease / CI | 稳定版 / 预发布版 / CI 构建 | |
+| Try again | 重试 | |
 
 ## Not in the first version
 

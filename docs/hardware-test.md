@@ -16,10 +16,10 @@ TaishanPi 3M first, from a build of `main`, and note the commit.
 - The eMMC already holding edk2-rk3576 0.4.1 written as "UEFI firmware,
   whole image" (the app's own firmware write is test 1).
 
-## 1. Firmware over Maskrom (about 2 minutes)
+## 1. Firmware over MaskROM (about 2 minutes)
 
 Board, TaishanPi 3M; What to write, "UEFI firmware, keep the partitions";
-Review, Connect and write. Put the board in Maskrom (F4 in the firmware's
+Review, Connect and write. Put the board in MaskROM (F4 in the firmware's
 countdown, or the MSK pads).
 
 Watch: the run page goes through "Sending the loader", "Waiting for the
@@ -31,7 +31,7 @@ Serial: the board resets and the new firmware banner appears.
 Also try "keep the partitions" on an eMMC without the edk2-rk3576 table:
 it must refuse before writing.
 
-## 2. Staged Windows install over Maskrom
+## 2. Staged Windows install over MaskROM
 
 Board, TaishanPi 3M; Windows 11 on the eMMC; choose the ISO; pick the
 edition; Review, Connect and write.
@@ -126,7 +126,7 @@ the install, and booted Windows.
   app; the log stays in the app's data folder (host-build\host-build.log)
   on failure. The card or drive should start straight into Windows.
 - **Windows PC, built here, eMMC.** About 15 GB free in the app's data
-  folder. After the DISM build the app connects over Maskrom; the confirm
+  folder. After the DISM build the app connects over MaskROM; the confirm
   card shows the eMMC and what is removed; the write sends only the
   virtual disk's blocks with data (note the size and time). The board
   restarts into Windows.
@@ -147,5 +147,5 @@ board: LCKFB TaishanPi 3M" on the first page.
 
 ## 4. CM5-IO
 
-Test 2 on the CM5-IO (Maskrom button). The eMMC should report about
+Test 2 on the CM5-IO (MaskROM button). The eMMC should report about
 31272730624 bytes.

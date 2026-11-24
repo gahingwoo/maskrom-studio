@@ -156,7 +156,6 @@ await session('upgrade', { env: { WOA_IMAGER_TEST_WORKER: 'fake-board-worker.js'
   await page.waitForSelector('text=rk3576-lckfb-tspi-3m');
   await next(page);
   await page.click('.pf-v6-c-wizard__footer button:has-text("Connect and write")');
-  await page.click('.pf-v6-c-modal-box button:has-text("Connect")');
   await page.waitForSelector('text=Upgrade the firmware?', { timeout: 120000 });
   await page.waitForTimeout(500);
   await shot('upgrade-confirm');

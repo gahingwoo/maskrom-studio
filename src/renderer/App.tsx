@@ -26,6 +26,7 @@ import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { ARMBIAN_RESTORE, DESKTOPS, distroWords, simpleOffers, variantWords, type ArmbianOffer } from '../woa/armbian-restore';
 import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
+import { MaskromLive } from './maskrom-live';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
@@ -43,6 +44,8 @@ interface Run {
   log: string[];
   confirm: StageSummary | FirmwareSummary | WholeSummary | FactorySummary | UpgradeSummary | null;
   result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[]; help?: 'noBoard' } | null;
+  /** Where the partition table and UEFI settings were kept before the write (pre-write-backup.ts). */
+  backup?: string;
 }
 interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }>;
   layout?: { windowsBytes: number; data: { fs: string; label: string; bytes: number } | null; unallocatedBytes: number }; chosen?: boolean }
@@ -118,7 +121,6 @@ export function App() {
   const [dest, setDest] = useState<Dest>('emmc');
   const [method, setMethod] = useState<Method>('stage');
   const [disk, setDisk] = useState<string | null>(null);
-  const [ask, setAsk] = useState(false);
   const [layoutMode, setLayoutMode] = useState<'whole' | 'custom'>('whole');
   const [winGb, setWinGb] = useState('');
   const [rest, setRest] = useState<RestUse>('unallocated');
@@ -312,7 +314,7 @@ export function App() {
       return { ok: true, title: okTitle, ...(text ? { text } : {}), ...(next ? { next } : {}) };
     }
     return { ok: false, title: errorText(r.reason), ...('detail' in r && r.detail ? { detail: r.detail } : {}),
-      ...(/^No board in Maskrom mode was found/.test(r.reason) ? { help: 'noBoard' as const } : {}) };
+      ...(/^No board in MaskROM mode was found/.test(r.reason) ? { help: 'noBoard' as const } : {}) };
   };
 
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
@@ -359,15 +361,21 @@ export function App() {
           if ('path' in r) addLog(t('upgrade.backupSaved', { path: r.path }));
           w.postMessage({ type: 'woa-backup-saved', path: 'path' in r ? r.path : null, ...('error' in r ? { error: r.error } : {}) } satisfies WoaWorkerRequest);
         });
+      } else if (m.type === 'pre-backup') {
+        api.saveBeforeWrite(m.boardId as BoardId, m.files, m.notes).then((r) => {
+          if ('path' in r) { const path = r.path; update((x) => ({ ...x, backup: path })); addLog(t('backup.where', { path })); }
+          w.postMessage({ type: 'woa-backup-saved', path: 'path' in r ? r.path : null, ...('error' in r ? { error: r.error } : {}) } satisfies WoaWorkerRequest);
+        });
       } else if (m.type === 'planned') {
         update((r) => ({ ...r, confirm: m.summary as Run['confirm'] }));
       } else if (m.type === 'result') {
         w.terminate();
         worker.current = null;
-        finish(resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
+        const done = resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
           : job.kind === 'upgrade' ? t('result.upgrade')
           : job.kind === 'whole' ? t('result.restore.armbian') : job.kind === 'factory' ? t('result.restore.factory') : t('result.firmware'),
-          job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined));
+          job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined);
+        finish(done);
         if (m.result.ok) update((r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, percent: 100 })) }));
       }
     };
@@ -383,7 +391,6 @@ export function App() {
   const storageWord = (b: WoaBoard, tk: Task) => t(tk === 'windows' || b.firmwareStorage === 'emmc' ? 'storage.emmc' : 'storage.spinor');
 
   const start = async () => {
-    setAsk(false);
     if (!board || !task) return;
     if (driveTask) {
       const isArmbian = task === 'armbian';
@@ -514,8 +521,8 @@ export function App() {
     servedTokens.current = [];
     setWizardStart(run?.result && !run.result.ok ? lastStep : 1);
     setRun(null);
-    // Try again: as pressing Start (Simple) or the Review button (Advanced, which asks first) once more.
-    if (again) { if (mode === 'simple') start(); else setAsk(true); }
+    // Try again: as pressing Start or the Review button once more; what is erased was confirmed on that page.
+    if (again) start();
   };
 
   // --- steps -------------------------------------------------------------------
@@ -593,7 +600,7 @@ export function App() {
             <Radio id="task-armbian" name="task" label={t('task.armbian')} isChecked={task === 'armbian'} isDisabled={onBoard}
               onChange={() => setTask('armbian')} description={onBoard ? t('task.restore.here') : t('task.armbian.short')} />
             <Radio id="task-factory" name="task" label={t('task.factory')} isChecked={task === 'factory'} isDisabled={onBoard}
-              onChange={() => setTask('factory')} description={onBoard ? t('task.restore.here') : t('task.factory.short')} />
+              onChange={() => setTask('factory')} description={onBoard ? t('task.restore.here') : `${t('task.factory.short')} ${t('task.factory.untested')}`} />
           </FormGroup>
         )}
       </Form>
@@ -996,6 +1003,7 @@ export function App() {
         <Stack hasGutter>
           <List component="ol" type={OrderType.number}>{maskromSteps(board).map((s) => <ListItem key={s}>{s}</ListItem>)}</List>
           {board.webflash.maskromNote && <Content component="p">{lang === 'en' ? board.webflash.maskromNote : t(`maskrom.${board.id}.note`)}</Content>}
+          <MaskromLive board={board.name} />
           <DriversNote />
         </Stack>
       </CardBody>
@@ -1089,6 +1097,18 @@ export function App() {
     }
   }
 
+  const erases = task !== 'upgrade';
+  const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
+    : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
+    : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
+  const askText = !board || !task ? '' : driveTask ? t('ask.drive.text', { drive: drives?.find((x) => x.device === stick)?.description ?? stick ?? '' })
+    : restoreTask ? t('ask.restore.text')
+    : task === 'stick' ? t('ask.stick.text')
+    : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
+      : task === 'windows' && method === 'host' ? t('ask.host.text')
+    : onBoard ? `${here?.emmc && (task === 'windows' || board.firmwareStorage === 'emmc') ? `${here.emmc.model}, ${here.emmc.device}, ${GB(here.emmc.bytes)}. ` : ''}${task === 'windows' ? t('ask.here.windows') : ''}${t('ask.here.password')}`
+      : t('ask.connect.text');
+
   const reviewStep = (
     <StepPage title={t('step.review')}>
       <Review rows={reviewRows} />
@@ -1119,11 +1139,21 @@ export function App() {
         </FormGroup>
       )}
       {maskromCard}
+      {/* The one confirmation before starting (UX audit D5): what is erased, a box to tick, then the button below.
+          A write over MaskROM still shows what the board itself reports before anything is written. */}
+      {board && task && (
+        <Alert isInline variant={erases ? 'warning' : 'info'} title={askTitle} id="review-erase">
+          <Stack hasGutter>
+            <Content component="p">{askText}</Content>
+            {erases && <Checkbox id="review-understood" label={t('review.understand')} isChecked={understood} onChange={(_e, v) => setUnderstood(v)} />}
+          </Stack>
+        </Alert>
+      )}
     </StepPage>
   );
 
   // --- Simple mode -------------------------------------------------------------
-  const SIMPLE_TASKS: Task[] = ['windows', 'armbian', 'factory', 'upgrade'];
+  const SIMPLE_TASKS: Task[] = ['windows', 'armbian', 'upgrade'];
   // Simple mode installs to the built-in storage: the boards with an eMMC.
   const SIMPLE_BOARDS: BoardId[] = WOA_BOARDS.filter((b) => b.emmc).map((b) => b.id);
   const advancedOnly = WOA_BOARDS.filter((b) => !b.emmc).map((b) => b.name).join(', ');
@@ -1160,9 +1190,8 @@ export function App() {
     : task === 'armbian' ? !!armbianFound && !armbianTooBig
     : task === 'factory' ? !!factory && !factory.refuse
     : task === 'upgrade' ? upgradeReady : false;
-  const erases = task !== 'upgrade';
   const [understood2, setUnderstood2] = useState(false);
-  useEffect(() => { setUnderstood2(false); }, [task, boardId]);
+  useEffect(() => { setUnderstood2(false); setUnderstood(false); }, [task, boardId, dest, disk, stick, method, restoreTo]);
   const term = (word: string, help: string) => (
     <>
       {word}{' '}
@@ -1201,7 +1230,7 @@ export function App() {
         <FormGroup role="radiogroup" fieldId="s-task" aria-label={t('s.step.what')} isStack>
           {simpleChoice('windows', t('s.what.windows'), t('s.what.windows.desc'), !board.emmc)}
           {simpleChoice('armbian', t('s.what.armbian'), t('s.what.armbian.desc'), !ARMBIAN_RESTORE[board.id])}
-          {simpleChoice('factory', t('s.what.factory'), t('s.what.factory.desc'), !ARMBIAN_RESTORE[board.id])}
+          {/* The factory restore is in Advanced mode only until it has run on a board (UX audit D1). */}
           {simpleChoice('upgrade', t('s.what.upgrade'), t('s.what.upgrade.desc'), board.firmwareStorage !== 'emmc')}
         </FormGroup>
         {task === 'windows' && (
@@ -1266,21 +1295,6 @@ export function App() {
             </HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
         )}
-        {task === 'factory' && (
-          <FormGroup fieldId="s-factory" label={term(t('s.factory.term'), t('s.factory.term.help'))}>
-            <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
-              <FlexItem><Button id="s-factory" variant="secondary" onClick={chooseFactory}>{t('s.factory.choose')}</Button></FlexItem>
-              <FlexItem><Button variant="link" isInline component="a" href={factoryLink} target="_blank">{t('restore.factory.where')}</Button></FlexItem>
-            </Flex>
-            {(factory || factoryError) && (
-              <FormHelperText><HelperText>
-                {factoryError ? <HelperTextItem variant="error">{t('s.factory.bad')} {factoryError}</HelperTextItem>
-                  : factory!.refuse ? <HelperTextItem variant="error">{t('s.factory.bad')} {msg(factory!.refuse)}</HelperTextItem>
-                  : <HelperTextItem variant="success">{t('s.factory.ok', { model: factory!.model, version: factory!.version })}</HelperTextItem>}
-              </HelperText></FormHelperText>
-            )}
-          </FormGroup>
-        )}
         {task === 'upgrade' && (
           <FormGroup fieldId="s-upgrade" label={t('s.what.upgrade')}>
             <Content component="p">{upgradeReady ? t('s.upgrade.info', { version: upgrade.version ?? upgrade.origin }) : upgradeError ?? t('s.upgrade.loading')}</Content>
@@ -1298,6 +1312,7 @@ export function App() {
   };
   const simpleReadyStep = board && (
     <StepPage title={t('s.step.ready')} lead={t('s.ready.lead')}>
+      <MaskromLive board={board.name} />
       <Card isPlain>
         <CardTitle>{term(t('s.ready.title'), t('s.ready.term.help'))}</CardTitle>
         <CardBody>
@@ -1394,20 +1409,6 @@ export function App() {
     ]} />
   ));
 
-  const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
-    : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
-    : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
-  const askText = !board || !task ? '' : driveTask ? t('ask.drive.text', { drive: drives?.find((x) => x.device === stick)?.description ?? stick ?? '' }) : restoreTask ? (
-    <Stack hasGutter>
-      <Content component="p">{t('ask.restore.text')}</Content>
-      <Checkbox id="ask-understood" label={t('ask.restore.understand')} isChecked={understood} onChange={(_e, v) => setUnderstood(v)} />
-    </Stack>
-  ) : task === 'stick' ? t('ask.stick.text')
-    : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
-      : task === 'windows' && method === 'host' ? t('ask.host.text')
-    : onBoard ? `${here?.emmc && (task === 'windows' || board.firmwareStorage === 'emmc') ? `${here.emmc.model}, ${here.emmc.device}, ${GB(here.emmc.bytes)}. ` : ''}${task === 'windows' ? t('ask.here.windows') : ''}${t('ask.here.password')}`
-      : t('ask.connect.text');
-
   return (
     <Shell onSettings={() => setSettings(true)} mode={run ? null : mode} onMode={requestMode}>
       {!run && offer && dismissed !== offer.version && (
@@ -1431,6 +1432,7 @@ export function App() {
                 <CardBody>
                   <Stack hasGutter>
                     {confirmText}
+                    {run.backup && <Content component="p" className="muted">{t('backup.where', { path: run.backup })}</Content>}
                     <ActionList>
                       <ActionListGroup>
                         <ActionListItem><Button variant={c?.kind === 'upgrade' ? 'primary' : 'danger'} onClick={() => answer(true)}>{t(c?.kind === 'upgrade' ? 'go.upgrade' : 'go.erase')}</Button></ActionListItem>
@@ -1446,6 +1448,7 @@ export function App() {
               <Alert isInline variant={run.result.ok ? 'success' : 'danger'} title={run.result.title}>
                 {run.result.text && <p>{run.result.text}</p>}
                 {run.result.detail && <p className="detail">{run.result.detail}</p>}
+                {run.backup && <p>{t('backup.where', { path: run.backup })}</p>}
               </Alert>
             )}
             {run.result?.ok && run.result.next && (
@@ -1497,22 +1500,12 @@ export function App() {
             {task === 'upgrade' && (<WizardStep name={t('step.upgrade')} id="upgrade" footer={{ isNextDisabled: !upgradeReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{upgradeStep}</WizardStep>)}
             {restoreTask && (<WizardStep name={t('step.restore')} id="restore" footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>)}
             <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady) || (task === 'upgrade' && !upgradeReady)}
-              footer={<ReviewFooter label={goLabel} disabled={!!why} why={why} onGo={() => setAsk(true)} />}>
+              footer={<ReviewFooter label={goLabel} disabled={!!why || (erases && !understood)} why={why ?? (erases && !understood ? t('review.tick') : null)} onGo={() => { setUnderstood(false); start(); }} />}>
               {reviewStep}
             </WizardStep>
           </Wizard>}
         </PageSection>
       )}
-      <Modal isOpen={ask} onClose={() => { setAsk(false); setUnderstood(false); }} variant="small" aria-labelledby="ask-title">
-        <ModalHeader title={askTitle} labelId="ask-title" />
-        <ModalBody>{askText}</ModalBody>
-        <ModalFooter>
-          {restoreTask && !driveTask
-            ? <Button variant="danger" onClick={() => { setUnderstood(false); start(); }} isDisabled={!understood}>{t('ask.connect')}</Button>
-            : <Button variant={onBoard || task === 'stick' || driveTask || onPc ? 'danger' : 'primary'} onClick={start}>{onBoard || task === 'stick' || driveTask || onPc ? t('go.erase') : t('ask.connect')}</Button>}
-          <Button variant="link" onClick={() => setAsk(false)}>{t('cancel')}</Button>
-        </ModalFooter>
-      </Modal>
       <SettingsModal open={settings} onClose={() => setSettings(false)} theme={theme} setTheme={setTheme}
         onOffer={(o) => setOffer(o)} onUpdate={() => { setSettings(false); setUpdating(true); }} writing={!!run && !run.result}
         onAbout={() => { setSettings(false); setAbout(true); }} onFirmwareChannel={() => api.releases(true).then(setReleases)}

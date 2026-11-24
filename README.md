@@ -25,12 +25,13 @@ Two modes, switched in the masthead or in Settings.
 
 **Simple** (the default for a new install): four steps with the
 recommended choices: the board, what to do (install Windows, install
-Armbian, restore the factory system, update the boot firmware), how to put
-the board in flashing mode, and a confirmation that says what is erased.
+Armbian, update the boot firmware; restoring the factory system is in
+Advanced mode only until it has been verified on a board), how to put the
+board in flashing mode, and a confirmation that says what is erased.
 
 | | |
 |---|---|
-| ![Simple mode, step 1: pictures of the LCKFB TaishanPi 3M and the ArmSoM CM5-IO](docs/imgs/simple-board.png) Choose the board | ![Simple mode, step 2: install Windows, install Linux (Armbian), restore the factory system, update the boot firmware; a Windows file chosen and ready to install](docs/imgs/simple-what.png) What to do |
+| ![Simple mode, step 1: pictures of the LCKFB TaishanPi 3M and the ArmSoM CM5-IO](docs/imgs/simple-board.png) Choose the board | ![Simple mode, step 2: install Windows, install Linux (Armbian), update the boot firmware; a Windows file chosen and ready to install](docs/imgs/simple-what.png) What to do |
 | ![Simple mode, step 3: how to put the TaishanPi 3M in flashing mode, with a photo of the MSK pads, and what will be erased](docs/imgs/simple-ready.png) Get ready | ![Simple mode, step 4: board, what, from, what is erased, how it is checked, what happens next, and a box to tick before Start](docs/imgs/simple-confirm.png) Confirm |
 
 **Advanced**: every option (firmware variants, disk layout, SD cards and
@@ -46,7 +47,7 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
 ## What it does
 
 - **Windows 11 on the eMMC.** You give it a Windows 11 23H2 ARM64 ISO (or
-  its install.wim or install.esd). With the board in Maskrom mode, the app
+  its install.wim or install.esd). With the board in MaskROM mode, the app
   writes [woa-rk3576](https://github.com/gahingwoo/woa-rk3576)'s WinPE and
   your Windows image into the free space of the eMMC, behind the firmware.
   The board then boots that WinPE from the eMMC, installs Windows onto the
@@ -58,7 +59,7 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
   alike: the board installs it from there with DISM and adds the drivers
   (20 to 40 minutes). On a Windows PC the app can instead build the
   finished Windows itself with DISM, for these and for the eMMC (written
-  over Maskrom from a virtual disk), so the board starts straight into
+  over MaskROM from a virtual disk), so the board starts straight into
   Windows. On Linux and macOS the install on the board is the only method.
 - **Not the whole disk, if you like.** Windows can take a chosen size (32 GB
   or more) and leave the rest unallocated, as an NTFS or exFAT data
@@ -72,7 +73,7 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
   a user name and password and the board starts straight to the desktop.
 - **UEFI firmware.** The latest edk2-rk3576 release, written as the web
   flasher [flash.gahingwoo.com](https://flash.gahingwoo.com/) writes it
-  ("whole image" or "keep the partitions"), over Maskrom.
+  ("whole image" or "keep the partitions"), over MaskROM.
 - **Firmware upgrade that keeps Windows.** For the TaishanPi 3M and
   CM5-IO: shows the installed and the new edk2-rk3576 version, saves the
   board's UEFI settings on the PC and writes them back, never touches the
@@ -135,7 +136,7 @@ the firmware and WinPE it writes: **Stable** (the newest release that is
 not a pre-release), **Prerelease** (pre-releases included) and **CI** (the
 rolling `ci` release of the latest successful build of main, untested).
 Simple mode always writes Stable firmware. What each system asks on first start, and the
-drivers for Maskrom (WinUSB through Zadig on Windows, a udev rule on Linux):
+drivers for MaskROM (WinUSB through Zadig on Windows, a udev rule on Linux):
 [docs/install.md](docs/install.md).
 
 ## Building
@@ -153,9 +154,9 @@ npm start
 ## Tests
 
 ```sh
-npm test                               # layout, GPT, FAT32, exFAT, UDF, WIM, Maskrom through the WASM against a pretend board
+npm test                               # layout, GPT, FAT32, exFAT, UDF, WIM, MaskROM through the WASM against a pretend board
 node scripts/electron-woa-e2e.mjs      # the staged install inside Electron against a pretend TaishanPi 3M
-node scripts/electron-maskrom-e2e.mjs  # Roxora Imager's Maskrom path inside Electron
+node scripts/electron-maskrom-e2e.mjs  # Roxora Imager's MaskROM path inside Electron
 node --test test/webflash/*.test.js    # modules copied from edk2-webflash
 node scripts/shots.mjs dev/shots       # screenshots, light and dark
 ```

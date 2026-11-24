@@ -1,12 +1,24 @@
 # Not yet tested on a board
 
-What CI checks (unit tests, the Maskrom paths through the WASM against a
+What CI checks (unit tests, the MaskROM paths through the WASM against a
 pretend board, Electron end-to-end runs, screenshots) is not a board. This
 list is what still needs the real hardware, for the combined test. Strike
 an entry by moving it to "Tested" with the date and what was seen.
 
 ## Untested
 
+- **Live MaskROM line** (ux-decisions D2): on the Get ready page and the
+  MaskROM card, the line turns green within two seconds of the board
+  entering MaskROM (TaishanPi 3M pads, CM5-IO button) on Linux, macOS and
+  Windows; on a Windows PC without WinUSB it says the driver is missing
+  and turns green after Zadig; unplugging turns it back. The write right
+  after it still finds the board (the Windows check opens and closes the
+  device once).
+- **The copy before a write** (ux-decisions D6): Armbian, a factory image,
+  the firmware and a Windows install on both boards each leave a folder in
+  nvdata-backups with gpt-sectors-0-33.bin, nvdata-sector-43648-384.bin
+  (when the board had settings) and backup.txt; the SHA-256 in it match the
+  files; the folder is named on the confirmation card and the result.
 - **Staged Windows onto an SD card or NVMe drive from macOS**
   (stage-everywhere): the password dialog once, the write and read-back
   through rawdisk `--regions` with a real card reader and a USB NVMe
@@ -57,7 +69,8 @@ an entry by moving it to "Tested" with the date and what was seen.
   Prerelease (0.3.0-tspi3m.1 era releases) and CI once edk2-rk3576 has a
   `ci` release; the app updating itself from the `ci` release on each OS.
 
-- **Simple mode** (simple-mode): each of the four tasks on both boards
+- **Simple mode** (simple-mode): each of its three tasks (the factory
+  restore is in Advanced mode only until it is verified) on both boards
   from a new install; the flashing-mode instructions as written (TaishanPi
   3M pads and F4, CM5-IO button); switching modes keeps the board; the
   dialog when Advanced choices are reset.
