@@ -525,6 +525,7 @@ export const MESSAGES: Dict = {
   'live.noDriver.text': d('Install WinUSB with Zadig as in the steps below, then this line turns green.', '请按下面的步骤用 Zadig 安装 WinUSB，装好后这一行会变成绿色。'),
   'live.other': d('A Rockchip device that is not an RK3576 in MaskROM mode is connected (USB ID {pid})', '已连接的 Rockchip 设备不是处于 MaskROM 模式的 RK3576（USB ID {pid}）'),
   'live.several': d('{n} Rockchip devices are connected; connect only the board you want to write', '连接了 {n} 个 Rockchip 设备，请只连接要写入的那块开发板'),
+  'review.tick': d('Tick the box at the end of this page to confirm what is erased.', '请在本页末尾勾选，确认会被清除的内容。'),
   'review.understand': d('I understand that this data will be erased', '我明白这些数据会被清除'),
   'run.restore': d('Writing {what}', '正在写入 {what}'),
   'run.restore.armbian': d('Armbian image: download, SHA-256, signature, decompress', 'Armbian 映像：下载、SHA-256、签名、解压'),

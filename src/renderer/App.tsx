@@ -1312,6 +1312,7 @@ export function App() {
   };
   const simpleReadyStep = board && (
     <StepPage title={t('s.step.ready')} lead={t('s.ready.lead')}>
+      <MaskromLive board={board.name} />
       <Card isPlain>
         <CardTitle>{term(t('s.ready.title'), t('s.ready.term.help'))}</CardTitle>
         <CardBody>
@@ -1321,7 +1322,6 @@ export function App() {
             </List>
             <Content component="p">{t('s.ready.cable')}</Content>
             {board.maskromEntry === 'pads' && <img src={`resources/boards/${board.id}-maskrom.jpg`} alt={t('s.ready.photo')} className="maskrom-photo" />}
-            <MaskromLive board={board.name} />
             <DriversNote />
           </Stack>
         </CardBody>
@@ -1500,7 +1500,7 @@ export function App() {
             {task === 'upgrade' && (<WizardStep name={t('step.upgrade')} id="upgrade" footer={{ isNextDisabled: !upgradeReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{upgradeStep}</WizardStep>)}
             {restoreTask && (<WizardStep name={t('step.restore')} id="restore" footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>)}
             <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady) || (task === 'upgrade' && !upgradeReady)}
-              footer={<ReviewFooter label={goLabel} disabled={!!why || (erases && !understood)} why={why} onGo={() => { setUnderstood(false); start(); }} />}>
+              footer={<ReviewFooter label={goLabel} disabled={!!why || (erases && !understood)} why={why ?? (erases && !understood ? t('review.tick') : null)} onGo={() => { setUnderstood(false); start(); }} />}>
               {reviewStep}
             </WizardStep>
           </Wizard>}
