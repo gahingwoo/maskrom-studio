@@ -12,6 +12,12 @@ over on the first start.
 - Armbian or a factory update.img onto the whole eMMC.
 - Firmware upgrade that keeps Windows and the UEFI settings.
 - About Maskrom Studio.
+- Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode): Armbian's
+  root partition at the end of the eMMC, its U-Boot in the firmware slot,
+  started from the firmware's "Armbian (U-Boot)" boot option.
+- A self-test on Windows' first desktop, with an optional prefilled GitHub
+  issue.
+- How to get a Windows 11 23H2 ARM64 image with UUP dump (docs).
 
 ## First version
 

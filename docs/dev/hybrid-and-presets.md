@@ -1,8 +1,42 @@
 # Design: Armbian presets, Windows + Armbian on one board
 
-Status: design only (2026-11-25), on branch `design-hybrid`. Nothing here
-is implemented. Decisions marked **(decided)** were made by the user on
-2026-11-25; everything else is a proposal for review.
+Status: designed 2026-11-25; decisions marked **(decided)** were made by
+the user that day. Implementation started the same day, off the board
+(not run on hardware yet). What is in the code now:
+
+- **Hybrid on one eMMC, TaishanPi 3M, Advanced mode, over MaskROM**
+  (`src/woa/armbian-hybrid.ts`, `stage-layout.ts`, `woa-stage.cmd`): the
+  Armbian image's root partition at the end of the eMMC (type B921B045,
+  legacy BIOS bootable attribute), its U-Boot FIT in the firmware slot at
+  0x10000, staging and Windows before it, `linux_offset` kept by the
+  install script. Armbian image chosen by the user (none preselected),
+  size field with a slider, default 24 GB.
+- **No Armbian presets yet (decided 2026-11-25 for the hybrid path):**
+  Armbian's own first login asks for the passwords, user and time zone.
+  Consequences: no ext4 writes, so the file system UUID is the image's
+  (do not keep the same Armbian image on an SD card in the board at the
+  same time), no read-only NTFS mount in Armbian, no mirror or charsiu
+  extras. These wait for the ext4 writer (section 1).
+- **Default system:** Windows only, until the firmware has the
+  default-system option; the page shows Armbian as the default greyed out
+  with the reason.
+- **Resize:** no `.rootfs_resize` file (it would need an ext4 write).
+  Instead the Armbian partition always ends within the last MiB of the
+  eMMC, past the 99% line that `armbian-resize-filesystem` computes, so
+  that script never touches the partition table and only runs
+  `resize2fs` (`resizeLeavesTableAlone`, checked when planning and in the
+  tests).
+- **First-desktop self-test** (`src/woa/selftest.ts`), scope decided
+  2026-11-25: Device Manager without warnings (EC20 `MI_04` allowed), GPU
+  on WDDM 2.0 and at 594 MHz or more where maliwddm reports `GpuClkHz`,
+  an audio output, network with name resolution, 64 MiB write and
+  read-back; a message box with "all passed" or the problems and a
+  prefilled GitHub issue link. Nothing is uploaded. No NPU test.
+- **Windows image:** the UUP download is shelved (decided); instead
+  `docs/windows-image.md` (and the Chinese page) explains UUP dump.
+
+Not yet: Simple mode entry, adding Armbian to an existing Windows, the
+exFAT shared partition, the presets and the ext4 writer, CM5-IO.
 
 Prototype screens (static, rendered with PatternFly 6 classes; not the
 app): `docs/dev/img/hybrid/1-install-mode.png` to `6-confirm.png`.

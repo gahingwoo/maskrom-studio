@@ -339,7 +339,9 @@ Added, all chosen on the "Windows setup" page:
 - **The password.** Never logged and not in `woa-stage.ini`. In the answer
   file it is encoded as Windows SIM encodes it (PlainText false, base64 of
   UTF-16LE password + "Password"): an encoding, not encryption. So
-  SetupComplete.cmd deletes the answer file when setup is done, and the
+  SetupComplete.cmd deletes the answer file when setup is done (and a
+  RunOnce value deletes any copy under Panther again after the first
+  sign-in), and the
   install script zeroes the staging copy (`fsutil file setzerodata`, best
   effort) before the staging volume is deleted. With "sign in by itself on
   every start" Windows keeps the password in the registry, as it does for
@@ -351,8 +353,8 @@ Added, all chosen on the "Windows setup" page:
   straight into `\Program Files\OpenSSH` of the new Windows, so the files
   inherit that folder's permissions. On the first start SetupComplete.cmd
   (as SYSTEM) runs the release's `install-sshd.ps1`, sets sshd to start
-  automatically, opens TCP 22 on all firewall profiles and starts it. The
-  shell stays sshd's default, cmd.exe. A pasted public key goes to
+  automatically, opens TCP 22 on the Private and Domain firewall profiles
+  (not Public) and starts it. The shell stays sshd's default, cmd.exe. A pasted public key goes to
   `C:\ProgramData\ssh\administrators_authorized_keys` with inheritance
   removed and only SYSTEM and Administrators granted (by SID). This
   follows what worked by hand on the TaishanPi 3M; `Add-WindowsCapability
@@ -485,6 +487,15 @@ Enterprise 23H2 arm64; its 23H2 Consumer media is x64 only), UUP dump
 checked), and Microsoft's own ARM64 ISO page, marked unsuitable: it offers
 only the current release (26H2 on that date).
 
+## Armbian next to Windows
+
+Designed and partly implemented in
+[hybrid-and-presets.md](hybrid-and-presets.md): Armbian's root partition at
+the end of the TaishanPi 3M's eMMC, its U-Boot FIT in the firmware's slot
+at 0x10000, started once from the firmware's "Armbian (U-Boot)" boot
+option (edk2-rk3576 docs/ARMBIAN-CHAINLOAD.md); and the self-test on
+Windows' first desktop.
+
 ## Writing to an SD card or USB drive instead
 
 Armbian can also go onto an SD card or USB drive in the computer, and the
@@ -498,8 +509,8 @@ A factory update.img stays eMMC-only: it is a MaskROM partition write.
 The page says what the boards do with such a card: the CM5-IO's BootROM
 starts the eMMC first whenever it holds a bootloader, so the card starts
 only once the eMMC's bootloader is erased, or through the UEFI firmware
-(a one-shot "Armbian (U-Boot)" entry is planned in edk2-rk3576, branch
-armbian-chainload, not released). The TaishanPi 3M's BootROM never boots
+(the one-shot "Armbian (U-Boot)" entry is on edk2-rk3576 main for the
+TaishanPi 3M; the CM5-IO's firmware does not have it yet). The TaishanPi 3M's BootROM never boots
 an SD card (strap eMMC then USB), so a card there needs a bootloader on
 the eMMC that loads it.
 

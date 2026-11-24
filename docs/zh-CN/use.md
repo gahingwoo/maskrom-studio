@@ -52,9 +52,26 @@ eMMC 上要先有固件，并且是用完整映像写的。还没有的话，先
 
 Microsoft 官网的 ARM64 ISO 只有当前版本，太新，用不了。应用的 Windows 一步里列出了可以获取 23H2 ARM64 ISO 的地方：[NTriver](https://ntriver.org/download-windows-11)（中国大陆可用；其中 23H2 ARM64 的是批量许可专业版和 IoT 企业版介质）和 [UUP dump](https://uupdump.net/known.php?q=22631+arm64)（在你自己的电脑上从 Microsoft 更新服务器生成 ISO）。你需要有效的许可证。
 
+在 Windows、macOS 或 Linux 上用 UUP dump 生成映像的详细步骤：[获取 Windows 11 23H2 ARM64 映像](windows-image.md)。
+
 ## 磁盘布局
 
 默认情况下 Windows 占满整个磁盘。在高级模式下，Windows 设置一步可以给 Windows 设定大小（至少 32 GB），其余空间建成数据分区（NTFS 或 exFAT），或在末尾留出一部分给 Linux。写入前会显示分区布局。CM5-IO 的 eMMC（约 31 GB）只放得下 Windows。
+
+## 同一块 eMMC 上装 Windows 和 Armbian
+
+适用于泰山派 3M，高级模式，通过 MaskROM 把 Windows 装到 eMMC。在 Windows 设置一步勾选 **同时在 eMMC 上安装 Armbian**，选一个 Armbian 映像（不会替你预先选好；列表是 Armbian 为这块板发布的映像），再设定 Armbian 占用的 eMMC 空间（默认 24 GB；其余给 Windows，Windows 至少 32 GB）。
+
+- Armbian 映像从 Armbian 下载，写入前核对 SHA-256 和签名。只写入它的根分区，放在 eMMC 末尾；它的 U-Boot 放进固件在 32 MiB 处的槽位。UEFI 固件和设置保留。
+- Windows 照常安装，到 Armbian 分区之前为止。
+- **默认启动 Windows。** 要启动 Armbian，在固件的启动管理器里选 **“Armbian (U-Boot)”**。这次启动运行 Armbian 自己的 U-Boot、内核和设备树；再下一次启动又回到 Windows。把 Armbian 设为默认需要一个尚未发布的固件选项。
+- Armbian 里没有预设任何内容：第一次启动时和普通 Armbian 映像一样，会询问 root 密码、用户和时区。
+- 不要在这块 eMMC 上的 Armbian 里运行 `armbian-install` 或更新引导程序：那会把 Armbian 的引导程序写到 UEFI 固件上。
+- CM5-IO（eMMC 放不下两个系统，固件也还没有这个启动项）和 ROCK 4D（固件在 SPI NOR 上）不支持。
+
+## Windows 第一次进桌面：自检
+
+第一个用户登录后，Windows 等一分半钟再检查自己：设备管理器里没有警告（EC20 模块的 MI_04 接口没有驱动是正常的）、GPU 用的是 WDDM 2.0 驱动且频率不低于 594 MHz（驱动报告频率时）、有可用的声音输出、网络已连接且能解析域名、向系统盘写入 64 MiB 再读回核对。弹窗会说明全部通过，或者列出问题，并可以在浏览器里打开预先填好的 GitHub 问题报告。只有你自己在那里提交时才会发送；报告里没有用户名、计算机名或序列号。报告也会保存到桌面上的 `RK3576-selftest.txt`。
 
 ## 精简 Windows
 

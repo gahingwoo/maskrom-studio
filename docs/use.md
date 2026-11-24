@@ -93,6 +93,9 @@ too new. The app's Windows step lists where a 23H2 ARM64 ISO can be had:
 ISO on your computer from Microsoft's update servers. You need a valid
 licence.
 
+Step by step with UUP dump, on Windows, macOS or Linux:
+[Getting a Windows 11 23H2 ARM64 image](windows-image.md).
+
 ## Disk layout
 
 By default Windows takes the whole disk. In Advanced mode the Windows setup
@@ -100,6 +103,43 @@ step can give Windows a size (32 GB or more) and make the rest a data
 partition (NTFS or exFAT) or leave some of it free at the end for Linux.
 The layout is shown before anything is written. The CM5-IO's eMMC (about
 31 GB) has room for Windows only.
+
+## Windows and Armbian on one eMMC
+
+TaishanPi 3M, Advanced mode, Windows onto the eMMC over MaskROM. On the
+Windows setup step tick **Also install Armbian on the eMMC**, choose an
+Armbian image (none is chosen for you; the list is Armbian's own for the
+board) and Armbian's share of the eMMC (24 GB by default; Windows gets the
+rest and at least 32 GB).
+
+- The Armbian image is downloaded from Armbian and checked against its
+  SHA-256 and signature. Only its root partition is written, at the end of
+  the eMMC, and its U-Boot goes into the firmware's slot at 32 MiB. The
+  UEFI firmware and its settings stay.
+- Windows is installed as usual and stops where Armbian starts.
+- **Windows starts by default.** To start Armbian, choose **"Armbian
+  (U-Boot)"** in the firmware's boot manager. That boot runs Armbian's own
+  U-Boot, kernel and device tree; the boot after it is Windows again.
+  Armbian as the default needs a firmware option that is not released yet.
+- Nothing is preset in Armbian: its first start asks for the root
+  password, a user and the time zone, as on any Armbian image.
+- Do not run `armbian-install` or a bootloader update in Armbian on this
+  eMMC: it would write Armbian's bootloader over the UEFI firmware.
+- Not on the CM5-IO (its eMMC is too small for both, and its firmware
+  does not have the boot option yet) or the ROCK 4D (firmware on SPI NOR).
+
+## Windows' first desktop: the self-test
+
+When the first user signs in, Windows checks itself after a minute and a
+half: Device Manager without warnings (the EC20 modem's MI_04 interface is
+expected to have no driver), the GPU on its WDDM 2.0 driver at 594 MHz or
+more where the driver reports its clock, a working audio output, a network
+connection with name resolution, and 64 MiB written to the system disk and
+read back. A message box says everything passed, or lists the problems and
+offers to open a prefilled GitHub issue in the browser. Nothing is sent
+unless you submit that issue yourself; it has no user name, computer name
+or serial numbers. The report is also saved on the desktop as
+`RK3576-selftest.txt`.
 
 ## Trimming Windows
 
