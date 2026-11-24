@@ -353,6 +353,61 @@ Added, all chosen on the "Windows setup" page:
   follows what worked by hand on the TaishanPi 3M; `Add-WindowsCapability
   OpenSSH.Server` hung for over 20 minutes there and is not used.
 
+## Trimming Windows
+
+A 4 GB board with an eMMC spends its first minutes on what Windows starts
+by itself. woa-trim.cmd (src/woa/trim.ts) trims the applied image offline,
+called from the shared CONFIGURE block, so the board's WinPE and the
+Windows PC build do the same. Each item is a choice; Simple mode has one
+switch, "Recommended trimming" (on), Advanced mode the list, starting at
+the same recommended set:
+
+| Item | What is done | Undo on the running Windows |
+|---|---|---|
+| Apps that run in the background | `dism /Remove-ProvisionedAppxPackage` for News, Weather, Teams, Phone Link, Mail and Calendar, Clipchamp, Solitaire, To Do, Maps, Feedback Hub, Tips, Office hub, Xbox app, Family, Power Automate, People, Cortana, new Outlook | install them from the Store |
+| OneDrive | the default user's Run value OneDriveSetup deleted; `Policies\Microsoft\Windows\OneDrive` DisableFileSyncNGSC=1 | delete the value; run `%WINDIR%\System32\OneDriveSetup.exe` |
+| Copilot | `Policies\Microsoft\Windows\WindowsCopilot` TurnOffWindowsCopilot=1 (machine and default user); Copilot app removed where present | delete both values |
+| Widgets | `Policies\Microsoft\Dsh` AllowNewsAndInterests=0 | delete the value |
+| Edge in the background | `Policies\Microsoft\Edge` StartupBoostEnabled=0, BackgroundModeEnabled=0 | delete both values |
+| Suggested apps and tips | `Policies\Microsoft\Windows\CloudContent` DisableWindowsConsumerFeatures=1, DisableConsumerAccountStateContent=1; the default user's ContentDeliveryManager values 0 | delete the values |
+| Diagnostic data | `Policies\Microsoft\Windows\DataCollection` AllowTelemetry=1 (Required; 0 is honoured only by Enterprise and Education) | delete the value |
+| Search indexer | WSearch DelayedAutostart=1 | `sc config wsearch start= auto` |
+| SysMain | SysMain Start=4 | `sc config sysmain start= auto` |
+| Classic right-click menu | an empty default value at `CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32` in the user's classes: in the default profile's UsrClass.dat when it has one, and through a RunOnce value in the default user hive at each new user's first sign-in (HKCU\Software\Classes lives in UsrClass.dat, so NTUSER.DAT alone would not do) | delete `HKCU\Software\Classes\CLSID\{86ca1aa0-...}` and sign in again |
+| Remove the Store (off) | Microsoft.WindowsStore and StorePurchaseApp removed | `wsreset -i` |
+| Remove Edge (off) | the Edge package stub removed; `Program Files (x86)\Microsoft\Edge` and its uninstall entries and shortcuts deleted; `Policies\Microsoft\EdgeUpdate` Install/Update{56EB18F8-...}=0 and `Microsoft\EdgeUpdate` DoNotUpdateToEdgeWithChromium=1 | delete the policy values and install Edge from microsoft.com/edge |
+| Chrome (off) | Google's arm64 enterprise MSI copied into the image, installed by SetupComplete.cmd when `Get-AuthenticodeSignature` says Valid and O=Google LLC; `Policies\Microsoft\Windows\System` DefaultAssociationsConfiguration points at an XML that gives ChromeHTML .htm, .html, .pdf, http, https and the like | uninstall Chrome, delete the value |
+
+The policies are Microsoft's documented ones (Policy CSP and ADMX names in
+trim.ts); the app list is ours. Nothing is taken from tiny11builder,
+whose repository has no licence. Not touched: Windows Update, activation,
+the drivers, WebView2 and Edge Update (other apps and the RK3576 tools need
+WebView2, and Edge Update keeps it current).
+
+Defender's real-time protection is not offered. On 22621 and 22631 Tamper
+Protection is on by default and makes Windows ignore
+DisableRealtimeMonitoring and DisableAntiSpyware whether they are set
+offline or not, so the choice would not hold.
+
+Removing Edge is not supported by Microsoft outside the EEA on these
+versions. What stays: Windows feature updates and repairs can install Edge
+again, a taskbar pin to Edge can be left as a dead icon, and `microsoft-
+edge:` links have nothing to open them. Chrome is downloaded from Google
+on the PC at write time (it is not ours to ship; Google publishes no
+checksum, so the PC checks it is an Arm64 MSI and the board checks the
+signature). No memory figure is shown on the page: it has not been
+measured on these boards.
+
+**RK3576 tools.** When the woa-rk3576 release has `rk3576-tools-arm64*.zip`
+(checked against SHA256SUMS.txt and GitHub's digest like the WinPE image;
+`WOA_IMAGER_RK3576_TOOLS_URL`, `_SHA256` and `_SIZE` point at another
+build for testing), it is unpacked to `rk3576-tools\` on the staging
+volume, CONFIGURE runs its `offline-install.cmd W:\` (without /hook, in a
+cmd of its own; a failure is logged and the install goes on), and
+SetupComplete.cmd calls `%ProgramFiles%\RK3576\setup\firstboot.cmd` once.
+The interface is woa-rk3576's tools/rk3576-tools/README.md. The option is
+on by default and greyed out when the release has no bundle.
+
 ## How much of the disk Windows gets
 
 `src/woa/windows-layout.ts`. By default Windows takes all of it, as

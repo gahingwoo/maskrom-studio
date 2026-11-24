@@ -27,6 +27,7 @@ import { crlf, INSTALL, LAUNCHER } from './stage-scripts';
 import type { WindowsTarget, WoaBoard } from './boards';
 import { certsCmd, trustedCerts } from './certs';
 import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
+import { anyTrim, CHROME_MSI, trimCmd } from './trim';
 import { layoutIni, planLayout, WHOLE_DISK, type Layout, type LayoutChoice } from './windows-layout';
 
 const ALIGN = 2048; // 1 MiB
@@ -188,11 +189,13 @@ export function planStage(o: StageInput): StagePlan {
   const setup = o.setup ?? { skipSetup: null, ssh: false, sshKey: '' };
   const extras = (o.extras ?? []).filter((e) => e.data.length > 0);
   for (const e of extras) {
-    if (!/^(openssh|extra-drivers)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
+    if (!/^(openssh|extra-drivers|chrome|rk3576-tools)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
       throw new StageError(`${e.path} cannot go on the staging volume.`);
     }
   }
   if (setup.ssh && !extras.some((e) => e.path === 'openssh/sshd.exe')) throw new StageError('SSH is on, but the OpenSSH files are missing.');
+  if (setup.trim?.chrome && !extras.some((e) => e.path === CHROME_MSI.path)) throw new StageError('Chrome is chosen, but its installer is missing.');
+  if (setup.rkTools && !extras.some((e) => e.path === 'rk3576-tools/offline-install.cmd')) throw new StageError('The RK3576 tools are chosen, but the bundle is missing.');
   const catalogs = [
     ...fat.listFiles('woa-drivers').filter((p) => /\.cat$/i.test(p)).map((p) => fat.readFile(p)),
     ...extras.filter((e) => /^extra-drivers\/.*\.cat$/i.test(e.path)).map((e) => e.data),
@@ -202,6 +205,7 @@ export function planStage(o: StageInput): StagePlan {
     ...(certs.length ? [{ name: 'woa-certs.cmd', source: bytesSource(crlf(certsCmd(certs))) }] : []),
     { name: 'SetupComplete.cmd', source: bytesSource(crlf(setupComplete(setup))) },
     ...(setup.skipSetup ? [{ name: 'unattend.xml', source: bytesSource(crlf(unattendXml(setup.skipSetup))) }] : []),
+    ...(anyTrim(setup.trim) ? [{ name: 'woa-trim.cmd', source: bytesSource(crlf(trimCmd(setup.trim!))) }] : []),
     ...(setup.ssh && setup.sshKey.trim() ? [{ name: 'ssh-key/administrators_authorized_keys', source: bytesSource(crlf(`${setup.sshKey.trim()}\n`)) }] : []),
   ];
   const files = (ini: string) => [

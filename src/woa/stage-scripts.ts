@@ -122,6 +122,18 @@ if exist "%STAGE%\openssh\sshd.exe" (
   if exist "%STAGE%\ssh-key\administrators_authorized_keys" copy /y "%STAGE%\ssh-key\administrators_authorized_keys" "W:\Program Files\OpenSSH\administrators_authorized_keys" >nul
 )
 
+rem --- 4c. trimming and the RK3576 tools (each optional; neither stops the install)
+if exist "%STAGE%\woa-trim.cmd" (
+  echo Trimming Windows: apps and background services, as chosen.
+  call "%STAGE%\woa-trim.cmd"
+)
+if exist "%STAGE%\rk3576-tools\offline-install.cmd" (
+  echo Installing the RK3576 tools.
+  rem Its own cmd: the bundle's script keeps its variables to itself. No /hook:
+  rem SetupComplete.cmd above already calls its first-boot step.
+  cmd /c ""%STAGE%\rk3576-tools\offline-install.cmd" W:\" >> "%LOG%" 2>&1 || echo The RK3576 tools could not be installed ^(exit !errorlevel!^); Windows goes on without them. >> "%LOG%"
+)
+
 `;
 
 export const INSTALL = String.raw`@echo off
