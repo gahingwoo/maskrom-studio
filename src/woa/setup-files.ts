@@ -28,6 +28,7 @@
 // sshd's default, cmd.exe.
 
 import type { LayoutChoice } from './windows-layout';
+import { chromeFirstStart, type TrimOptions } from './trim';
 
 export const OPENSSH = {
   version: '9.5.0.0p1-Beta',
@@ -61,6 +62,10 @@ export interface SetupOptions {
   sshKey: string;
   /** How the disk is shared after a staged install (windows-layout.ts); absent: Windows takes all of it. */
   layout?: LayoutChoice;
+  /** What is trimmed while Windows is installed (trim.ts); absent: nothing. */
+  trim?: TrimOptions;
+  /** Install the RK3576 tools bundle (rk-monitor, NPU tools) from the woa-rk3576 release. */
+  rkTools?: boolean;
 }
 
 export const DEFAULT_SETUP: SetupOptions = { skipSetup: null, ssh: true, sshKey: '' };
@@ -186,6 +191,13 @@ export function setupComplete(o: SetupOptions): string {
     'schtasks.exe /create /f /tn "WoA RK3576 time sync" /sc onstart /delay 0001:00 /ru SYSTEM /tr "%WINDIR%\\System32\\w32tm.exe /resync /force" >> "%LOG%" 2>&1',
     'w32tm.exe /resync /force >> "%LOG%" 2>&1',
   );
+  if (o.trim?.chrome) l.push(...chromeFirstStart());
+  if (o.rkTools) {
+    l.push(
+      'rem The RK3576 tools (woa-rk3576 tools/rk3576-tools): shortcuts, the counters task, counter registration.',
+      'if exist "%ProgramFiles%\\RK3576\\setup\\firstboot.cmd" call "%ProgramFiles%\\RK3576\\setup\\firstboot.cmd" >> "%LOG%" 2>&1',
+    );
+  }
   l.push(
     'rem The answer file holds the password (encoded, not encrypted): remove every copy.',
     'del /f /q "%WINDIR%\\Panther\\unattend.xml" 2>nul',

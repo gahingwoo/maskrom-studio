@@ -61,6 +61,12 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
   finished Windows itself with DISM, for these and for the eMMC (written
   over MaskROM from a virtual disk), so the board starts straight into
   Windows. On Linux and macOS the install on the board is the only method.
+- **Trimmed, if you like.** Apps that run in the background, OneDrive
+  setup, Copilot, Widgets, suggested apps, Edge's background mode and
+  SysMain can be turned off while Windows is installed (recommended set on
+  by default), and Edge replaced with Chrome (off by default). The RK3576
+  tools (monitor widget, NPU tools) are installed when the WinPE release
+  carries them. Details and how to undo each: docs/DESIGN.md.
 - **Not the whole disk, if you like.** Windows can take a chosen size (32 GB
   or more) and leave the rest unallocated, as an NTFS or exFAT data
   partition, or free at the end for Linux later; the layout is shown before

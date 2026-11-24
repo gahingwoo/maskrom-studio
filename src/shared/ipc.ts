@@ -21,7 +21,7 @@ export type JobResult = { ok: true; sha256: string } | { ok: false; reason: stri
 /** The latest edk2-rk3576 and woa-rk3576 releases, as far as they could be read. */
 export interface Releases {
   firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>>; tier: ReleaseTier } | null;
-  winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier } | null;
+  winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier; tools: { file: string; size: number } | null } | null;
   problems: string[];
 }
 

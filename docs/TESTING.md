@@ -7,6 +7,17 @@ an entry by moving it to "Tested" with the date and what was seen.
 
 ## Untested
 
+- **Trimming Windows** (trim-windows): a staged install and a PC build
+  with the recommended set on both boards: the listed apps gone, OneDrive
+  not started, no Copilot or Widgets, SysMain disabled, WSearch delayed,
+  Windows Update and activation still working, the Store and Edge still
+  there; woa-stage.log shows each step. Then Edge removed with Chrome:
+  Edge gone, WebView2 apps (the RK3576 monitor) still working, Chrome
+  installed after its signature check and the default browser of a new
+  user. Whether Edge comes back after a cumulative update.
+- **RK3576 tools in the install** (trim-windows): once woa-rk3576 releases
+  the bundle, the tray monitor and widget appear on the first sign-in, the
+  counters task exists, Settings, Apps lists RK3576 tools.
 - **Pulling the cable during a write** (retry-report): on both boards,
   during the loader and during wl: "The board was disconnected" with the
   MaskROM steps, the live line green again after re-entering MaskROM, Try

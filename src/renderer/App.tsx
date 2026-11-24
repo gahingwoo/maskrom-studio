@@ -20,6 +20,7 @@ import type { WebflashTarget } from '../web/webflash/boards';
 import type { WoaJob, WoaWorkerEvent, WoaWorkerRequest } from '../woa/woa-worker';
 import type { RegionResult, RegionStage } from '../woa/maskrom-regions';
 import { accountProblem, DEFAULT_SETUP, OPENSSH, sshKeyProblem, type Account, type SetupOptions } from '../woa/setup-files';
+import { anyTrim, NO_TRIM, RECOMMENDED_TRIM, TRIM_KEYS, type TrimOptions } from '../woa/trim';
 import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal, type UiMode } from './common';
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
@@ -115,6 +116,10 @@ export function App() {
   const [ssh, setSsh] = useState(DEFAULT_SETUP.ssh);
   const [sshKey, setSshKey] = useState('');
   const [drivers, setDrivers] = useState<DriverFolder | null>(null);
+  // Trimming Windows (trim.ts): Simple mode's one switch, Advanced mode's list; both start at the recommended set.
+  const [trimSimple, setTrimSimple] = useState(true);
+  const [trimPick, setTrimPick] = useState<TrimOptions>(RECOMMENDED_TRIM);
+  const [rkToolsOn, setRkToolsOn] = useState(true);
   const [driversError, setDriversError] = useState<string | null>(null);
   const [drives, setDrives] = useState<Target[] | null>(null);
   const [stick, setStick] = useState<string | null>(null);
@@ -252,7 +257,11 @@ export function App() {
     : layoutChoice && (Number.isNaN(layoutChoice.windowsBytes) || Number.isNaN(layoutChoice.linuxReserveBytes)) ? { problem: 'layout.number' } : null;
   const layoutErr = layoutChoice && (Number.isNaN(layoutChoice.windowsBytes!) || Number.isNaN(layoutChoice.linuxReserveBytes)) ? t('layout.number')
     : layoutPlan && 'problem' in layoutPlan ? (layoutPlan.problem === 'layout.number' ? t('layout.number') : msg(layoutPlan.problem)) : null;
-  const setup: SetupOptions = { skipSetup: skip ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}) };
+  const trim = mode === 'simple' ? (trimSimple ? RECOMMENDED_TRIM : NO_TRIM) : trimPick;
+  const toolsThere = !!releases?.winpe?.tools;
+  const rkTools = rkToolsOn && toolsThere;
+  const setup: SetupOptions = { skipSetup: skip ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}),
+    ...(anyTrim(trim) ? { trim } : {}), ...(rkTools ? { rkTools: true } : {}) };
   const accountErr = skip ? accountProblem(account) : null;
   const passwordMismatch = skip && account.password !== password2;
   const keyErr = ssh ? sshKeyProblem(sshKey) : null;
@@ -321,7 +330,7 @@ export function App() {
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
 
   const startMaskrom = async (jobFor: (served: Record<string, Served>, extras: Array<{ path: string; data: Uint8Array }>) => WoaJob,
-    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: { ssh: boolean; drivers: string | null } | null) => {
+    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean } | null) => {
     const served: Record<string, Served> = {};
     for (const p of prep) {
       setStage(p.id, { percent: 0, note: t('run.starting') });
@@ -332,7 +341,7 @@ export function App() {
       setStage(p.id, { percent: 100, note: `${s.name}, ${formatBytes(s.size)}` });
     }
     let extraFiles: Array<{ path: string; data: Uint8Array }> = [];
-    if (extras && (extras.ssh || extras.drivers)) {
+    if (extras && (extras.ssh || extras.drivers || extras.chrome || extras.rkTools)) {
       setStage('extras', { percent: 0, note: t('run.starting') });
       const x = await withProgress('extras', () => api.prepareExtras(extras));
       if ('error' in x) { finish({ ok: false, title: errorText(x.error) }); return; }
@@ -479,7 +488,7 @@ export function App() {
       setRun({ title: t('run.staging'), log: [], confirm: null, result: null, stages: [
         { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
         { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
-        ...(ssh || drivers ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
+        ...(ssh || drivers || trim.chrome || rkTools ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
         { id: 'board', label: t('run.board'), percent: null },
         { id: 'write', label: t('run.write'), percent: 0 },
         { id: 'check', label: t('run.check'), percent: null },
@@ -494,7 +503,7 @@ export function App() {
       }), [
         { id: 'winpe', get: () => api.prepareWinpe() },
         { id: 'image', get: () => api.serveWindows(windows!.token) },
-      ], { ssh, drivers: drivers?.token ?? null });
+      ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools });
       return;
     }
     setRun({ title: t('run.firmware'), log: [], confirm: null, result: null, stages: [
@@ -954,6 +963,12 @@ export function App() {
     </FormSection>
   );
 
+  const toolsGroup = (
+    <FormGroup label={t('tools.label')} fieldId="rk-tools" role="group">
+      <Checkbox id="rk-tools" label={t('tools.on')} isChecked={rkTools} isDisabled={!toolsThere} onChange={(_e, v) => setRkToolsOn(v)}
+        description={toolsThere ? t('tools.desc') : t('tools.missing')} />
+    </FormGroup>
+  );
   const setupStep = (
     <StepPage title={t('step.setup')} lead={t('setup.lead')}>
       <Form onSubmit={(e) => e.preventDefault()} className="setup-form">
@@ -1007,6 +1022,18 @@ export function App() {
           </Flex>
           {driversError && <Alert isInline variant="danger" title={driversError} />}
         </FormGroup>
+        {toolsGroup}
+        <FormGroup label={t('trim.label')} fieldId="trim" role="group" isStack>
+          <Content component="p" className="muted">{t('trim.desc')}</Content>
+          {TRIM_KEYS.map((k) => (
+            <Checkbox key={k} id={`trim-${k}`} label={t(`trim.${k}`)} description={t(`trim.${k}.desc`)} isChecked={trimPick[k]}
+              onChange={(_e, v) => setTrimPick((x) => ({ ...x, [k]: v }))} />
+          ))}
+          {(trimPick.removeEdge || trimPick.removeStore) && <Alert isInline variant="warning" title={t('trim.warn.title')}>
+            {[trimPick.removeEdge ? t('trim.warn.edge') : '', trimPick.removeStore ? t('trim.warn.store') : ''].filter(Boolean).join(' ')}</Alert>}
+          <Flex><FlexItem><Button variant="link" isInline onClick={() => setTrimPick(RECOMMENDED_TRIM)}>{t('trim.recommended')}</Button></FlexItem>
+            <FlexItem><Button variant="link" isInline onClick={() => setTrimPick(NO_TRIM)}>{t('trim.none')}</Button></FlexItem></Flex>
+        </FormGroup>
       </Form>
     </StepPage>
   );
@@ -1037,6 +1064,8 @@ export function App() {
         [t('review.setup'), skip ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
         [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
+        [t('review.trim'), anyTrim(trim) ? TRIM_KEYS.filter((k) => trim[k]).map((k) => t(`trim.${k}`)).join('; ') : t('review.trim.none')],
+        [t('review.tools'), rkTools ? t('tools.on') : t('review.trim.none')],
         [t('review.target'), t(`review.target.${dest}.${method}`)],
         ...(staged ? [[t('layout.label'), layoutDisk ? layoutRows().map(([k, v]) => `${k}: ${v}`).join('; ') : t('layout.preview.later')] as [string, string]] : []),
         [t('review.erased'), dest === 'emmc' ? t('review.erased.windows') : disk ? t('review.erased.disk', { drive: drives?.find((x) => x.device === disk)?.description ?? disk }) : t('review.disk.choose')],
@@ -1270,6 +1299,13 @@ export function App() {
                 ))}
               </DescriptionList>
             </ExpandableSection>
+          </FormGroup>
+        )}
+        {task === 'windows' && (
+          <FormGroup fieldId="s-trim" label={t('trim.label')} isStack>
+            <Switch id="s-trim" label={t('trim.simple')} isChecked={trimSimple} onChange={(_e, v) => setTrimSimple(v)} />
+            <FormHelperText><HelperText><HelperTextItem>{t('trim.simple.desc')}</HelperTextItem></HelperText></FormHelperText>
+            {toolsGroup}
           </FormGroup>
         )}
         {task === 'armbian' && (

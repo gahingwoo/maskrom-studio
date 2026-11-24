@@ -75,16 +75,24 @@ export interface WinpeRelease {
   tag: string;
   url: string | null;
   image: ReleaseAsset | null;
+  /** The RK3576 tools bundle (rk-monitor, NPU tools; woa-rk3576 tools/rk3576-tools), when the release has it. */
+  tools?: ReleaseAsset | null;
   problems: string[];
 }
+
+/** The RK3576 tools bundle's asset name. */
+export const TOOLS_ASSET = /^rk3576-tools-arm64.*\.zip$/;
 
 export function winpeRelease(rel: GithubRelease, sums: Map<string, string>): WinpeRelease {
   const name = rel.assets.map((a) => a.name).find((n) => /^woa-rk3576-winpe-.*\.img\.xz$/.test(n));
   if (!name) return { tag: rel.tag_name, url: rel.html_url ?? null, image: null, problems: [`${rel.tag_name} has no woa-rk3576-winpe-*.img.xz`] };
   const a = asset(rel, sums, name);
+  const toolsName = rel.assets.map((x) => x.name).find((n) => TOOLS_ASSET.test(n));
+  const t = toolsName ? asset(rel, sums, toolsName) : null;
+  const tools = t && typeof t !== 'string' ? t : null;
   return typeof a === 'string'
-    ? { tag: rel.tag_name, url: rel.html_url ?? null, image: null, problems: [a] }
-    : { tag: rel.tag_name, url: rel.html_url ?? null, image: a, problems: [] };
+    ? { tag: rel.tag_name, url: rel.html_url ?? null, image: null, tools, problems: [a] }
+    : { tag: rel.tag_name, url: rel.html_url ?? null, image: a, tools, problems: typeof t === 'string' ? [t] : [] };
 }
 
 export type Fetch = (url: string, init?: { headers?: Record<string, string> }) => Promise<Response>;
