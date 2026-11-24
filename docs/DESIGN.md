@@ -373,6 +373,7 @@ the same recommended set:
 | Diagnostic data | `Policies\Microsoft\Windows\DataCollection` AllowTelemetry=1 (Required; 0 is honoured only by Enterprise and Education) | delete the value |
 | Search indexer | WSearch DelayedAutostart=1 | `sc config wsearch start= auto` |
 | SysMain | SysMain Start=4 | `sc config sysmain start= auto` |
+| Classic right-click menu | an empty default value at `CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32` in the user's classes: in the default profile's UsrClass.dat when it has one, and through a RunOnce value in the default user hive at each new user's first sign-in (HKCU\Software\Classes lives in UsrClass.dat, so NTUSER.DAT alone would not do) | delete `HKCU\Software\Classes\CLSID\{86ca1aa0-...}` and sign in again |
 | Remove the Store (off) | Microsoft.WindowsStore and StorePurchaseApp removed | `wsreset -i` |
 | Remove Edge (off) | the Edge package stub removed; `Program Files (x86)\Microsoft\Edge` and its uninstall entries and shortcuts deleted; `Policies\Microsoft\EdgeUpdate` Install/Update{56EB18F8-...}=0 and `Microsoft\EdgeUpdate` DoNotUpdateToEdgeWithChromium=1 | delete the policy values and install Edge from microsoft.com/edge |
 | Chrome (off) | Google's arm64 enterprise MSI copied into the image, installed by SetupComplete.cmd when `Get-AuthenticodeSignature` says Valid and O=Google LLC; `Policies\Microsoft\Windows\System` DefaultAssociationsConfiguration points at an XML that gives ChromeHTML .htm, .html, .pdf, http, https and the like | uninstall Chrome, delete the value |

@@ -39,6 +39,8 @@ export interface TrimOptions {
   searchDelayed: boolean;
   /** SysMain (Superfetch) off. */
   sysmain: boolean;
+  /** The classic (Windows 10 style) right-click menu for every new user. */
+  classicMenu: boolean;
   /** Remove the Store and its purchase app (most inbox apps then cannot update). */
   removeStore: boolean;
   /** Remove Microsoft Edge (not WebView2) and stop Edge Update from installing it again. */
@@ -50,7 +52,7 @@ export interface TrimOptions {
 /** Nothing trimmed. */
 export const NO_TRIM: TrimOptions = {
   apps: false, onedrive: false, copilot: false, widgets: false, edgeBackground: false, suggestions: false,
-  telemetry: false, searchDelayed: false, sysmain: false, removeStore: false, removeEdge: false, chrome: false,
+  telemetry: false, searchDelayed: false, sysmain: false, classicMenu: false, removeStore: false, removeEdge: false, chrome: false,
 };
 
 /**
@@ -60,7 +62,7 @@ export const NO_TRIM: TrimOptions = {
  */
 export const RECOMMENDED_TRIM: TrimOptions = {
   ...NO_TRIM, apps: true, onedrive: true, copilot: true, widgets: true, edgeBackground: true, suggestions: true,
-  telemetry: true, searchDelayed: true, sysmain: true,
+  telemetry: true, searchDelayed: true, sysmain: true, classicMenu: true,
 };
 
 export const TRIM_KEYS = Object.keys(NO_TRIM) as Array<keyof TrimOptions>;
@@ -101,6 +103,9 @@ export const EDGE_APPS = ['Microsoft.MicrosoftEdge.Stable'];
 /** Edge Update's application IDs (Microsoft Edge update policy documentation). */
 export const EDGE_APP_ID = '{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}';
 export const WEBVIEW2_APP_ID = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+/** The Windows 11 context menu's COM class; an empty InprocServer32 for it brings back the classic menu. */
+export const CLASSIC_MENU_CLSID = '{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}';
 
 export const CHROME_MSI = {
   url: 'https://dl.google.com/chrome/install/googlechromestandaloneenterprise_arm64.msi',
@@ -197,6 +202,21 @@ export function trimCmd(o: TrimOptions): string {
   if (o.sysmain) {
     l.push('rem SysMain (Superfetch) off: on a 4 GB board with an eMMC it mostly adds reads at boot.',
       reg(`${SY}\\Services\\SysMain`, 'Start', 'REG_DWORD', 4));
+  }
+  if (o.classicMenu) {
+    const clsid = `Software\\Classes\\CLSID\\${CLASSIC_MENU_CLSID}\\InprocServer32`;
+    l.push(
+      'rem The classic right-click menu: an empty InprocServer32 default for this CLSID in the user\'s classes.',
+      'rem HKCU\\Software\\Classes is the user\'s UsrClass.dat, not NTUSER.DAT: set it in the default',
+      'rem profile\'s UsrClass.dat when there is one, and at each new user\'s first sign-in (RunOnce).',
+      'if exist "W:\\Users\\Default\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat" (',
+      '  reg load HKLM\\WOATRIMCLS "W:\\Users\\Default\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat" >> "%LOG%" 2>&1 && (',
+      `    reg add "HKLM\\WOATRIMCLS\\CLSID\\${CLASSIC_MENU_CLSID}\\InprocServer32" /ve /t REG_SZ /d "" /f >> "%LOG%" 2>&1`,
+      '    reg unload HKLM\\WOATRIMCLS >> "%LOG%" 2>&1',
+      '  )',
+      ')',
+      `reg add "${DU}\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v ClassicContextMenu /t REG_SZ /d "reg.exe add \\"HKCU\\${clsid}\\" /ve /t REG_SZ /d \\"\\" /f" /f >> "%LOG%" 2>&1`,
+    );
   }
   if (o.removeEdge) {
     l.push(

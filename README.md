@@ -63,8 +63,8 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
   Windows. On Linux and macOS the install on the board is the only method.
 - **Trimmed, if you like.** Apps that run in the background, OneDrive
   setup, Copilot, Widgets, suggested apps, Edge's background mode and
-  SysMain can be turned off while Windows is installed (recommended set on
-  by default), and Edge replaced with Chrome (off by default). The RK3576
+  SysMain can be turned off, and the classic right-click menu brought
+  back, while Windows is installed (recommended set on by default), and Edge replaced with Chrome (off by default). The RK3576
   tools (monitor widget, NPU tools) are installed when the WinPE release
   carries them. Details and how to undo each: docs/DESIGN.md.
 - **Not the whole disk, if you like.** Windows can take a chosen size (32 GB

@@ -80,6 +80,12 @@ describe('woa-trim.cmd', () => {
     expect(edge).toContain('Microsoft.MicrosoftEdge.Stable');
     expect(edge).toContain('StartupBoostEnabled');
   });
+  it('brings back the classic right-click menu for new users', () => {
+    expect(rec).toContain('/v ClassicContextMenu');
+    expect(rec).toContain('HKCU\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32');
+    expect(rec).toContain('reg unload HKLM\\WOATRIMCLS');
+    expect(trimCmd({ ...NO_TRIM, sysmain: true })).not.toContain('ClassicContextMenu');
+  });
   it('removes the Store only when asked', () => {
     const store = trimCmd({ ...NO_TRIM, removeStore: true });
     for (const a of STORE_APPS) expect(store).toContain(a);

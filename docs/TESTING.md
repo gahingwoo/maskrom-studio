@@ -11,7 +11,8 @@ an entry by moving it to "Tested" with the date and what was seen.
   with the recommended set on both boards: the listed apps gone, OneDrive
   not started, no Copilot or Widgets, SysMain disabled, WSearch delayed,
   Windows Update and activation still working, the Store and Edge still
-  there; woa-stage.log shows each step. Then Edge removed with Chrome:
+  there; a new user gets the classic right-click menu; woa-stage.log
+  shows each step. Then Edge removed with Chrome:
   Edge gone, WebView2 apps (the RK3576 monitor) still working, Chrome
   installed after its signature check and the default browser of a new
   user. Whether Edge comes back after a cumulative update.
