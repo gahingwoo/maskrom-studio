@@ -51,7 +51,7 @@
 - **UEFI 固件。** 从 edk2-rk3576 最新发行版取固件，按 [flash.gahingwoo.com](https://flash.gahingwoo.com/) 相同的方式写入（"完整映像"或"保留分区"）；也可以升级固件，保留 Windows 和 UEFI 设置，并把写入的内容全部读回比较。
 - **回到 Linux。** 泰山派 3M 或 CM5-IO 的任意 Armbian 映像，用 SHA-256 和 Armbian 的签名校验；或者出厂 `update.img`（尚未在开发板上跑过）。
 - **在开发板上直接运行。** 在开发板上的 Linux 里运行，直接写入本机的 eMMC 或 SPI NOR，不需要第二台电脑。
-- **WinPE 启动 U 盘。** 把 woa-rk3576 的 WinPE 写到 U 盘，按它的[安装说明](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/zh-CN/install.md)使用。
+- **WinPE 启动 U 盘。** 把 woa-rk3576 的 WinPE 写到 U 盘，按它的[安装说明](https://github.com/gahingwoo/woa-rk3576/blob/main/docs/INSTALL.zh-CN.md)使用。
 
 RK3576 是 ARMv8.0，跑不了 Windows 11 24H2 及更新版本，这些映像会被拒绝。应用不提供也不下载 Windows：映像和许可证需要你自己准备。
 
