@@ -222,7 +222,7 @@ export function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onC
     setResult(r);
   };
   const close = () => { if (!busy) onClose(); };
-  const notes = <Button variant="link" isInline component="a" href={offer.url} target="_blank">Release notes</Button>;
+  const notes = <Button variant="link" isInline component="a" href={offer.url} target="_blank">{t('update.notes')}</Button>;
   // Once the app itself is being replaced there is no stopping half way.
   const canCancel = stage === 'download' || stage === 'brew-update';
   return (
@@ -253,7 +253,7 @@ export function UpdateModal({ offer, onClose }: { offer: UpdateOffer | null; onC
           )}
           {busy && stage !== 'download' && (
             <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }} flexWrap={{ default: 'nowrap' }}>
-              <FlexItem flex={{ default: 'flexNone' }}><Spinner size="md" aria-label="Working" /></FlexItem>
+              <FlexItem flex={{ default: 'flexNone' }}><Spinner size="md" aria-label={t('working')} /></FlexItem>
               <FlexItem>{t('update.working')}</FlexItem>
             </Flex>
           )}

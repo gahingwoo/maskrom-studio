@@ -826,7 +826,7 @@ export function App() {
       {edition?.check.level === 'warn' && <Alert isInline variant="warning" title={t('win.warned')}>{checkText(edition)}</Alert>}
       {windows && (
         <Table aria-label={t('win.col.edition')} variant="compact">
-          <Thead><Tr><Th screenReaderText="-" /><Th>{t('win.col.edition')}</Th><Th>{t('win.col.build')}</Th><Th>{t('win.col.installed')}</Th></Tr></Thead>
+          <Thead><Tr><Th screenReaderText={t('restore.list.pick')} /><Th>{t('win.col.edition')}</Th><Th>{t('win.col.build')}</Th><Th>{t('win.col.installed')}</Th></Tr></Thead>
           <Tbody>
             {windows.editions.map((e) => (
               <Tr key={e.index}>
@@ -1307,7 +1307,7 @@ export function App() {
     </StepPage>
   );
   const simpleWizard = (
-    <Wizard navAriaLabel="Steps" isVisitRequired>
+    <Wizard navAriaLabel={t('steps')} isVisitRequired>
       <WizardStep name={t('s.step.board')} id="s-board" footer={{ isNextDisabled: !board || !SIMPLE_BOARDS.includes(board.id), isCancelHidden: true, isBackHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleBoardStep}</WizardStep>
       <WizardStep name={t('s.step.what')} id="s-what" isDisabled={!board} footer={{ isNextDisabled: !task || !SIMPLE_TASKS.includes(task) || !simpleReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleWhatStep}</WizardStep>
       <WizardStep name={t('s.step.ready')} id="s-ready" isDisabled={!simpleReady} footer={{ isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleReadyStep}</WizardStep>
@@ -1433,7 +1433,7 @@ export function App() {
         </PageSection>
       ) : (
         <PageSection type="wizard" isFilled hasBodyWrapper={false} aria-label={t('app.name')}>
-          {mode === 'simple' ? simpleWizard : mode === 'advanced' && <Wizard navAriaLabel="Steps" isVisitRequired>
+          {mode === 'simple' ? simpleWizard : mode === 'advanced' && <Wizard navAriaLabel={t('steps')} isVisitRequired>
             <WizardStep name={t('step.board')} id="board" footer={{ isNextDisabled: !board, isCancelHidden: true, isBackHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{boardStep}</WizardStep>
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
             {windowsNeeded && (<WizardStep name={t('step.windows')} id="windows" footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>)}
