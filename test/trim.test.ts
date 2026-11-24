@@ -65,7 +65,7 @@ describe('woa-trim.cmd', () => {
     expect(rec.trim().endsWith('exit /b 0')).toBe(true);
   });
   it('never touches Windows Update, activation, Defender or WebView2', () => {
-    const all = trimCmd(Object.fromEntries(TRIM_KEYS.map((k) => [k, true])) as typeof NO_TRIM);
+    const all = trimCmd(Object.fromEntries(TRIM_KEYS.map((k) => [k, true])) as unknown as typeof NO_TRIM);
     const code = all.split('\n').filter((l) => !/^\s*rem /.test(l)).join('\n');
     expect(code).not.toMatch(/wuauserv|UsoSvc|WaaSMedic|sppsvc|Windows Defender|DisableAntiSpyware|DisableRealtimeMonitoring|EdgeWebView/i);
     expect(code).not.toContain(WEBVIEW2_APP_ID);
