@@ -1180,7 +1180,8 @@ export function App() {
                 variant: 'single', onChange: () => { setBoardId(id); setVia('maskrom'); }, isChecked: boardId === id }}>
                 <CardTitle>{b.name}</CardTitle>
               </CardHeader>
-              <CardBody><img src={`resources/boards/${id}.png`} alt={b.name} className="board-photo" /></CardBody>
+              {/* The card is labelled by its whole text; the title already names the board, so the photo adds no words. */}
+              <CardBody><img src={`resources/boards/${id}.png`} alt="" className="board-photo" /></CardBody>
             </Card>
           );
         })}
