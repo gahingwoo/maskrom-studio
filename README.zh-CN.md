@@ -26,6 +26,8 @@
 
 **简单模式**（默认）：四个步骤，全部使用推荐设置。选开发板，选要做什么（安装 Windows、安装 Armbian、更新启动固件），按说明让开发板进入刷机模式，最后确认会清除哪些内容。恢复出厂系统在板上跑过之前只放在高级模式里。
 
+![简单模式全过程：选泰山派 3M，更新启动固件，准备，确认，然后对模拟开发板写入](https://github.com/gahingwoo/maskrom-studio/raw/readme-media/demo-zh-CN.gif)
+
 | | |
 |---|---|
 | ![简单模式第 1 步：立创泰山派 3M 和 ArmSoM CM5-IO 的图片](docs/imgs/simple-board-zh-CN.png) 选开发板 | ![简单模式第 2 步：安装 Windows、安装 Linux（Armbian）、更新启动固件](docs/imgs/simple-what-zh-CN.png) 做什么 |
