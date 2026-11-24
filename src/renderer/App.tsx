@@ -1317,6 +1317,8 @@ export function App() {
         [t('s.confirm.file'), simpleFrom ?? ''],
         [t('s.confirm.erased'), eraseText],
         [t('s.confirm.checked'), t('s.confirm.checked.value')],
+        ...(task === 'windows' ? [[t('s.confirm.time'), t('s.time.windows')] as [string, string]]
+          : task === 'armbian' && armbianFound ? [[t('s.confirm.time'), t('s.time.armbian', { size: formatBytes(armbianFound.size) })] as [string, string]] : []),
         [t('s.confirm.after'), t(`s.after.${task}`)],
       ]} />
       {erases && <Checkbox id="s-understand" label={t('s.understand')} isChecked={understood2} onChange={(_e, v) => setUnderstood2(v)} />}
