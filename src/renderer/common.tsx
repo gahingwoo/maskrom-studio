@@ -427,17 +427,20 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
         <ModalHeader title={t('cache.ask.title')} labelId="clear-title" />
         <ModalBody>
           <Stack hasGutter>
-            <Content component="p">{t('cache.ask.text')}</Content>
-            <List>
-              <ListItem>{t('cache.ask.images', { size: formatBytes(cache.images.bytes), files: cache.images.files, names: cache.images.names.join(', ') || '-' })}</ListItem>
-              <ListItem>{t('cache.ask.loaders', { size: formatBytes(cache.loaders.bytes), files: cache.loaders.files })}</ListItem>
-            </List>
+            {cacheBytes > 0 && <Content component="p">{t('cache.ask.text')}</Content>}
+            {/* Only what is there: an empty kind is not listed. */}
+            {cacheBytes > 0 && (
+              <List>
+                {cache.images.files > 0 && <ListItem>{t('cache.ask.images', { size: formatBytes(cache.images.bytes), files: cache.images.files, names: cache.images.names.join(', ') })}</ListItem>}
+                {cache.loaders.files > 0 && <ListItem>{t('cache.ask.loaders', { size: formatBytes(cache.loaders.bytes), files: cache.loaders.files })}</ListItem>}
+              </List>
+            )}
             <Checkbox id="clear-nvdata" isChecked={alsoNv} onChange={(_e, v) => setAlsoNv(v)} isDisabled={cache.nvdata.files === 0}
               label={t('cache.ask.nvdata', { n: cache.nvdata.files })} description={t('cache.ask.nvdata.desc', { path: cache.nvdata.dir })} />
           </Stack>
         </ModalBody>
         <ModalFooter>
-          <Button variant="danger" onClick={doClear}>{t('cache.ask.go', { size: formatBytes(cacheBytes + (alsoNv ? cache.nvdata.bytes : 0)) })}</Button>
+          <Button variant="danger" onClick={doClear} isDisabled={cacheBytes + (alsoNv ? cache.nvdata.bytes : 0) === 0}>{t('cache.ask.go', { size: formatBytes(cacheBytes + (alsoNv ? cache.nvdata.bytes : 0)) })}</Button>
           <Button variant="link" onClick={() => setClearAsk(false)}>{t('cancel')}</Button>
         </ModalFooter>
       </Modal>
