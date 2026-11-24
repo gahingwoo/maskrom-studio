@@ -27,6 +27,7 @@ Advanced mode:
 | ![Simple mode's Armbian choice: GNOME (recommended), KDE Plasma, and without a desktop, with pictures](imgs/simple-armbian.png) Simple mode, which Armbian | ![The firmware upgrade's confirmation: eMMC SAMSUNG 62.0 GB, installed 0.4.1, new 0.4.2, UEFI settings kept with the path of the saved copy](imgs/upgrade-confirm.png) Firmware upgrade, confirmation |
 | ![The finished firmware upgrade: the first 32.0 MiB read back equal](imgs/upgrade-done.png) Firmware upgrade, done | ![Settings: updates, downloads with Clear cache, appearance, language](imgs/settings.png) Settings |
 | ![Clear the cache: downloaded images and loader pieces listed, the UEFI settings backups kept unless ticked](imgs/clear-cache.png) Clear cache | ![About Maskrom Studio](imgs/about.png) About |
+| ![Windows onto an SD card from Linux: installed on the board in 20 to 40 minutes, with a note that building on the PC needs Windows](imgs/windows-method.png) Install method on Linux and macOS | ![同上，中文](imgs/windows-method-zh-CN.png) 安装方式（Linux、macOS） |
 
 Dark theme:
 

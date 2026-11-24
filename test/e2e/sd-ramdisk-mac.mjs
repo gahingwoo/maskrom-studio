@@ -27,7 +27,11 @@
 //      (src/main/local-image.ts), written with the size and SHA-256 that
 //      gave, and the disk then holds exactly the image;
 //   8. without the granted right nothing is written (the dialog cannot be
-//      answered here; the write is cancelled after 15 seconds).
+//      answered here; the write is cancelled after 15 seconds);
+//   9. the staged Windows layout's way of writing (macWriteRegions, rawdisk
+//      --regions): pieces at the start, in the middle and in the last 33
+//      sectors are where they belong, what lies between them is untouched,
+//      and a disk smaller than the last region's end is refused unchanged.
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -43,7 +47,7 @@ mkdirSync(join(root, 'build/e2e'), { recursive: true });
 const bundle = join(root, 'build/e2e/mac-write.cjs');
 await build({ entryPoints: ['src/main/mac-write.ts'], bundle: true, platform: 'node', format: 'cjs',
   external: ['etcher-sdk', 'drivelist'], outfile: bundle, logLevel: 'warning' });
-const { macWrite } = createRequire(import.meta.url)(bundle);
+const { macWrite, macWriteRegions } = createRequire(import.meta.url)(bundle);
 await build({ entryPoints: ['src/main/local-image.ts'], bundle: true, platform: 'node', format: 'cjs',
   external: ['etcher-sdk'], outfile: join(root, 'build/e2e/local-image.cjs'), logLevel: 'warning' });
 const { describeLocal, measureFile } = createRequire(import.meta.url)(join(root, 'build/e2e/local-image.cjs'));
@@ -170,6 +174,25 @@ try {
     check(w.out.ok === true && w.out.sha256 === sha256(custom), `custom .${kind}: write and read-back match`);
     check(firstDifference(contents(big).subarray(0, custom.length), custom) === -1, `custom .${kind}: disk holds exactly the image`);
   }
+
+  // The staged layout's regions.
+  const piece = (lba, bytes) => { const b = randomBytes(bytes); return { lba, label: `at ${lba}`, b, source: { size: bytes, read: (o, l) => new Uint8Array(b.buffer, b.byteOffset + o, l) } }; };
+  const sectors = (DISK_MIB * MIB) / BLOCK;
+  const regions = [piece(2048, 70 * MIB + 3 * BLOCK), piece(sectors - 33, 33 * BLOCK), piece(200000, 5 * BLOCK), piece(0, 34 * BLOCK)];
+  const writeRegions = (d, over = {}) => macWriteRegions({ device: d.disk, regions, minSize: 1, helperPath, testDisk: true,
+    onProgress: () => {}, unmount: async () => {}, eject: async () => {}, ...over });
+  fill(big);
+  const r = await writeRegions(big);
+  console.log(JSON.stringify(r));
+  check(r.ok === true, 'regions written and read back equal');
+  const disk2 = contents(big);
+  check(regions.every((g) => firstDifference(disk2.subarray(g.lba * BLOCK, g.lba * BLOCK + g.b.length), g.b) === -1), 'every region is at its sector');
+  check(disk2.subarray(34 * BLOCK, 2048 * BLOCK).every((x) => x === 0xa5) && disk2.subarray(2048 * BLOCK + regions[0].b.length, 200000 * BLOCK).every((x) => x === 0xa5),
+    'the disk between the regions is untouched');
+  fill(small);
+  const sb = sha256(contents(small));
+  const rs = await writeRegions(small);
+  check(rs.ok === false && /smaller than the image/.test(rs.reason) && sha256(contents(small)) === sb, 'regions past the end of a smaller disk are refused, the disk unchanged');
 
   revoke(big);
   fill(big);

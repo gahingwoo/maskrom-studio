@@ -54,10 +54,12 @@ More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.m
   restarts into Windows. How and why: [docs/DESIGN.md](docs/DESIGN.md).
 - **Other targets.** Windows also goes onto an SD card in the PC's reader
   or an NVMe drive in a USB enclosure, which then goes into the board,
-  where the board has one (table above). On
-  a Windows PC the app can instead build the finished Windows itself with
-  DISM, for these and for the eMMC (written over Maskrom from a virtual
-  disk), so the board starts straight into Windows.
+  where the board has one (table above), from Windows, Linux and macOS
+  alike: the board installs it from there with DISM and adds the drivers
+  (20 to 40 minutes). On a Windows PC the app can instead build the
+  finished Windows itself with DISM, for these and for the eMMC (written
+  over Maskrom from a virtual disk), so the board starts straight into
+  Windows. On Linux and macOS the install on the board is the only method.
 - **Not the whole disk, if you like.** Windows can take a chosen size (32 GB
   or more) and leave the rest unallocated, as an NTFS or exFAT data
   partition, or free at the end for Linux later; the layout is shown before

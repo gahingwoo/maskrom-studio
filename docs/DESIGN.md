@@ -191,8 +191,8 @@ second is offered where it can be done properly.
 |---|---|---|---|
 | eMMC, over Maskrom | firmware partition kept, Windows from 64 MiB | any host | Windows host: DISM into a VHD, then Maskrom |
 | eMMC, on the board | as above | Linux on the board | no |
-| SD card in the PC's reader | fresh GPT, Windows from 1 MiB | Linux, Windows hosts | Windows host: DISM onto the card |
-| NVMe in a USB enclosure | fresh GPT, Windows from 1 MiB | Linux, Windows hosts | Windows host: DISM onto the drive |
+| SD card in the PC's reader | fresh GPT, Windows from 1 MiB | any host | Windows host: DISM onto the card |
+| NVMe in a USB enclosure | fresh GPT, Windows from 1 MiB | any host | Windows host: DISM onto the drive |
 
 Which of these a board offers is `windowsTargets` in src/woa/boards.ts, the
 one place the page and the checks in stage-layout.ts and main.ts read it
@@ -208,8 +208,31 @@ card or drive goes into the board, the firmware boots its WinPE (SD and
 USB come before the eMMC; NVMe may need the boot manager), and WinPE
 installs onto that same disk, found by its GUID, as on the eMMC. For an SD
 target the SD controller driver (dwcmshc) is made boot-start as well as
-sdstor. macOS is not offered for these two: its writer streams one image
-from the start of the disk and has no way to write regions.
+sdstor. On macOS the main process plans the same regions
+(`planDiskStage` in src/helper/board-write.ts, plain TypeScript, no
+mkfs or diskutil formatting) and writes them through
+maskrom-studio-rawdisk `--regions` (src/helper/macos/rawdisk.c,
+src/main/mac-write.ts `macWriteRegions`): the helper gets the disk from
+authopen after the password dialog as for an SD card image, reads a
+16-byte header (offset, length) before each region and a zero-length end,
+writes each region at its place, then sends every region back for the
+comparison. Afterwards the disk is ejected, so macOS does not keep the new
+FAT and exFAT volumes mounted.
+
+There is no USB-drive target for Windows: the boards start WinPE from a
+USB stick (the fallback stick, any host), but Windows itself is installed
+to the eMMC, an SD card or an NVMe drive only.
+
+**Drivers in a staged install.** Everything the PC build does to the
+applied Windows is the shared `CONFIGURE` block (stage-scripts.ts), which
+the board's WinPE runs too: `dism /Add-Driver` of the RK3576 drivers from
+the WinPE release (boot disk, GPU, NPU, audio and the rest of
+woa-drivers) and of the user's extra driver folder, bcdboot, test signing
+in the BCD, the boot-start services (sdstor, dwcmshc for an SD target),
+the registry settings, the drivers' test certificates in Root and
+TrustedPublisher, the answer file and OpenSSH. A test checks that both
+scripts contain it. The one difference left: the PC build applies an
+NVMe target without /Compact, the board always with it.
 
 **Built on a Windows PC.** `host-build.cmd` (stage-scripts.ts) is the
 install script's own configure block, run by the PC's DISM, the way Windows
@@ -563,8 +586,9 @@ shown in Chinese through patterns, unknown ones as they are.
 
 - Windows on the ROCK 4D itself: the drive can be prepared, its ACPI is
   not ready.
-- Building on the PC from Linux or macOS (see above), and writing an SD
-  card or NVMe drive from macOS.
+- Building on the PC from Linux or macOS (see above); there the page
+  offers only the install on the board, with a note that building on the
+  PC needs Windows.
 - A USB stick that already holds the Windows image (the fallback stick is
   WinPE only, as today; the exFAT writer could add the image partition).
 - Downloading Windows from Microsoft (UUP). Legal and automatable in

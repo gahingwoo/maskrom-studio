@@ -23,7 +23,7 @@ import { ensureLoader } from './loader-cache';
 import { handleProtocol, ORIGIN, registerScheme } from './protocol';
 import { migrateOldData } from './migrate';
 import { cacheInfo, clearCache } from './cache';
-import { macWrite } from './mac-write';
+import { macWrite, macWriteRegions } from './mac-write';
 import { loadSettings, saveSettings } from './settings';
 import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restartApp } from './updater';
 import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
@@ -32,7 +32,7 @@ import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './wind
 import { firmwareRelease, FIRMWARE_REPO, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
 import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
-import { fileSource, type BoardJob } from '../helper/board-write';
+import { fileSource, planDiskStage, type BoardJob } from '../helper/board-write';
 import { hostBuildFiles } from '../woa/host-build';
 import { MIN_DISK_BYTES, targetRefusal } from '../woa/stage-layout';
 import { woaBoard } from '../woa/boards';
@@ -723,9 +723,34 @@ function runElevated(wc: WebContents, signal: AbortSignal, args: (socket: string
   }).then((out) => (out.ok ? { ok: true, sha256: out.sha256 } : { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) }));
 }
 
+/**
+ * macOS: the staged layout on an SD card or NVMe drive, planned here (it is
+ * plain TypeScript) and written through maskrom-studio-rawdisk --regions,
+ * which macOS lets open the disk after the password dialog.
+ */
+async function stageDiskMac(wc: WebContents, signal: AbortSignal, job: Extract<BoardJob, { kind: 'stage-disk' }>): Promise<JobResult> {
+  const size = await driveSize(job.device);
+  if (size === null) return { ok: false, reason: `${job.device} is no longer connected. Nothing was written.` };
+  let planned: ReturnType<typeof planDiskStage>;
+  try {
+    planned = planDiskStage(job, size);
+  } catch (err) {
+    return { ok: false, reason: String((err as Error).message ?? err) };
+  }
+  if ('stop' in planned) return { ok: false, reason: planned.stop };
+  try {
+    const out = await macWriteRegions({
+      signal, device: job.device, regions: planned.regions, minSize: MIN_DISK_BYTES, helperPath: writerPath(RAWDISK),
+      onProgress: (p) => sendProgress(wc, { stage: p.stage, bytes: p.bytes, total: p.total, speed: p.speed }),
+    });
+    return out.ok ? { ok: true, sha256: out.sha256 } : { ok: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) };
+  } finally {
+    planned.close();
+  }
+}
+
 ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (signal): Promise<JobResult> => {
   if (process.platform !== 'linux' && req.kind !== 'stage-disk') return { ok: false, reason: 'Writing the board this runs on works on Linux only.' };
-  if (process.platform === 'darwin') return { ok: false, reason: 'host.macDisk' };
   const wc = e.sender;
   let bj: BoardJob;
   let total = 0;
@@ -767,6 +792,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
     if (signal.aborted) return { ok: false, reason: 'Cancelled. Nothing was written.' };
     return { ok: false, reason: String((err as Error).message ?? err) };
   }
+  if (process.platform === 'darwin' && bj.kind === 'stage-disk') return stageDiskMac(wc, signal, bj);
   const dir = mkdtempSync(join(tmpdir(), 'maskrom-studio-job-'));
   const jobFile = join(dir, 'job.json');
   writeFileSync(jobFile, JSON.stringify(bj), { mode: 0o600 });
