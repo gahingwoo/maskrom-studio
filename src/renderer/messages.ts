@@ -299,8 +299,13 @@ export const MESSAGES: Dict = {
   'maskrom.tspi3m.note': d('', '已经在运行这个固件的开发板不用短接焊盘：在启动倒计时按 F4 即可。'),
 
   // drivers note
-  'drivers.windows': d('Windows needs the WinUSB driver for the board in MaskROM mode. Install it once with Zadig: choose the device with ID 2207 in Zadig\'s list, select WinUSB and click Install Driver.',
-    'Windows 需要为 MaskROM 模式的开发板装 WinUSB 驱动。用 Zadig 装一次即可：在 Zadig 的列表里选 ID 为 2207 的设备，选 WinUSB，点 Install Driver。'),
+  'drivers.windows': d('On Windows the board needs the WinUSB driver, installed once per computer with Zadig:',
+    'Windows 需要为开发板安装 WinUSB 驱动，每台电脑只需用 Zadig 装一次：'),
+  'drivers.windows.1': d('Put the board in flashing mode (MaskROM) and connect it, as above.', '按上面的步骤让开发板进入刷机模式（MaskROM）并连接好。'),
+  'drivers.windows.2': d('Download Zadig and open it.', '下载并打开 Zadig。'),
+  'drivers.windows.3': d('Choose the device whose USB ID starts with 2207. If the list does not show it, choose Options, then List All Devices.',
+    '选择 USB ID 以 2207 开头的设备。列表里没有的话，点 Options，再点 List All Devices。'),
+  'drivers.windows.4': d('Select WinUSB and click Install Driver.', '选择 WinUSB，点 Install Driver。'),
   'drivers.linux': d('The .deb and .rpm packages install a udev rule that lets you use the board without root. With the AppImage, add the rule once:',
     '.deb 和 .rpm 安装包自带 udev 规则，不用 root 就能访问开发板。用 AppImage 的话，先添加一次这条规则：'),
   'drivers.mac': d('macOS needs no driver.', 'macOS 不需要驱动。'),

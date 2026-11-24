@@ -179,6 +179,19 @@ const simpleEnv = { env: { WOA_IMAGER_UI_MODE: 'simple' } };
 await session('simple', simpleEnv, simple('tspi3m'));
 await session('simple cm5io', simpleEnv, simple('cm5io'));
 for (const o of [{ theme: 'dark' }, { lang: 'zh-CN' }]) await session(`simple ${JSON.stringify(o)}`, { ...o, ...simpleEnv }, simple('tspi3m'));
+// The same step as a Windows PC shows it: the WinUSB driver steps with Zadig, below the photo.
+const readyOnWindows = async (page, shot) => {
+  await page.click('#s-board-cm5io');
+  await next(page);
+  await page.click('label[for="s-task-windows"]');
+  await button(page, 'Choose the Windows file|选择 Windows 文件');
+  await page.waitForSelector('.pf-m-success');
+  await next(page);
+  await page.waitForSelector('.pf-v6-c-card ol');
+  await page.locator('.pf-v6-c-card ol').last().scrollIntoViewIfNeeded();
+  await shot('simple-ready-windows');
+};
+for (const o of [{}, { lang: 'zh-CN' }]) await session(`ready windows ${JSON.stringify(o)}`, { ...o, env: { WOA_IMAGER_UI_MODE: 'simple', WOA_IMAGER_SHOW_PLATFORM: 'win32' } }, readyOnWindows);
 
 // Simple mode's Armbian choice: a card per desktop Armbian publishes, and one without a desktop.
 const simpleArmbian = async (page, shot) => {

@@ -39,8 +39,9 @@ The zip holds the same app without an installer.
 
 For Maskrom writing Windows needs the WinUSB driver for the board:
 
-1. Put the board in Maskrom mode and connect it (see the app's Review
-   page).
+1. Put the board in Maskrom mode and connect it (the app's Get ready
+   step in Simple mode, or Review in Advanced mode, shows how; on Windows
+   it lists these same steps there).
 2. Download Zadig from https://zadig.akeo.ie/ and run it.
 3. Choose the device whose USB ID starts with 2207 (Options, List All
    Devices, if it is not shown), select **WinUSB** and click

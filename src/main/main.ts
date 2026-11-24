@@ -857,7 +857,9 @@ ipcMain.handle('open-external', (_e, url: string) => {
 });
 ipcMain.on('app:info', (e) => {
   e.returnValue = {
-    platform: process.platform, version: app.getVersion(), dataDir: shownPath(app.getPath('userData')),
+    // Screenshots only (unpackaged builds): the page as another system shows it (the Windows driver steps).
+    platform: (!app.isPackaged && process.env.WOA_IMAGER_SHOW_PLATFORM) || process.platform,
+    version: app.getVersion(), dataDir: shownPath(app.getPath('userData')),
     // Screenshots only (unpackaged builds): a worker with a pretend board.
     ...(!app.isPackaged && process.env.WOA_IMAGER_TEST_WORKER ? { testWorker: process.env.WOA_IMAGER_TEST_WORKER } : {}),
   };

@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import {
   Alert, Button, Checkbox, CodeBlock, CodeBlockAction, CodeBlockCode, Content, DescriptionList,
   DescriptionListDescription, DescriptionListGroup, DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form,
-  FormGroup, FormHelperText, FormSection, HelperText, HelperTextItem, List, ListItem, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
+  FormGroup, FormHelperText, FormSection, HelperText, HelperTextItem, List, ListItem, OrderType, Masthead, Menu, MenuContent, MenuItem, MenuList, MastheadBrand, MastheadContent, MastheadLogo, MastheadMain, Modal, ModalBody, ModalFooter,
   MenuToggle, ModalHeader, Page, Progress, Select, SelectList, SelectOption, ProgressMeasureLocation, Spinner, Stack, StackItem, Switch, Title, ToggleGroup,
   ToggleGroupItem, Toolbar, ToolbarContent, ToolbarGroup, ToolbarItem,
 } from '@patternfly/react-core';
@@ -135,10 +135,16 @@ export function DriversNote() {
   const { t } = useI18n();
   if (api.platform === 'win32') {
     return (
-      <Content component="p">
-        {t('drivers.windows')}{' '}
-        <Button variant="link" isInline component="a" href="https://zadig.akeo.ie/" target="_blank">zadig.akeo.ie</Button>
-      </Content>
+      <>
+        <Content component="p">{t('drivers.windows')}</Content>
+        <List component="ol" type={OrderType.number}>
+          <ListItem>{t('drivers.windows.1')}</ListItem>
+          <ListItem>{t('drivers.windows.2')}{' '}
+            <Button variant="link" isInline component="a" href="https://zadig.akeo.ie/" target="_blank">zadig.akeo.ie</Button></ListItem>
+          <ListItem>{t('drivers.windows.3')}</ListItem>
+          <ListItem>{t('drivers.windows.4')}</ListItem>
+        </List>
+      </>
     );
   }
   if (api.platform === 'linux') {
