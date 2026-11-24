@@ -117,6 +117,12 @@ if exist "%STAGE%\unattend.xml" (
   fsutil file setzerodata offset=0 length=1048576 "%STAGE%\unattend.xml" >nul 2>&1
   echo answer file in place, staging copy zeroed >> "%LOG%"
 )
+if exist "%STAGE%\woa-autologon.ps1" (
+  rem Automatic sign-in on every start, see setup-files.ts. It holds the password too.
+  copy /y "%STAGE%\woa-autologon.ps1" W:\Windows\Setup\Scripts\woa-autologon.ps1 >nul || goto :faillog
+  fsutil file setzerodata offset=0 length=1048576 "%STAGE%\woa-autologon.ps1" >nul 2>&1
+  echo automatic sign-in script in place, staging copy zeroed >> "%LOG%"
+)
 if exist "%STAGE%\openssh\sshd.exe" (
   echo Putting OpenSSH into Program Files.
   xcopy "%STAGE%\openssh" "W:\Program Files\OpenSSH\" /e /i /q /y >> "%LOG%" 2>&1 || goto :faillog

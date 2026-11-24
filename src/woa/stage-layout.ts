@@ -29,7 +29,7 @@ import { bytesSource, concatSource, patchedSource, sliceSource, type ByteSource 
 import { crlf, INSTALL, LAUNCHER } from './stage-scripts';
 import type { WindowsTarget, WoaBoard } from './boards';
 import { certsCmd, trustedCerts } from './certs';
-import { setupComplete, unattendXml, type SetupOptions } from './setup-files';
+import { AUTOLOGON_FILE, autoLogonScript, setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { anyTrim, CHROME_MSI, trimCmd } from './trim';
 import { SELFTEST_FILE, selfTestScript } from './selftest';
 import { layoutIni, planLayout, WHOLE_DISK, type Layout, type LayoutChoice } from './windows-layout';
@@ -219,6 +219,7 @@ export function planStage(o: StageInput): StagePlan {
     { name: 'SetupComplete.cmd', source: bytesSource(crlf(setupComplete(setup))) },
     { name: SELFTEST_FILE, source: bytesSource(crlf(selfTestScript({ appVersion: o.appVersion }))) },
     ...(setup.skipSetup ? [{ name: 'unattend.xml', source: bytesSource(crlf(unattendXml(setup.skipSetup))) }] : []),
+    ...(setup.skipSetup?.autoLogonAlways ? [{ name: AUTOLOGON_FILE, source: bytesSource(crlf(autoLogonScript(setup.skipSetup))) }] : []),
     ...(anyTrim(setup.trim) ? [{ name: 'woa-trim.cmd', source: bytesSource(crlf(trimCmd(setup.trim!))) }] : []),
     ...(setup.ssh && setup.sshKey.trim() ? [{ name: 'ssh-key/administrators_authorized_keys', source: bytesSource(crlf(`${setup.sshKey.trim()}\n`)) }] : []),
   ];

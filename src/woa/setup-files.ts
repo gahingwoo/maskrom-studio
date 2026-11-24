@@ -12,6 +12,25 @@
 // optional computer name, languages and time zone. Components carry
 // processorArchitecture="arm64", without which an ARM64 Windows ignores them.
 //
+// Signing in automatically on every start ("Sign in automatically"): the
+// answer file's AutoLogon keeps LogonCount 1 either way (Microsoft's
+// reference says LogonCount must be given with AutoLogon). LogonCount
+// becomes Winlogon's AutoLogonCount, which Winlogon counts down at each
+// automatic sign-in and, when it runs out, sets AutoAdminLogon to 0 and
+// drops the stored password. So the lasting setting is written after the
+// first sign-in, when Setup is done with Winlogon: SetupComplete.cmd makes
+// a SYSTEM scheduled task that runs woa-autologon.ps1 once at that sign-in.
+// The script deletes AutoLogonCount (nothing counts down any more), stores
+// the password as the LSA secret DefaultPassword (LsaStorePrivateData, as
+// Sysinternals Autologon does) instead of the plain-text Winlogon
+// DefaultPassword value, which it deletes, sets AutoAdminLogon 1,
+// DefaultUserName and DefaultDomainName ".", and turns off Windows 11's
+// "only Windows Hello for Microsoft accounts" (DevicePasswordLessBuildVersion
+// 0), which hides password sign-in. An empty password needs no secret:
+// DefaultPassword is then an empty value, since Winlogon turns
+// AutoAdminLogon off when it finds no password at all. Then the script
+// deletes its task and itself.
+//
 // Passwords are written as Windows' own answer file tools write them:
 // PlainText false, the value base64 of UTF-16LE (password + "Password").
 // That is an encoding, not encryption, so SetupComplete.cmd deletes the
@@ -51,7 +70,7 @@ export interface Account {
   keyboard: string;
   /** A Windows time zone ID such as "China Standard Time"; empty keeps the image's. */
   timeZone: string;
-  /** Sign in by itself on every start, not only the first. */
+  /** Sign in automatically on every start, not only the first. */
   autoLogonAlways: boolean;
 }
 
@@ -92,6 +111,9 @@ export function sshKeyProblem(k: string): string | null {
   return null;
 }
 
+export const AUTOLOGON_FILE = 'woa-autologon.ps1';
+export const AUTOLOGON_TASK = 'Maskrom Studio automatic sign-in';
+
 const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
 /** The answer file's password encoding (what Windows SIM writes with "Hide sensitive data"). */
@@ -130,7 +152,8 @@ ${intl}    ${COMPONENT('Microsoft-Windows-Shell-Setup')}
       <AutoLogon>
         <Enabled>true</Enabled>
         <Username>${xml(a.user)}</Username>
-${a.autoLogonAlways ? '' : '        <LogonCount>1</LogonCount>\n'}        <Password>
+        <LogonCount>1</LogonCount>
+        <Password>
           <Value>${pw}</Value>
           <PlainText>false</PlainText>
         </Password>
@@ -159,6 +182,114 @@ ${a.timeZone ? `      <TimeZone>${xml(a.timeZone)}</TimeZone>\n` : ''}      <Use
     </component>
   </settings>
 </unattend>
+`;
+}
+
+const psString = (s: string) => `'${s.replace(/'/g, "''")}'`;
+const utf16Base64 = (s: string) => {
+  let bin = '';
+  for (let i = 0; i < s.length; i++) bin += String.fromCharCode(s.charCodeAt(i) & 0xff, s.charCodeAt(i) >> 8);
+  return btoa(bin);
+};
+
+/**
+ * \Windows\Setup\Scripts\woa-autologon.ps1: automatic sign-in on every
+ * start, run once as SYSTEM after the first sign-in (see the top of this
+ * file). It holds the password, base64 of UTF-16LE (an encoding, like the
+ * answer file's), and deletes itself whatever happens.
+ */
+export function autoLogonScript(a: Account): string {
+  return String.raw`# Written by Maskrom Studio (src/woa/setup-files.ts). Run once as SYSTEM by the
+# scheduled task "${AUTOLOGON_TASK}" after the first sign-in.
+# It turns on automatic sign-in for good, then deletes the task and itself.
+$ErrorActionPreference = 'Stop'
+$Log = Join-Path $env:WINDIR 'Logs\woa-autologon.log'
+function Log($m) { Add-Content -Path $Log -Value "$(Get-Date -Format s) $m" }
+$User = ${psString(a.user)}
+$Password = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${utf16Base64(a.password)}'))
+try {
+  Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class WoaLsa {
+  [StructLayout(LayoutKind.Sequential)]
+  struct LSA_UNICODE_STRING { public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
+  [StructLayout(LayoutKind.Sequential)]
+  struct LSA_OBJECT_ATTRIBUTES { public int Length; public IntPtr RootDirectory; public IntPtr ObjectName; public uint Attributes; public IntPtr SecurityDescriptor; public IntPtr SecurityQualityOfService; }
+  [DllImport("advapi32.dll")] static extern uint LsaOpenPolicy(IntPtr systemName, ref LSA_OBJECT_ATTRIBUTES attributes, uint access, out IntPtr policy);
+  [DllImport("advapi32.dll")] static extern uint LsaStorePrivateData(IntPtr policy, ref LSA_UNICODE_STRING keyName, IntPtr privateData);
+  [DllImport("advapi32.dll")] static extern uint LsaClose(IntPtr policy);
+  [DllImport("advapi32.dll")] static extern int LsaNtStatusToWinError(uint status);
+  const uint POLICY_ALL_ACCESS = 0x000F0FFF;
+  const uint STATUS_OBJECT_NAME_NOT_FOUND = 0xC0000034;
+  static LSA_UNICODE_STRING Str(string s) {
+    LSA_UNICODE_STRING u = new LSA_UNICODE_STRING();
+    u.Buffer = Marshal.StringToHGlobalUni(s);
+    u.Length = (ushort)(s.Length * 2);
+    u.MaximumLength = (ushort)(s.Length * 2 + 2);
+    return u;
+  }
+  // value null deletes the secret.
+  public static void Store(string name, string value) {
+    LSA_OBJECT_ATTRIBUTES oa = new LSA_OBJECT_ATTRIBUTES();
+    oa.Length = Marshal.SizeOf(typeof(LSA_OBJECT_ATTRIBUTES));
+    IntPtr policy;
+    uint st = LsaOpenPolicy(IntPtr.Zero, ref oa, POLICY_ALL_ACCESS, out policy);
+    if (st != 0) throw new Win32Exception(LsaNtStatusToWinError(st));
+    LSA_UNICODE_STRING key = Str(name);
+    LSA_UNICODE_STRING data = new LSA_UNICODE_STRING();
+    IntPtr pData = IntPtr.Zero;
+    try {
+      if (value != null) {
+        data = Str(value);
+        pData = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(LSA_UNICODE_STRING)));
+        Marshal.StructureToPtr(data, pData, false);
+      }
+      st = LsaStorePrivateData(policy, ref key, pData);
+      if (st != 0 && !(value == null && st == STATUS_OBJECT_NAME_NOT_FOUND)) throw new Win32Exception(LsaNtStatusToWinError(st));
+    } finally {
+      if (pData != IntPtr.Zero) Marshal.FreeHGlobal(pData);
+      if (data.Buffer != IntPtr.Zero) {
+        for (int i = 0; i < data.MaximumLength; i++) Marshal.WriteByte(data.Buffer, i, 0);
+        Marshal.FreeHGlobal(data.Buffer);
+      }
+      Marshal.FreeHGlobal(key.Buffer);
+      LsaClose(policy);
+    }
+  }
+}
+'@
+  $Winlogon = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+  # The answer file's LogonCount: Winlogon would turn automatic sign-in off when it runs out.
+  Remove-ItemProperty -Path $Winlogon -Name AutoLogonCount -ErrorAction SilentlyContinue
+  if ($Password.Length -gt 0) {
+    # The password as the LSA secret DefaultPassword, and not in plain text in the registry.
+    [WoaLsa]::Store('DefaultPassword', $Password)
+    Remove-ItemProperty -Path $Winlogon -Name DefaultPassword -ErrorAction SilentlyContinue
+  } else {
+    # No password: no secret, and an empty DefaultPassword so Winlogon keeps AutoAdminLogon on.
+    [WoaLsa]::Store('DefaultPassword', $null)
+    New-ItemProperty -Path $Winlogon -Name DefaultPassword -Value '' -PropertyType String -Force | Out-Null
+  }
+  New-ItemProperty -Path $Winlogon -Name DefaultUserName -Value $User -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $Winlogon -Name DefaultDomainName -Value '.' -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $Winlogon -Name AutoAdminLogon -Value '1' -PropertyType String -Force | Out-Null
+  # Windows 11 hides password sign-in, and with it automatic sign-in, unless this is 0.
+  $Device = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device'
+  if (-not (Test-Path $Device)) { New-Item -Path $Device -Force | Out-Null }
+  New-ItemProperty -Path $Device -Name DevicePasswordLessBuildVersion -Value 0 -PropertyType DWord -Force | Out-Null
+  Log 'automatic sign-in is on for every start'
+} catch {
+  Log "automatic sign-in could not be set: $($_.Exception.Message)"
+} finally {
+  # Nothing here may stop the cleanup. No 2>&1 on schtasks: PowerShell 5.1 turns its stderr into errors.
+  $ErrorActionPreference = 'Continue'
+  $Password = $null
+  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+  schtasks.exe /delete /tn "${AUTOLOGON_TASK}" /f | Out-Null
+  Log "script deleted: $(-not (Test-Path -LiteralPath $PSCommandPath)), task deleted: $($LASTEXITCODE -eq 0)"
+}
 `;
 }
 
@@ -200,6 +331,21 @@ export function setupComplete(o: SetupOptions): string {
     );
   }
   l.push(...selfTestRunOnce());
+  if (o.skipSetup?.autoLogonAlways) {
+    const ps = `%WINDIR%\\Setup\\Scripts\\${AUTOLOGON_FILE}`;
+    l.push(
+      'rem Automatic sign-in on every start: a task runs the script once, as SYSTEM, half a',
+      'rem minute after the first sign-in, when the answer file\'s LogonCount is used up.',
+      `if exist "${ps}" (`,
+      '  rem It holds the password: only SYSTEM and Administrators may read it.',
+      `  icacls "${ps}" /inheritance:r /grant "*S-1-5-18:F" /grant "*S-1-5-32-544:F" >> "%LOG%" 2>&1`,
+      '  reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\PasswordLess\\Device" /v DevicePasswordLessBuildVersion /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1',
+      `  schtasks.exe /create /f /tn "${AUTOLOGON_TASK}" /sc onlogon /delay 0000:30 /ru SYSTEM /rl highest /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ${ps}" >> "%LOG%" 2>&1`,
+      '  rem Without the task nothing would delete the script, so delete it now.',
+      `  if errorlevel 1 del /f /q "${ps}"`,
+      ')',
+    );
+  }
   l.push(
     'rem The answer file holds the password (encoded, not encrypted): remove every copy.',
     'del /f /q "%WINDIR%\\Panther\\unattend.xml" 2>nul',

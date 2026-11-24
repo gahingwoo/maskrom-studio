@@ -43,6 +43,8 @@ is not, write "UEFI firmware, whole image" first (see
    - First start: "Windows setup (OOBE)", or "Skip setup, create this
      account" with a user name and password (and optionally computer name, language, keyboard,
      time zone).
+   - Sign in automatically (with "Skip setup" only, off by default):
+     Windows signs in to the account on every start, not only the first.
    - OpenSSH server: on by default; paste a public key to sign in without
      a password.
    - More drivers: a folder with .inf, .cat and .sys files, for example
@@ -74,8 +76,10 @@ After the install:
 With "Skip setup, create this account", the password is written only into the answer file on the
 eMMC, encoded the way Windows encodes it (not plain text, but not
 encrypted), and the answer file is deleted when Windows setup is done. It
-is never logged. With "Sign in by itself on every start", Windows keeps the
-password in the registry, as it does for any automatic sign-in.
+is never logged. With "Sign in automatically", a task that runs once after
+the first sign-in stores the password as the LSA secret Windows reads for
+automatic sign-in (as Sysinternals Autologon does), not as plain text in
+the registry, and then deletes itself and its copy of the password.
 
 ## Windows images
 

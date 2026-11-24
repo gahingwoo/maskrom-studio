@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { certBlob, certsCmd, isSelfSigned, pkcs7Certificates, trustedCerts } from '../src/woa/certs';
-import { accountProblem, encodePassword, setupComplete, sshKeyProblem, unattendXml, type Account } from '../src/woa/setup-files';
+import { accountProblem, AUTOLOGON_FILE, AUTOLOGON_TASK, autoLogonScript, encodePassword, setupComplete, sshKeyProblem, unattendXml, type Account } from '../src/woa/setup-files';
 import { unzip } from '../src/woa/zip';
 import { CONFIGURE } from '../src/woa/stage-scripts';
 
@@ -55,6 +55,65 @@ describe('the answer file', () => {
     expect(accountProblem({ ...a, password: '' })).toBe('account.password.empty');
     expect(accountProblem({ ...a, computerName: 'this-name-is-too-long' })).toBe('account.computer.bad');
     expect(accountProblem(a)).toBeNull();
+  });
+});
+
+describe('signing in automatically', () => {
+  const a: Account = { user: 'woa', password: 'pässword & <x>', computerName: '', locale: '', keyboard: '', timeZone: '', autoLogonAlways: true };
+  const utf16 = (s: string) => Buffer.from(s, 'utf16le').toString('base64');
+  it('keeps LogonCount 1 in the answer file, so Setup only signs in for the first start', () => {
+    expect(unattendXml(a)).toMatch(/<LogonCount>1<\/LogonCount>/);
+  });
+  it('stores the password as the LSA secret, not in plain text, and turns automatic sign-in on for good', () => {
+    const s = autoLogonScript(a);
+    expect(s).not.toContain(a.password);
+    expect(s).toContain(`FromBase64String('${utf16(a.password)}')`);
+    expect(s).toContain('LsaStorePrivateData');
+    expect(s).toContain("[WoaLsa]::Store('DefaultPassword', $Password)");
+    expect(s).toMatch(/Remove-ItemProperty -Path \$Winlogon -Name AutoLogonCount/);
+    expect(s).toMatch(/Remove-ItemProperty -Path \$Winlogon -Name DefaultPassword/);
+    expect(s).toContain("-Name AutoAdminLogon -Value '1' -PropertyType String");
+    expect(s).toContain("-Name DefaultUserName -Value $User");
+    expect(s).toContain("$User = 'woa'");
+    expect(s).toContain("-Name DefaultDomainName -Value '.'");
+    expect(s).toContain('PasswordLess\\Device');
+    expect(s).toContain('-Name DevicePasswordLessBuildVersion -Value 0 -PropertyType DWord');
+    // The cleanup cannot be skipped: it is in finally, after errors are made non-fatal.
+    const fin = s.slice(s.indexOf('} finally {'));
+    expect(fin).toContain("$ErrorActionPreference = 'Continue'");
+    expect(fin).toContain('Remove-Item -LiteralPath $PSCommandPath -Force');
+    expect(fin).toContain(`schtasks.exe /delete /tn "${AUTOLOGON_TASK}" /f`);
+  });
+  it('works with an empty password: no secret, an empty DefaultPassword', () => {
+    const s = autoLogonScript({ ...a, password: '' });
+    expect(s).toContain("FromBase64String('')");
+    expect(s).toContain("[WoaLsa]::Store('DefaultPassword', $null)");
+    expect(s).toContain("-Name DefaultPassword -Value '' -PropertyType String");
+  });
+  it('quotes the user name for PowerShell', () => {
+    expect(autoLogonScript({ ...a, user: "o'neil" })).toContain("$User = 'o''neil'");
+  });
+  it('SetupComplete.cmd locks the script down and runs it as SYSTEM after the first sign-in, before the answer file goes', () => {
+    const s = setupComplete({ skipSetup: a, ssh: false, sshKey: '' });
+    const ps = `%WINDIR%\\Setup\\Scripts\\${AUTOLOGON_FILE}`;
+    expect(s).toContain(`icacls "${ps}" /inheritance:r /grant "*S-1-5-18:F" /grant "*S-1-5-32-544:F"`);
+    expect(s).toContain(`schtasks.exe /create /f /tn "${AUTOLOGON_TASK}" /sc onlogon /delay 0000:30 /ru SYSTEM /rl highest`);
+    expect(s).toContain(`-File ${ps}"`);
+    expect(s).toContain(`if errorlevel 1 del /f /q "${ps}"`);
+    expect(s).toContain('DevicePasswordLessBuildVersion /t REG_DWORD /d 0');
+    expect(s.indexOf(AUTOLOGON_TASK)).toBeLessThan(s.indexOf('del /f /q "%WINDIR%\\Panther\\unattend.xml"'));
+    expect(s).toMatch(/RunOnce" \/v WoaUnattendCleanup .*Panther\\unattend\.xml/);
+    // A parenthesis in a line inside the if block would end the block early.
+    const block = s.slice(s.indexOf(`if exist "${ps}" (`), s.indexOf('\n)\n', s.indexOf(`if exist "${ps}" (`)));
+    for (const line of block.split('\n').slice(1)) expect(line).not.toMatch(/[()]/);
+  });
+  it('the install script copies the script into the new Windows and zeroes the staging copy', () => {
+    expect(CONFIGURE).toContain(`copy /y "%STAGE%\\${AUTOLOGON_FILE}" W:\\Windows\\Setup\\Scripts\\${AUTOLOGON_FILE}`);
+    expect(CONFIGURE).toContain(`fsutil file setzerodata offset=0 length=1048576 "%STAGE%\\${AUTOLOGON_FILE}"`);
+  });
+  it('leaves it all out when the option is off', () => {
+    expect(setupComplete({ skipSetup: { ...a, autoLogonAlways: false }, ssh: false, sshKey: '' })).not.toContain(AUTOLOGON_FILE);
+    expect(setupComplete({ skipSetup: null, ssh: false, sshKey: '' })).not.toContain(AUTOLOGON_TASK);
   });
 });
 

@@ -782,6 +782,7 @@ ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (
     const log = (() => { try { return readFileSync(join(dir, 'host-build.log'), 'utf8'); } catch { return ''; } })();
     // The answer file held the password: gone before anything else happens.
     rmSync(join(dir, 'unattend.xml'), { force: true });
+    rmSync(join(dir, 'woa-autologon.ps1'), { force: true });
     if (!/WOA-HOST-BUILD-OK/.test(log)) {
       return { ok: false, reason: 'host.failed', detail: log.split(/\r?\n/).slice(-30).join('\n') };
     }
