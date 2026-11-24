@@ -44,7 +44,7 @@ const x64 = join(tmp, 'install.wim');
 }
 
 const base = {
-  ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_FAKE_RELEASES: '1', WOA_IMAGER_FAKE_UPDATE: 'current',
+  ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_UI_MODE: 'advanced', WOA_IMAGER_FAKE_RELEASES: '1', WOA_IMAGER_FAKE_UPDATE: 'current',
   WOA_IMAGER_TEST_PICK: iso, WOA_IMAGER_TEST_FIRMWARE: firmware,
   WOA_IMAGER_SHOW_DATA_DIR: '/home/user/.config/Maskrom Studio',
   // A fresh profile, so nothing of this machine's shows or is touched (Linux).
@@ -53,11 +53,11 @@ const base = {
 delete base.ELECTRON_RUN_AS_NODE;
 const errors = [];
 
-async function session(name, { theme = 'light', lang = 'en', env = {} }, steps) {
+async function session(name, { theme = 'light', lang = 'en', env = {}, size = [W, H] }, steps) {
   const app = await electron.launch({ args: ['.'], env: { ...base, ...env } });
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-  await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [W, H]);
+  await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), size);
   await page.evaluate(([t, l]) => { localStorage.setItem('theme', t); localStorage.setItem('lang', l); }, [theme, lang]);
   await page.reload();
   await page.waitForSelector('h2');
@@ -149,6 +149,48 @@ await session('upgrade', { env: { WOA_IMAGER_TEST_WORKER: 'fake-board-worker.js'
   await page.click('.pf-v6-c-card button:has-text("Upgrade")');
   await page.waitForSelector('text=The firmware is upgraded', { timeout: 180000 });
   await shot('upgrade-done');
+});
+
+// Simple mode: four steps, for the TaishanPi 3M and Windows; the CM5-IO's flashing-mode step.
+const simple = (boardId) => async (page, shot) => {
+  await page.click(`#s-board-${boardId}`);
+  if (boardId === 'tspi3m') await shot('simple-board');
+  await next(page);
+  await page.waitForSelector('#s-task-windows');
+  await page.click('label[for="s-task-windows"]');
+  await button(page, 'Choose the Windows file|选择 Windows 文件');
+  await page.waitForSelector('.pf-m-success');
+  if (boardId === 'tspi3m') await shot('simple-what');
+  await next(page);
+  await page.waitForSelector('.pf-v6-c-card ol');
+  await page.waitForTimeout(400);
+  await shot(`simple-ready${boardId === 'tspi3m' ? '' : `-${boardId}`}`);
+  if (boardId !== 'tspi3m') return;
+  await next(page);
+  await page.waitForSelector('#s-understand');
+  await shot('simple-confirm');
+};
+const simpleEnv = { env: { WOA_IMAGER_UI_MODE: 'simple' } };
+await session('simple', simpleEnv, simple('tspi3m'));
+await session('simple cm5io', simpleEnv, simple('cm5io'));
+for (const o of [{ theme: 'dark' }, { lang: 'zh-CN' }]) await session(`simple ${JSON.stringify(o)}`, { ...o, ...simpleEnv }, simple('tspi3m'));
+
+// Advanced to Simple with a non-default choice: the dialog that lists what goes back.
+await session('mode switch', {}, async (page, shot) => {
+  await toTask(page, 'uefi-keep');
+  await page.click('#mode-simple');
+  await page.waitForSelector('#mode-title');
+  await page.waitForTimeout(400);
+  await shot('mode-switch');
+});
+
+// Narrow: the masthead has no room for the mode choice; Settings has it.
+await session('narrow', { ...simpleEnv, size: [720, 640] }, async (page, shot) => {
+  await shot('simple-narrow');
+  await page.click('.pf-v6-c-masthead button:has-text("Settings")');
+  await page.waitForSelector('#set-mode-simple');
+  await page.waitForTimeout(500);
+  await shot('simple-narrow-settings');
 });
 
 const about = async (page, shot) => {

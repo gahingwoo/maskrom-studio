@@ -16,11 +16,13 @@ export interface Settings {
   appChannel: Channel;
   /** Which releases of edk2-rk3576 and woa-rk3576 the writes use. */
   firmwareChannel: Channel;
+  /** Simple: four steps with the recommended choices; Advanced: every option. */
+  uiMode: 'simple' | 'advanced';
   /** The newer release the last check found, repeated at the next start. */
   knownRelease: AppRelease | null;
 }
 
-const DEFAULTS: Settings = { updateCheck: true, lastUpdateCheck: 0, resetAfterMaskrom: true, appChannel: 'stable', firmwareChannel: 'stable', knownRelease: null };
+const DEFAULTS: Settings = { updateCheck: true, lastUpdateCheck: 0, resetAfterMaskrom: true, appChannel: 'stable', firmwareChannel: 'stable', uiMode: 'simple', knownRelease: null };
 
 function file(): string {
   return join(app.getPath('userData'), 'settings.json');
@@ -36,6 +38,8 @@ export function loadSettings(): Settings {
       // The earlier on/off for betas is the Prerelease tier.
       appChannel: isChannel(raw.appChannel) ? raw.appChannel : raw.betaUpdates === true ? 'prerelease' : 'stable',
       firmwareChannel: isChannel(raw.firmwareChannel) ? raw.firmwareChannel : 'stable',
+      // New installs start Simple; an install from before the two modes keeps the page it knew.
+      uiMode: raw.uiMode === 'simple' || raw.uiMode === 'advanced' ? raw.uiMode : 'advanced',
       knownRelease: raw.knownRelease && typeof raw.knownRelease.tag_name === 'string' && typeof raw.knownRelease.html_url === 'string'
         && Array.isArray(raw.knownRelease.assets) ? raw.knownRelease : null,
     };

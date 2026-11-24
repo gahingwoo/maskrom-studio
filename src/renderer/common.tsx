@@ -32,7 +32,11 @@ export const api = window.imager;
  * a masthead, then one wizard that fills the rest of the window, its step
  * nav running the full height and its footer pinned to the bottom.
  */
-export function Shell({ children, onSettings }: { children: React.ReactNode; onSettings: () => void }) {
+export function Shell({ children, onSettings, mode, onMode }: {
+  children: React.ReactNode; onSettings: () => void;
+  /** Simple or Advanced, shown at md and wider; narrower, Settings has it. */
+  mode?: UiMode | null; onMode?: (m: UiMode) => void;
+}) {
   const { t, lang } = useI18n();
   const [langOpen, setLangOpen] = useState(false);
   const masthead = (
@@ -49,6 +53,11 @@ export function Shell({ children, onSettings }: { children: React.ReactNode; onS
         <Toolbar isFullHeight isStatic>
           <ToolbarContent>
             <ToolbarGroup align={{ default: 'alignEnd' }}>
+              {mode && onMode && (
+                <ToolbarItem visibility={{ default: 'hidden', md: 'visible' }}>
+                  <ModeToggle mode={mode} onMode={onMode} />
+                </ToolbarItem>
+              )}
               <ToolbarItem>
                 <Button variant="plain" icon={<GlobeIcon />} aria-label={t('lang.dialog')} title={t('lang.dialog')}
                   onClick={() => setLangOpen(true)}>
@@ -278,7 +287,8 @@ function checkWords(c: UpdateCheck, t: T): string {
 
 type AppSettings = { updateCheck: boolean; appChannel: Channel; firmwareChannel: Channel; resetAfterMaskrom: boolean };
 
-export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdate, writing, onAbout, onFirmwareChannel }: {
+export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdate, writing, onAbout, onFirmwareChannel, mode, onMode }: {
+  mode?: UiMode | null; onMode?: (m: UiMode) => void;
   /** The firmware tier changed: the releases are read again. */
   onFirmwareChannel?: () => void;
   open: boolean; onClose: () => void; theme: Theme; setTheme: (t: Theme) => void;
@@ -325,6 +335,14 @@ export function SettingsModal({ open, onClose, theme, setTheme, onOffer, onUpdat
       <ModalBody>
         {s && (
           <Form onSubmit={(e) => e.preventDefault()}>
+            {mode && onMode && (
+              <FormSection title={t('mode.label')} titleElement="h3">
+                <FormGroup fieldId="ui-mode" role="group" aria-label={t('mode.label')}>
+                  <ModeToggle mode={mode} onMode={onMode} idPrefix="set-mode" />
+                  <FormHelperText><HelperText><HelperTextItem>{t(`mode.${mode}.help`)}</HelperTextItem></HelperText></FormHelperText>
+                </FormGroup>
+              </FormSection>
+            )}
             <FormSection title={t('settings.updates')} titleElement="h3">
               <FormGroup fieldId="set-update" label={t('settings.updateCheck.label')} hasNoPaddingTop>
                 <Switch id="set-update" label={t('settings.updateCheck')} isChecked={s.updateCheck}
@@ -518,5 +536,19 @@ function ChannelPicker({ id, label, value, help, onChange }: { id: string; label
         <FormHelperText><HelperText><HelperTextItem variant={value === 'stable' ? 'default' : 'warning'}>{note}</HelperTextItem></HelperText></FormHelperText>
       )}
     </>
+  );
+}
+
+export type UiMode = 'simple' | 'advanced';
+
+/** Simple | Advanced: a choice between two modes, so a toggle group, as the theme choice. */
+export function ModeToggle({ mode, onMode, idPrefix = 'mode' }: { mode: UiMode; onMode: (m: UiMode) => void; idPrefix?: string }) {
+  const { t } = useI18n();
+  return (
+    <ToggleGroup isCompact aria-label={t('mode.label')}>
+      {(['simple', 'advanced'] as UiMode[]).map((m) => (
+        <ToggleGroupItem key={m} text={t(`mode.${m}`)} buttonId={`${idPrefix}-${m}`} isSelected={mode === m} onChange={() => { if (mode !== m) onMode(m); }} />
+      ))}
+    </ToggleGroup>
   );
 }

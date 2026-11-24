@@ -780,9 +780,12 @@ ipcMain.handle('cache:clear', (_e, o: { nvdata: boolean }) => {
 
 ipcMain.handle('settings:get', () => {
   const s = loadSettings();
-  return { updateCheck: s.updateCheck, appChannel: s.appChannel, firmwareChannel: s.firmwareChannel, resetAfterMaskrom: s.resetAfterMaskrom };
+  // Tests and screenshots (unpackaged builds) start in the mode they ask for.
+  const forced = !app.isPackaged ? process.env.WOA_IMAGER_UI_MODE : undefined;
+  const uiMode = forced === 'simple' || forced === 'advanced' ? forced : s.uiMode;
+  return { updateCheck: s.updateCheck, appChannel: s.appChannel, firmwareChannel: s.firmwareChannel, resetAfterMaskrom: s.resetAfterMaskrom, uiMode };
 });
-ipcMain.handle('settings:set', (_e, patch: { updateCheck?: boolean; appChannel?: unknown; firmwareChannel?: unknown; resetAfterMaskrom?: boolean }) => {
+ipcMain.handle('settings:set', (_e, patch: { updateCheck?: boolean; appChannel?: unknown; firmwareChannel?: unknown; resetAfterMaskrom?: boolean; uiMode?: unknown }) => {
   const s = loadSettings();
   saveSettings({
     ...s,
@@ -790,6 +793,7 @@ ipcMain.handle('settings:set', (_e, patch: { updateCheck?: boolean; appChannel?:
     // A new tier for the app: the last check's offer was for the old one.
     ...(isChannel(patch.appChannel) ? { appChannel: patch.appChannel, lastUpdateCheck: 0, knownRelease: null } : {}),
     ...(isChannel(patch.firmwareChannel) ? { firmwareChannel: patch.firmwareChannel } : {}),
+    ...(patch.uiMode === 'simple' || patch.uiMode === 'advanced' ? { uiMode: patch.uiMode } : {}),
     ...(typeof patch.resetAfterMaskrom === 'boolean' ? { resetAfterMaskrom: patch.resetAfterMaskrom } : {}),
   });
 });

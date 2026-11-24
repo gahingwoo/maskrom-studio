@@ -36,7 +36,7 @@ const iso = join(dir, 'w.iso');
 writeFileSync(iso, execFileSync('xz', ['-dc', 'test/fixtures/udf-small.iso.xz']));
 const head = Array.from(readFileSync('test/fixtures/tspi3m-emmc-head.bin'));
 
-const env = { ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_TEST_SERVE: winpe, WOA_IMAGER_TEST_SERVE_XZ: iso, WOA_IMAGER_TEST_PICK: iso };
+const env = { ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_UI_MODE: 'advanced', WOA_IMAGER_TEST_SERVE: winpe, WOA_IMAGER_TEST_SERVE_XZ: iso, WOA_IMAGER_TEST_PICK: iso };
 delete env.ELECTRON_RUN_AS_NODE;
 const app = await electron.launch({ args: ['.'], env });
 let ok = false;

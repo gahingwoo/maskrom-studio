@@ -206,8 +206,8 @@ export interface ImagerApi {
   releaseServed(token: string): Promise<void>;
   onUsbChoice(cb: (choices: { deviceId: string; productName?: string; productId: number }[]) => void): () => void;
   answerUsbChoice(deviceId: string): void;
-  getSettings(): Promise<{ updateCheck: boolean; appChannel: 'stable' | 'prerelease' | 'ci'; firmwareChannel: 'stable' | 'prerelease' | 'ci'; resetAfterMaskrom: boolean }>;
-  setSettings(s: { updateCheck?: boolean; appChannel?: 'stable' | 'prerelease' | 'ci'; firmwareChannel?: 'stable' | 'prerelease' | 'ci'; resetAfterMaskrom?: boolean }): Promise<void>;
+  getSettings(): Promise<{ updateCheck: boolean; appChannel: 'stable' | 'prerelease' | 'ci'; firmwareChannel: 'stable' | 'prerelease' | 'ci'; resetAfterMaskrom: boolean; uiMode: 'simple' | 'advanced' }>;
+  setSettings(s: { updateCheck?: boolean; appChannel?: 'stable' | 'prerelease' | 'ci'; firmwareChannel?: 'stable' | 'prerelease' | 'ci'; resetAfterMaskrom?: boolean; uiMode?: 'simple' | 'advanced' }): Promise<void>;
   checkUpdate(force: boolean): Promise<UpdateCheck | null>;
   installUpdate?(): Promise<UpdateResult>;
   cancelUpdate?(): Promise<void>;

@@ -10,10 +10,20 @@
 
 现状：第一个版本，还没有在实际开发板上跑过。测试步骤见 [docs/hardware-test.md](docs/hardware-test.md)（英文）。
 
+有两种模式，可在顶栏或“设置”中切换。
+
+**简单模式**（新安装时的默认模式）：四个步骤，全部使用推荐设置：选开发板，选要做什么（安装 Windows、安装 Armbian、恢复原厂系统、更新启动固件），按说明让开发板进入刷机模式，最后确认会清除哪些内容。
+
 | | |
 |---|---|
-| ![写入内容这一步（立创泰山派 3M）：全部任务](docs/imgs/task-zh-CN.png) 写入内容 | ![Windows 设置：自己设定 Windows 大小（40 GB），exFAT 数据分区，给 Linux 留 8 GB](docs/imgs/windows-setup-zh-CN.png) 磁盘布局 |
-| ![设置：更新、下载文件与清除缓存、外观、语言](docs/imgs/settings-zh-CN.png) 设置 | ![关于 Maskrom Studio](docs/imgs/about-zh-CN.png) 关于 |
+| ![简单模式第 1 步：立创泰山派 3M 和 ArmSoM CM5-IO 的图片](docs/imgs/simple-board-zh-CN.png) 选开发板 | ![简单模式第 2 步：安装 Windows、安装 Linux（Armbian）、恢复原厂系统、更新启动固件](docs/imgs/simple-what-zh-CN.png) 做什么 |
+| ![简单模式第 3 步：泰山派 3M 进入刷机模式的方法和 MSK 焊盘照片](docs/imgs/simple-ready-zh-CN.png) 准备 | ![设置：更新、下载文件与清除缓存、外观、语言](docs/imgs/settings-zh-CN.png) 设置 |
+
+**高级模式**：全部选项（固件的各种写法、磁盘布局、SD 卡和 U 盘、发布类型、WinPE 启动 U 盘）。
+
+| | |
+|---|---|
+| ![写入内容这一步（高级模式）：Windows、UEFI 固件、Linux 和出厂系统分组](docs/imgs/task-zh-CN.png) 写入内容 | ![Windows 设置：自己设定 Windows 大小（40 GB），exFAT 数据分区，给 Linux 留 8 GB](docs/imgs/windows-setup-zh-CN.png) 磁盘布局 |
 
 更多截图（含深色主题）：[docs/screenshots.md](docs/screenshots.md)。
 

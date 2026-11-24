@@ -4,12 +4,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ActionList, ActionListGroup, ActionListItem, Alert, AlertActionCloseButton, AlertActionLink, Button, Card, CardBody,
-  CardTitle, Checkbox, CodeBlock, CodeBlockCode, Content, DescriptionList, DescriptionListDescription, DescriptionListGroup,
+  CardHeader, CardTitle, Checkbox, Gallery, Popover, CodeBlock, CodeBlockCode, Content, DescriptionList, DescriptionListDescription, DescriptionListGroup,
   DescriptionListTerm, ExpandableSection, Flex, FlexItem, Form, FormGroup, FormSection, FormHelperText, HelperText, HelperTextItem,
   List, ListItem, Modal, ModalBody, ModalFooter, ModalHeader, OrderType, PageSection, Progress, ProgressMeasureLocation,
   Radio, Stack, StackItem, Switch, TextArea, TextInput, Title, Wizard, WizardFooterWrapper, WizardStep, useWizardContext,
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
+import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon';
 import { formatBytes } from '../shared/format';
 import type { ArmbianChoice, FactoryChoice, ReleaseTier, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
@@ -19,7 +20,7 @@ import type { WebflashTarget } from '../web/webflash/boards';
 import type { WoaJob, WoaWorkerEvent, WoaWorkerRequest } from '../woa/woa-worker';
 import type { RegionResult, RegionStage } from '../woa/maskrom-regions';
 import { accountProblem, DEFAULT_SETUP, OPENSSH, sshKeyProblem, type Account, type SetupOptions } from '../woa/setup-files';
-import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal } from './common';
+import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal, type UiMode } from './common';
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
 import { ARMBIAN_RESTORE, type ArmbianBranch } from '../woa/armbian-restore';
@@ -141,7 +142,17 @@ export function App() {
   const worker = useRef<Worker | null>(null);
   const servedTokens = useRef<string[]>([]);
 
-  useEffect(() => { api.releases().then(setReleases); }, []);
+  // Simple or Advanced (Settings, masthead); null until the settings are read.
+  const [mode, setModeState] = useState<UiMode | null>(null);
+  const [modeAsk, setModeAsk] = useState<string[] | null>(null);
+  useEffect(() => {
+    api.getSettings().then(async (st) => {
+      // Simple mode always uses the Stable firmware and WinPE.
+      if (st.uiMode === 'simple' && st.firmwareChannel !== 'stable') await api.setSettings({ firmwareChannel: 'stable' });
+      setModeState(st.uiMode);
+      api.releases(st.uiMode === 'simple' && st.firmwareChannel !== 'stable').then(setReleases);
+    });
+  }, []);
   useEffect(() => {
     api.boardHere().then((h) => {
       setHere(h);
@@ -1035,6 +1046,184 @@ export function App() {
     </StepPage>
   );
 
+  // --- Simple mode -------------------------------------------------------------
+  const SIMPLE_TASKS: Task[] = ['windows', 'armbian', 'factory', 'upgrade'];
+  const SIMPLE_BOARDS: BoardId[] = ['tspi3m', 'cm5io'];
+  /** What Advanced mode has set that Simple mode would put back to the recommended choice. */
+  const nonDefaults = async (): Promise<string[]> => {
+    const st = await api.getSettings();
+    const out: string[] = [];
+    if (boardId && !SIMPLE_BOARDS.includes(boardId)) out.push(t('mode.reset.board'));
+    if (task && !SIMPLE_TASKS.includes(task)) out.push(t('mode.reset.task'));
+    if (layoutMode !== 'whole') out.push(t('mode.reset.layout'));
+    if (st.firmwareChannel !== 'stable') out.push(t('mode.reset.tier'));
+    if (restoreTo !== 'emmc' || dest !== 'emmc' || method !== 'stage') out.push(t('mode.reset.target'));
+    if (branch !== 'vendor') out.push(t('mode.reset.branch'));
+    if (!keepSettings) out.push(t('mode.reset.keep'));
+    if (via === 'here') out.push(t('mode.reset.here'));
+    return out;
+  };
+  const toSimple = async () => {
+    if (boardId && !SIMPLE_BOARDS.includes(boardId)) setBoardId(null);
+    if (task && !SIMPLE_TASKS.includes(task)) setTask(null);
+    setLayoutMode('whole'); setRestoreTo('emmc'); setDest('emmc'); setMethod('stage'); setBranch('vendor'); setKeepSettings(true); setVia('maskrom');
+    const st = await api.getSettings();
+    if (st.firmwareChannel !== 'stable') { await api.setSettings({ firmwareChannel: 'stable' }); api.releases(true).then(setReleases); }
+    await api.setSettings({ uiMode: 'simple' });
+    setModeState('simple');
+  };
+  const requestMode = async (m: UiMode) => {
+    if (m === 'advanced') { await api.setSettings({ uiMode: 'advanced' }); setModeState('advanced'); return; }
+    const list = await nonDefaults();
+    if (list.length) setModeAsk(list); else await toSimple();
+  };
+  const simpleReady = task === 'windows' ? !!edition
+    : task === 'armbian' ? !!armbianFound
+    : task === 'factory' ? !!factory && !factory.refuse
+    : task === 'upgrade' ? upgradeReady : false;
+  const erases = task !== 'upgrade';
+  const [understood2, setUnderstood2] = useState(false);
+  useEffect(() => { setUnderstood2(false); }, [task, boardId]);
+  const term = (word: string, help: string) => (
+    <>
+      {word}{' '}
+      <Popover bodyContent={help} aria-label={word}>
+        <Button variant="plain" isInline aria-label={`${word}: ${t('s.help')}`} icon={<OutlinedQuestionCircleIcon />} className="term-help" />
+      </Popover>
+    </>
+  );
+  const simpleChoice = (id: Task, title: string, desc: string, disabled = false) => (
+    <Radio key={id} id={`s-task-${id}`} name="s-task" label={title} description={desc} isChecked={task === id} isDisabled={disabled}
+      onChange={() => { setTask(id); if (id === 'armbian') { setBranch('vendor'); setRestoreTo('emmc'); } }} />
+  );
+  const simpleBoardStep = (
+    <StepPage title={t('s.step.board')} lead={t('s.board.lead')}>
+      <Gallery hasGutter minWidths={{ default: '14rem' }}>
+        {SIMPLE_BOARDS.map((id) => {
+          const b = woaBoard(id)!;
+          return (
+            <Card key={id} id={`s-board-${id}`} isSelectable isSelected={boardId === id} isCompact>
+              <CardHeader selectableActions={{ selectableActionId: `s-board-input-${id}`, selectableActionAriaLabelledby: `s-board-${id}`, name: 's-board',
+                variant: 'single', onChange: () => { setBoardId(id); setVia('maskrom'); }, isChecked: boardId === id }}>
+                <CardTitle>{b.name}</CardTitle>
+              </CardHeader>
+              <CardBody><img src={`resources/boards/${id}.png`} alt={b.name} className="board-photo" /></CardBody>
+            </Card>
+          );
+        })}
+      </Gallery>
+      <Content component="p" className="muted">{t('s.board.rock4d')}</Content>
+    </StepPage>
+  );
+  const simpleWhatStep = board && (
+    <StepPage title={t('s.step.what')} lead={t('s.what.lead', { board: board.name })}>
+      <Form onSubmit={(e) => e.preventDefault()}>
+        <FormGroup role="radiogroup" fieldId="s-task" aria-label={t('s.step.what')} isStack>
+          {simpleChoice('windows', t('s.what.windows'), t('s.what.windows.desc'), !board.windows)}
+          {simpleChoice('armbian', t('s.what.armbian'), t('s.what.armbian.desc'), !ARMBIAN_RESTORE[board.id])}
+          {simpleChoice('factory', t('s.what.factory'), t('s.what.factory.desc'), !ARMBIAN_RESTORE[board.id])}
+          {simpleChoice('upgrade', t('s.what.upgrade'), t('s.what.upgrade.desc'), board.firmwareStorage !== 'emmc')}
+        </FormGroup>
+        {task === 'windows' && (
+          <FormGroup fieldId="s-win" label={t('s.windows.label')}>
+            <Flex><FlexItem><Button id="s-win" variant="secondary" onClick={() => chooseWindows(() => api.pickWindows())}>{t('s.windows.choose')}</Button></FlexItem></Flex>
+            <FormHelperText><HelperText>
+              {windowsError ? <HelperTextItem variant="error">{t('s.windows.bad')} {windowsError}</HelperTextItem>
+                : windows && !edition ? <HelperTextItem variant="error">{t('s.windows.bad')} {windows.refuse ? msg(windows.refuse) : checkText(windows.editions[0])}</HelperTextItem>
+                : edition ? <HelperTextItem variant="success">{t('s.windows.ok', { edition: edition.name, release: (edition.release ?? String(edition.build)).replace(/^Windows 1[01] /, '') })}</HelperTextItem>
+                : <HelperTextItem>{t('win.24h2.text')}</HelperTextItem>}
+              {edition?.warn && <HelperTextItem variant="warning">{checkText(edition)}</HelperTextItem>}
+            </HelperText></FormHelperText>
+            <ExpandableSection toggleText={t('win.get')} className="sources">
+              <Content component="p">{t('win.get.text')}</Content>
+              <DescriptionList isCompact>
+                {WINDOWS_SOURCES.filter((src) => src.fits).map((src) => (
+                  <DescriptionListGroup key={src.id}>
+                    <DescriptionListTerm><Button variant="link" isInline component="a" href={src.url} target="_blank">{src.title[lang]}</Button>
+                      {src.recommended && <span className="muted"> ({src.recommended[lang]})</span>}</DescriptionListTerm>
+                    <DescriptionListDescription>{src.text[lang]}</DescriptionListDescription>
+                  </DescriptionListGroup>
+                ))}
+              </DescriptionList>
+            </ExpandableSection>
+          </FormGroup>
+        )}
+        {task === 'armbian' && (
+          <FormGroup fieldId="s-armbian" label="Armbian">
+            <Content component="p">{armbianFound ? t('s.armbian.info', { version: armbianFound.version, kernel: armbianFound.kernel })
+              : armbian && typeof armbian === 'object' && 'error' in armbian ? msg(armbian.error) : t('s.armbian.looking')}</Content>
+          </FormGroup>
+        )}
+        {task === 'factory' && (
+          <FormGroup fieldId="s-factory" label={term(t('s.factory.term'), t('s.factory.term.help'))}>
+            <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem><Button id="s-factory" variant="secondary" onClick={chooseFactory}>{t('s.factory.choose')}</Button></FlexItem>
+              <FlexItem><Button variant="link" isInline component="a" href={factoryLink} target="_blank">{t('restore.factory.where')}</Button></FlexItem>
+            </Flex>
+            {(factory || factoryError) && (
+              <FormHelperText><HelperText>
+                {factoryError ? <HelperTextItem variant="error">{t('s.factory.bad')} {factoryError}</HelperTextItem>
+                  : factory!.refuse ? <HelperTextItem variant="error">{t('s.factory.bad')} {msg(factory!.refuse)}</HelperTextItem>
+                  : <HelperTextItem variant="success">{t('s.factory.ok', { model: factory!.model, version: factory!.version })}</HelperTextItem>}
+              </HelperText></FormHelperText>
+            )}
+          </FormGroup>
+        )}
+        {task === 'upgrade' && (
+          <FormGroup fieldId="s-upgrade" label={t('s.what.upgrade')}>
+            <Content component="p">{upgradeReady ? t('s.upgrade.info', { version: upgrade.version ?? upgrade.origin }) : upgradeError ?? t('s.upgrade.loading')}</Content>
+          </FormGroup>
+        )}
+      </Form>
+      <Content component="p" className="muted">{t('s.more')}</Content>
+    </StepPage>
+  );
+  const eraseText = task === 'windows' ? t('s.erase.windows') : task === 'upgrade' ? t('s.erase.upgrade') : t('s.erase.all');
+  const simpleReadyStep = board && (
+    <StepPage title={t('s.step.ready')} lead={t('s.ready.lead')}>
+      <Card isPlain>
+        <CardTitle>{term(t('s.ready.title'), t('s.ready.term.help'))}</CardTitle>
+        <CardBody>
+          <Stack hasGutter>
+            <List component="ol" type={OrderType.number}>
+              {(board.id === 'tspi3m' ? [1, 2, 3, 4] : [1, 2, 3]).map((n) => <ListItem key={n}>{t(`s.ready.${board.id}.${n}`)}</ListItem>)}
+            </List>
+            <Content component="p">{t('s.ready.cable')}</Content>
+            {board.id === 'tspi3m' && <img src="resources/boards/tspi3m-maskrom.jpg" alt={t('s.ready.photo')} className="maskrom-photo" />}
+            <DriversNote />
+          </Stack>
+        </CardBody>
+      </Card>
+      <Alert isInline variant={erases ? 'warning' : 'info'} title={t(erases ? 's.erase.title' : 's.erase.none.title')}>{eraseText}</Alert>
+    </StepPage>
+  );
+  const simpleFrom = task === 'windows' ? windows?.fileName : task === 'factory' ? factory?.fileName
+    : task === 'armbian' ? armbianFound?.file : task === 'upgrade' && upgradeReady ? `edk2-rk3576 ${upgrade.version ?? upgrade.origin}` : '';
+  const simpleConfirmStep = board && task && (
+    <StepPage title={t('s.step.confirm')} lead={t('s.confirm.lead')}>
+      <Review rows={[
+        [t('s.confirm.board'), board.name],
+        [t('s.confirm.what'), t(`s.what.${task}`)],
+        [t('s.confirm.file'), simpleFrom ?? ''],
+        [t('s.confirm.erased'), eraseText],
+        [t('s.confirm.checked'), t('s.confirm.checked.value')],
+        [t('s.confirm.after'), t(`s.after.${task}`)],
+      ]} />
+      {erases && <Checkbox id="s-understand" label={t('s.understand')} isChecked={understood2} onChange={(_e, v) => setUnderstood2(v)} />}
+    </StepPage>
+  );
+  const simpleWizard = (
+    <Wizard navAriaLabel="Steps" isVisitRequired>
+      <WizardStep name={t('s.step.board')} id="s-board" footer={{ isNextDisabled: !board || !SIMPLE_BOARDS.includes(board.id), isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleBoardStep}</WizardStep>
+      <WizardStep name={t('s.step.what')} id="s-what" isDisabled={!board} footer={{ isNextDisabled: !task || !SIMPLE_TASKS.includes(task) || !simpleReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleWhatStep}</WizardStep>
+      <WizardStep name={t('s.step.ready')} id="s-ready" isDisabled={!simpleReady} footer={{ isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{simpleReadyStep}</WizardStep>
+      <WizardStep name={t('s.step.confirm')} id="s-confirm" isDisabled={!simpleReady}
+        footer={<ReviewFooter label={t('s.start')} disabled={!simpleReady || (erases && !understood2)} why={null} onGo={() => { setUnderstood2(false); start(); }} />}>
+        {simpleConfirmStep}
+      </WizardStep>
+    </Wizard>
+  );
+
   const windowsNeeded = task === 'windows';
   const c = run?.confirm;
   const confirmText = c && (c.kind === 'upgrade' ? (
@@ -1094,7 +1283,7 @@ export function App() {
       : t('ask.connect.text');
 
   return (
-    <Shell onSettings={() => setSettings(true)}>
+    <Shell onSettings={() => setSettings(true)} mode={run ? null : mode} onMode={requestMode}>
       {!run && offer && dismissed !== offer.version && (
         <PageSection aria-label={t('settings.updates')} className="update-notice">
           <Alert isInline variant="info" title={t('update.available', { version: `${offer.version}${offer.beta ? ' (beta)' : ''}` })}
@@ -1150,7 +1339,7 @@ export function App() {
         </PageSection>
       ) : (
         <PageSection type="wizard" isFilled hasBodyWrapper={false} aria-label={t('app.name')}>
-          <Wizard navAriaLabel="Steps" isVisitRequired>
+          {mode === 'simple' ? simpleWizard : mode === 'advanced' && <Wizard navAriaLabel="Steps" isVisitRequired>
             <WizardStep name={t('step.board')} id="board" footer={{ isNextDisabled: !board, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{boardStep}</WizardStep>
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
             {windowsNeeded && (<WizardStep name={t('step.windows')} id="windows" footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>)}
@@ -1161,7 +1350,7 @@ export function App() {
               footer={<ReviewFooter label={goLabel} disabled={!!why} why={why} onGo={() => setAsk(true)} />}>
               {reviewStep}
             </WizardStep>
-          </Wizard>
+          </Wizard>}
         </PageSection>
       )}
       <Modal isOpen={ask} onClose={() => { setAsk(false); setUnderstood(false); }} variant="small" aria-labelledby="ask-title">
@@ -1176,7 +1365,16 @@ export function App() {
       </Modal>
       <SettingsModal open={settings} onClose={() => setSettings(false)} theme={theme} setTheme={setTheme}
         onOffer={(o) => setOffer(o)} onUpdate={() => { setSettings(false); setUpdating(true); }} writing={!!run && !run.result}
-        onAbout={() => { setSettings(false); setAbout(true); }} onFirmwareChannel={() => api.releases(true).then(setReleases)} />
+        onAbout={() => { setSettings(false); setAbout(true); }} onFirmwareChannel={() => api.releases(true).then(setReleases)}
+        mode={mode} onMode={(m) => { setSettings(false); requestMode(m); }} />
+      <Modal isOpen={!!modeAsk} onClose={() => setModeAsk(null)} variant="small" aria-labelledby="mode-title">
+        <ModalHeader title={t('mode.reset.title')} labelId="mode-title" />
+        <ModalBody><Stack hasGutter><Content component="p">{t('mode.reset.text')}</Content><List>{(modeAsk ?? []).map((x) => <ListItem key={x}>{x}</ListItem>)}</List></Stack></ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={() => { setModeAsk(null); toSimple(); }}>{t('mode.reset.go')}</Button>
+          <Button variant="link" onClick={() => setModeAsk(null)}>{t('cancel')}</Button>
+        </ModalFooter>
+      </Modal>
       <AboutModal open={about} onClose={() => setAbout(false)} />
       {updating && <UpdateModal offer={offer} onClose={() => setUpdating(false)} />}
     </Shell>

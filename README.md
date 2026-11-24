@@ -16,11 +16,25 @@ ROCK 4D (firmware only; it has no eMMC).
 Status: first version, not yet run on hardware. See
 [docs/hardware-test.md](docs/hardware-test.md).
 
+Two modes, switched in the masthead or in Settings.
+
+**Simple** (the default for a new install): four steps with the
+recommended choices: the board, what to do (install Windows, install
+Armbian, restore the factory system, update the boot firmware), how to put
+the board in flashing mode, and a confirmation that says what is erased.
+
 | | |
 |---|---|
-| ![The What to write step for the TaishanPi 3M with every task](docs/imgs/task.png) What to write | ![A Windows 11 23H2 ARM64 ISO read: architecture, builds, boot files, editions; its 24H2 edition refused with the reason](docs/imgs/windows-image.png) A Windows image checked |
-| ![Windows setup with a chosen disk layout: 40 GB Windows, an exFAT data partition, 8 GB kept for Linux](docs/imgs/windows-setup.png) Disk layout | ![The firmware upgrade's confirmation: installed 0.4.1, new 0.4.2, UEFI settings kept](docs/imgs/upgrade-confirm.png) Firmware upgrade |
-| ![Armbian written to an SD card, with the board's note](docs/imgs/armbian.png) Armbian to an SD card | ![About Maskrom Studio](docs/imgs/about.png) About |
+| ![Simple mode, step 1: pictures of the LCKFB TaishanPi 3M and the ArmSoM CM5-IO](docs/imgs/simple-board.png) Choose the board | ![Simple mode, step 2: install Windows, install Linux (Armbian), restore the factory system, update the boot firmware; a Windows file chosen and ready to install](docs/imgs/simple-what.png) What to do |
+| ![Simple mode, step 3: how to put the TaishanPi 3M in flashing mode, with a photo of the MSK pads, and what will be erased](docs/imgs/simple-ready.png) Get ready | ![Simple mode, step 4: board, what, from, what is erased, how it is checked, what happens next, and a box to tick before Start](docs/imgs/simple-confirm.png) Confirm |
+
+**Advanced**: every option (firmware variants, disk layout, SD cards and
+USB drives, release tiers, the WinPE stick).
+
+| | |
+|---|---|
+| ![The What to write step in Advanced mode, grouped: Windows, UEFI firmware, Linux and factory systems](docs/imgs/task.png) What to write | ![Windows setup with a chosen disk layout: 40 GB Windows, an exFAT data partition, 8 GB kept for Linux](docs/imgs/windows-setup.png) Disk layout |
+| ![The firmware upgrade's confirmation: installed 0.4.1, new 0.4.2, UEFI settings kept](docs/imgs/upgrade-confirm.png) Firmware upgrade | ![About Maskrom Studio](docs/imgs/about.png) About |
 
 More, in the dark theme and in Chinese: [docs/screenshots.md](docs/screenshots.md).
 

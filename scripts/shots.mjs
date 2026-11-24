@@ -22,7 +22,7 @@ put('sys/block/mmcblk1/device/name', 'A3A561\n');
 put('sys/block/mmcblk1/size', '121110528\n');
 
 const base = {
-  ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_FAKE_RELEASES: '1', WOA_IMAGER_FAKE_UPDATE: 'current',
+  ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_UI_MODE: 'advanced', WOA_IMAGER_FAKE_RELEASES: '1', WOA_IMAGER_FAKE_UPDATE: 'current',
   WOA_IMAGER_TEST_PICK: iso,
 };
 delete base.ELECTRON_RUN_AS_NODE;

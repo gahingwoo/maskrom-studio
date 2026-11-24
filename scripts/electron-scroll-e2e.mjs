@@ -13,7 +13,7 @@ import { join } from 'node:path';
 const tmp = mkdtempSync(join(tmpdir(), 'woa-scroll-'));
 const iso = join(tmp, 'Win11_23H2_ARM64.iso');
 writeFileSync(iso, execFileSync('xz', ['-dc', 'test/fixtures/udf-small.iso.xz']));
-const env = { ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_FAKE_RELEASES: '1', WOA_IMAGER_FAKE_UPDATE: 'current', WOA_IMAGER_TEST_PICK: iso };
+const env = { ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_UI_MODE: 'advanced', WOA_IMAGER_FAKE_RELEASES: '1', WOA_IMAGER_FAKE_UPDATE: 'current', WOA_IMAGER_TEST_PICK: iso };
 delete env.ELECTRON_RUN_AS_NODE;
 const failures = [];
 

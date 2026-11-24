@@ -115,3 +115,7 @@ html.pf-v6-theme-dark .credit-badge__mark { fill: #8b73c9; }
 html.pf-v6-theme-dark .credit-badge__name { fill: var(--pf-t--global--text--color--subtle); }
 html.pf-v6-theme-dark .credit-badge__label { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
 
+
+/* Simple mode: the boards' pictures and the flashing-mode photo at a readable size. */
+.board-photo { display: block; width: 100%; max-width: 20rem; height: auto; margin-inline: auto; }
+.maskrom-photo { display: block; width: 100%; max-width: 48rem; height: auto; border-radius: var(--pf-t--global--border--radius--small); }
