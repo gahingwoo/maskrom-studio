@@ -51,29 +51,44 @@ async function runDiskJob(job: Extract<BoardJob, { kind: 'stage-disk' }>, send: 
     return fail(`${job.device} is not a drive the imager writes to (system disk, read-only, too small, or gone). Nothing was written.`);
   }
   const d = drives.find((x) => x.device === job.device)!;
-  const head = new Uint8Array(34 * 512);
-  const winpe = fileSource(job.winpe);
-  const file = fileSource(job.image.path);
+  const planned = planDiskStage(job, d.size ?? 0);
+  if ('stop' in planned) return fail(planned.stop);
   try {
-    const source = job.image.extents ? extentSource(file, { path: job.image.name, size: job.image.size, extents: job.image.extents }) : file;
-    let regions: Region[];
-    try {
-      regions = planStage({
-        board, target: job.target, diskBytes: d.size ?? 0, head, winpe,
-        image: { source, name: job.image.name, sha256: job.image.sha256, index: job.image.index, edition: job.image.edition, build: job.image.build },
-        rand: (n) => new Uint8Array(randomBytes(n)), appVersion: job.appVersion,
-        setup: job.setup, extras: job.extras.map((e) => ({ path: e.path, data: new Uint8Array(Buffer.from(e.base64, 'base64')) })),
-      }).regions;
-    } catch (e) {
-      if (e instanceof StageError) return fail(e.message);
-      throw e;
-    }
+    const regions = planned.regions;
     const bad = await writeDriveRegions(job.device, regions, send);
     if (bad) return fail(`${bad} Write it again.`);
     send({ type: 'done', ok: true, sha256: '' });
   } finally {
-    winpe.close();
-    file.close();
+    planned.close();
+  }
+}
+
+/**
+ * The staged layout for an SD card or NVMe drive of diskBytes (a fresh GPT:
+ * what is on the drive now does not matter). Also used by the main process
+ * on macOS, which writes it through maskrom-studio-rawdisk. close() closes
+ * the files the regions read from.
+ */
+export function planDiskStage(job: Extract<BoardJob, { kind: 'stage-disk' }>, diskBytes: number):
+  { regions: Region[]; close(): void } | { stop: string } {
+  const board = woaBoard(job.boardId);
+  if (!board) return { stop: 'Unknown board.' };
+  const winpe = fileSource(job.winpe);
+  const file = fileSource(job.image.path);
+  const close = () => { winpe.close(); file.close(); };
+  try {
+    const source = job.image.extents ? extentSource(file, { path: job.image.name, size: job.image.size, extents: job.image.extents }) : file;
+    const regions = planStage({
+      board, target: job.target, diskBytes, head: new Uint8Array(34 * 512), winpe,
+      image: { source, name: job.image.name, sha256: job.image.sha256, index: job.image.index, edition: job.image.edition, build: job.image.build },
+      rand: (n) => new Uint8Array(randomBytes(n)), appVersion: job.appVersion,
+      setup: job.setup, extras: job.extras.map((e) => ({ path: e.path, data: new Uint8Array(Buffer.from(e.base64, 'base64')) })),
+    }).regions;
+    return { regions, close };
+  } catch (e) {
+    close();
+    if (e instanceof StageError) return { stop: e.message };
+    throw e;
   }
 }
 

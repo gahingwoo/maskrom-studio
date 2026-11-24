@@ -25,7 +25,22 @@
  *
  * Exit status: 0 done, 2 bad arguments, 3 the right was not granted,
  * 4 the disk could not be opened, 5 write error, 6 read error, 7 the image
- * data ended early, 8 the disk is smaller than the image.
+ * data ended early (or, with --regions, was not as described below), 8 the
+ * disk is smaller than the image.
+ *
+ *   maskrom-studio-rawdisk --regions /dev/rdiskN END [PROMPT]
+ *
+ * Writes pieces at given places instead of one image from the start (the
+ * staged Windows layout on an SD card or NVMe drive, src/woa/stage-layout.ts):
+ *
+ * stdin   for each region a header of two little-endian 64-bit numbers,
+ *         its byte offset on the disk and its length, then that many bytes;
+ *         a header with length 0 ends the list. Offsets and lengths are
+ *         whole blocks, no region ends past END, and END must fit the disk
+ *         (checked before anything is written).
+ * stdout  after all are written, every region read back from the disk, in
+ *         the same order, without headers
+ * stderr  as above
  *
  * Written for Maskrom Studio; GPL-2.0-only like the rest of it.
  */
@@ -48,6 +63,8 @@
 
 #define AUTHOPEN "/usr/libexec/authopen"
 #define CHUNK ((size_t)1 << 20)
+/* More than the staged layout ever has (WinPE's used ranges, the image, two tables). */
+#define MAX_REGIONS 65536
 
 enum {
 	EXIT_ARGS = 2,
@@ -231,6 +248,114 @@ static int open_with_authopen(const char *device, const AuthorizationExternalFor
 	return fd;
 }
 
+struct region {
+	unsigned long long offset, length;
+};
+
+static unsigned long long le64(const unsigned char *b)
+{
+	unsigned long long v = 0;
+	int i;
+
+	for (i = 7; i >= 0; i--)
+		v = (v << 8) | b[i];
+	return v;
+}
+
+/*
+ * --regions: read the regions from stdin and write each where it belongs,
+ * then read them all back to stdout.
+ */
+static int write_regions(int fd, uint32_t block, unsigned long long end, unsigned char *buf)
+{
+	struct region *list = NULL;
+	size_t count = 0, i;
+	unsigned long long left;
+	unsigned char head[16];
+
+	for (;;) {
+		struct region r;
+		ssize_t got = read_full(STDIN_FILENO, head, sizeof(head));
+
+		if (got != (ssize_t)sizeof(head)) {
+			fprintf(stderr, "the region list ended early, after %zu regions\n", count);
+			return EXIT_INPUT;
+		}
+		r.offset = le64(head);
+		r.length = le64(head + 8);
+		if (r.length == 0)
+			break;
+		if (r.offset % block || r.length % block || r.offset > end || r.length > end - r.offset) {
+			fprintf(stderr, "region %zu (offset %llu, length %llu) is not whole blocks of %u inside %llu bytes\n",
+				count, r.offset, r.length, (unsigned)block, end);
+			return EXIT_INPUT;
+		}
+		if (count == MAX_REGIONS) {
+			fprintf(stderr, "more than %d regions\n", MAX_REGIONS);
+			return EXIT_INPUT;
+		}
+		if (count % 256 == 0) {
+			struct region *more = realloc(list, (count + 256) * sizeof(*list));
+
+			if (!more) {
+				fprintf(stderr, "out of memory\n");
+				return EXIT_INPUT;
+			}
+			list = more;
+		}
+		list[count++] = r;
+		if (lseek(fd, (off_t)r.offset, SEEK_SET) != (off_t)r.offset) {
+			fprintf(stderr, "seek to byte %llu: %s\n", r.offset, strerror(errno));
+			return EXIT_WRITE;
+		}
+		for (left = r.length; left > 0;) {
+			size_t want = left < CHUNK ? (size_t)left : CHUNK;
+
+			got = read_full(STDIN_FILENO, buf, want);
+			if (got < 0 || (size_t)got < want) {
+				fprintf(stderr, "the data of region %zu ended after %llu of %llu bytes%s%s\n", count - 1,
+					r.length - left + (got > 0 ? (unsigned long long)got : 0), r.length,
+					got < 0 ? ": " : "", got < 0 ? strerror(errno) : "");
+				return EXIT_INPUT;
+			}
+			if (write_full(fd, buf, want) != 0) {
+				fprintf(stderr, "write at byte %llu: %s\n", r.offset + (r.length - left), strerror(errno));
+				return EXIT_WRITE;
+			}
+			left -= want;
+		}
+	}
+	if (ioctl(fd, DKIOCSYNCHRONIZECACHE) != 0 && errno == EIO) {
+		fprintf(stderr, "flushing the drive: %s\n", strerror(errno));
+		return EXIT_WRITE;
+	}
+	fprintf(stderr, "written\n");
+
+	for (i = 0; i < count; i++) {
+		if (lseek(fd, (off_t)list[i].offset, SEEK_SET) != (off_t)list[i].offset) {
+			fprintf(stderr, "seek to byte %llu: %s\n", list[i].offset, strerror(errno));
+			return EXIT_READ;
+		}
+		for (left = list[i].length; left > 0;) {
+			size_t want = left < CHUNK ? (size_t)left : CHUNK;
+			ssize_t got = read_full(fd, buf, want);
+
+			if (got < 0 || (size_t)got < want) {
+				fprintf(stderr, "read at byte %llu: %s\n", list[i].offset + (list[i].length - left),
+					got < 0 ? strerror(errno) : "the disk ended");
+				return EXIT_READ;
+			}
+			if (write_full(STDOUT_FILENO, buf, want) != 0) {
+				fprintf(stderr, "passing the read-back on: %s\n", strerror(errno));
+				return EXIT_READ;
+			}
+			left -= want;
+		}
+	}
+	free(list);
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *device, *prompt;
@@ -241,12 +366,16 @@ int main(int argc, char **argv)
 	unsigned char *buf;
 	void *mem = NULL;
 	AuthorizationExternalForm ext;
-	int fd, rc;
+	int fd, rc, regions;
 
-	if (argc < 3 || argc > 4) {
-		fprintf(stderr, "usage: %s /dev/rdiskN SIZE [PROMPT]\n", argv[0]);
+	regions = argc > 1 && strcmp(argv[1], "--regions") == 0;
+	if (argc - regions < 3 || argc - regions > 4) {
+		fprintf(stderr, "usage: %s /dev/rdiskN SIZE [PROMPT]\n"
+			"       %s --regions /dev/rdiskN END [PROMPT]\n", argv[0], argv[0]);
 		return EXIT_ARGS;
 	}
+	argv += regions;
+	argc -= regions;
 	device = argv[1];
 	prompt = argc > 3 ? argv[3] : NULL;
 	errno = 0;
@@ -282,6 +411,11 @@ int main(int argc, char **argv)
 	}
 	buf = mem;
 	fprintf(stderr, "opened %u %llu\n", (unsigned)block, disk_size);
+	if (regions) {
+		rc = write_regions(fd, block, size, buf);
+		close(fd);
+		return rc;
+	}
 
 	for (left = size; left > 0;) {
 		size_t want = left < CHUNK ? (size_t)left : CHUNK;

@@ -113,7 +113,16 @@ const windowsFlow = (only) => async (page, shot) => {
   await shot('review');
 };
 
+// Windows onto an SD card from Linux or macOS: installed on the board, no greyed-out PC build.
+const methodFlow = async (page, shot) => {
+  await toTask(page, 'windows');
+  await page.click('label[for="dest-sd"]');
+  await page.locator('#method-stage-only').scrollIntoViewIfNeeded();
+  await shot('windows-method');
+};
+
 await session('windows', {}, windowsFlow(null));
+for (const o of [{}, { lang: 'zh-CN' }]) await session(`method ${JSON.stringify(o)}`, o, methodFlow);
 for (const o of [{ theme: 'dark' }, { lang: 'zh-CN' }]) await session(`windows ${JSON.stringify(o)}`, o, windowsFlow(['task', 'setup']));
 
 await session('x64', { env: { WOA_IMAGER_TEST_PICK: x64 } }, async (page, shot) => {

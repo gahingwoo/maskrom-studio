@@ -261,7 +261,6 @@ export function App() {
   // Written to an SD card or USB drive of this computer, not to the board: Armbian on a card, the SD card firmware.
   const driveTask = (task === 'armbian' && restoreTo === 'drive') || task === 'uefi-sd';
   const sdRelease = releases?.firmware && boardId ? releases.firmware.sdcard?.[boardId] : undefined;
-  const destOk = !(onPc && api.platform === 'darwin' && method === 'stage');
 
   const chooseWindows = async (pick: () => Promise<WindowsChoice | { error: string } | null>) => {
     setWindowsError(null);
@@ -608,15 +607,23 @@ export function App() {
                 onChange={() => { setDest(x); setDisk(null); refreshDrives(30e9); }}
                 description={x === 'sd' ? t(`dest.sd.desc.${board.sdBoot}`, { board: board.name }) : t('dest.nvme.desc', { board: board.name })} />))}
           </FormGroup>
-          <FormGroup role="radiogroup" fieldId="method" label={t('method.label')} isStack>
-            <Radio id="method-stage" name="method" label={t('method.stage')} isChecked={method === 'stage'} onChange={() => setMethod('stage')}
-              description={t(board.emmc ? 'method.stage.desc' : 'method.stage.desc.noEmmc')} isDisabled={onPc && api.platform === 'darwin'} />
-            <Radio id="method-host" name="method" label={t('method.host')} isChecked={method === 'host'} onChange={() => setMethod('host')}
-              isDisabled={!WIN_HOST || onBoard} description={WIN_HOST ? t('method.host.desc') : t('method.host.notHere')} />
-          </FormGroup>
+          {/* Built on this PC needs a Windows PC (DISM); elsewhere the board installs, and that is said once, not offered greyed out. */}
+          {WIN_HOST && !onBoard ? (
+            <FormGroup role="radiogroup" fieldId="method" label={t('method.label')} isStack>
+              <Radio id="method-stage" name="method" label={t('method.stage')} isChecked={method === 'stage'} onChange={() => setMethod('stage')}
+                description={t('method.stage.desc')} />
+              <Radio id="method-host" name="method" label={t('method.host')} isChecked={method === 'host'} onChange={() => setMethod('host')}
+                description={t('method.host.desc')} />
+            </FormGroup>
+          ) : (
+            <FormGroup fieldId="method" label={t('method.label')}>
+              <Content component="p" id="method-stage-only">{t('method.stage.only')}</Content>
+              {!onBoard && (
+                <FormHelperText><HelperText><HelperTextItem>{t('method.host.notHere')}</HelperTextItem></HelperText></FormHelperText>
+              )}
+            </FormGroup>
+          )}
           {!board.windowsBooted && <Alert isInline variant="warning" title={t('untried.title', { board: board.name })}>{t('untried.text')}</Alert>}
-          {onPc && api.platform === 'darwin' && <Alert isInline variant="warning"
-            title={t(board.emmc ? 'host.macDisk' : 'host.macDisk.noEmmc', { where: whereText(board.windowsTargets.filter((x) => x !== 'emmc')) })} />}
         </Form>
       )}
       {onBoard && task === 'windows' && here?.emmcRefusal && (
@@ -1023,7 +1030,6 @@ export function App() {
       if (!releases?.winpe) why = t('why.winpe');
       if (onBoard && here?.emmcRefusal) why = msg(here.emmcRefusal);
       if (dest !== 'emmc' && !disk) why = t('review.disk.choose');
-      if (!destOk) why = t('host.macDisk');
       goLabel = onBoard || dest !== 'emmc' || method === 'host' ? t('go.erase') : t('go.connect');
     } else if (task === 'upgrade') {
       reviewRows = reviewRows.concat([

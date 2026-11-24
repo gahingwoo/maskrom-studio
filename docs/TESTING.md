@@ -7,6 +7,16 @@ an entry by moving it to "Tested" with the date and what was seen.
 
 ## Untested
 
+- **Staged Windows onto an SD card or NVMe drive from macOS**
+  (stage-everywhere): the password dialog once, the write and read-back
+  through rawdisk `--regions` with a real card reader and a USB NVMe
+  enclosure on Apple silicon and Intel; the disk ejected afterwards; then
+  WinPE starts from it on the CM5-IO (SD, NVMe) and the TaishanPi 3M (SD,
+  with its eMMC firmware), installs Windows with the drivers and the board
+  starts it. CI only writes RAM disks with made-up regions.
+- **Staged onto an SD card or NVMe drive from Linux** (stage-everywhere):
+  the same, now the default method there; the page shows no greyed-out
+  "built on this PC" choice, only the note that it needs Windows.
 - **Windows image checks** (win-image-vetting): an x64 ISO refused, a 24H2
   ISO refused, a 23H2 VL Pro ISO from NTriver and a UUP dump ISO accepted;
   Windows 10 and 21H2 images shown with the purple notice.
