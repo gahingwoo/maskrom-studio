@@ -89,7 +89,7 @@ try {
   $f = Join-Path $env:SystemDrive 'woa-selftest.bin'
   $data = New-Object byte[] (64MB)
   (New-Object System.Random).NextBytes($data)
-  $s = New-Object System.IO.FileStream($f, 'Create', 'Write', 'None', 1MB, [System.IO.FileOptions]::WriteThrough)
+  $s = New-Object System.IO.FileStream($f, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, [int]1MB, [System.IO.FileOptions]::WriteThrough)
   $s.Write($data, 0, $data.Length); $s.Flush($true); $s.Close()
   $sha = [System.Security.Cryptography.SHA256]::Create()
   $want = [BitConverter]::ToString($sha.ComputeHash($data))
