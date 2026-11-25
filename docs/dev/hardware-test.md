@@ -1,10 +1,8 @@
 # Hardware test
 
-The procedure for a board session. What is still untested, and the results,
-are kept in [testing](testing.md).
-
-Nothing in this app has run on a board yet. Run these on the LCKFB
-TaishanPi 3M first, from a build of `main`, and note the commit.
+The procedure for a board session; results go into [testing](testing.md).
+Start on the LCKFB TaishanPi 3M, from a build of `main`, and note the
+commit.
 
 ## What you need
 
@@ -14,8 +12,7 @@ TaishanPi 3M first, from a build of `main`, and note the commit.
 - The SD card slot and the USB-A ports empty: the firmware boots them
   before the eMMC.
 - A Windows 11 23H2 ARM64 ISO (build 22631), or its install.wim or
-  install.esd. 24H2 and later are refused. Enterprise 22631.2428 is what
-  installed before by hand.
+  install.esd. Enterprise 22631.2428 installed by hand before.
 - The eMMC already holding edk2-rk3576 0.4.1 written as "UEFI firmware,
   whole image" (the app's own firmware write is test 1).
 
@@ -114,8 +111,8 @@ Repeat test 2 (or run it once with these on):
 
 ## 2c. Other targets and the PC build
 
-Each is new; note per target whether the board started WinPE, finished
-the install, and booted Windows.
+Note per target whether the board started WinPE, finished the install and
+booted Windows.
 
 - **SD card, staged (Linux or Windows PC).** A card of 32 GB or more in
   the PC's reader. What to write: Windows 11, "An SD card in this
