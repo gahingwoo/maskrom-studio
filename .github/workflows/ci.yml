@@ -136,3 +136,40 @@ jobs:
       - run: npm run build
       - name: Write, read back, refuse the system disk
         run: node test/e2e/sd-loop.mjs
+
+  browser-gpu:
+    name: Browser GPU script (Windows PowerShell 5.1)
+    # src/woa/browser-gpu/rk3576-browser-gpu.ps1, the copy of woa-rk3576's
+    # that every Windows install runs: its own tests, a dry run on the
+    # runner, and a warning when it differs from woa-rk3576's main
+    # (scripts/sync-browser-gpu.mjs brings it over).
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tests
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion
+          powershell -NoProfile -ExecutionPolicy Bypass -File src\woa\browser-gpu\browser-gpu.tests.ps1 -Script (Resolve-Path src\woa\browser-gpu\rk3576-browser-gpu.ps1)
+          if ($LASTEXITCODE -ne 0) { throw 'browser-gpu.tests.ps1 failed' }
+      - name: Status and a dry run on the runner (no RK3576, so the gate says no)
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File src\woa\browser-gpu\rk3576-browser-gpu.ps1 -Action Status
+          if ($LASTEXITCODE -ne 0) { throw 'Status' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File src\woa\browser-gpu\rk3576-browser-gpu.ps1 -Action Install -DryRun
+          if ($LASTEXITCODE -ne 0) { throw 'Install -DryRun' }
+          if (Get-ScheduledTask -TaskPath '\RK3576\' -ErrorAction SilentlyContinue) { throw 'a dry run registered the task' }
+      - name: Same as woa-rk3576 main
+        shell: pwsh
+        run: |
+          foreach ($p in @(@('tools/rk3576-tools/setup/rk3576-browser-gpu.ps1', 'src/woa/browser-gpu/rk3576-browser-gpu.ps1'),
+                           @('tools/rk3576-tools/tests/browser-gpu.tests.ps1', 'src/woa/browser-gpu/browser-gpu.tests.ps1'))) {
+            try {
+              $up = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/gahingwoo/woa-rk3576/main/$($p[0])").Content -replace "`r`n", "`n"
+            } catch { Write-Host "::warning::could not fetch woa-rk3576 $($p[0]): $($_.Exception.Message)"; continue }
+            $here = (Get-Content -Raw $p[1]) -replace "`r`n", "`n"
+            if ($up -ne $here) { Write-Host "::warning file=$($p[1])::differs from woa-rk3576 main $($p[0]); run node scripts/sync-browser-gpu.mjs <woa-rk3576 checkout>" }
+            else { Write-Host "$($p[1]) is woa-rk3576 main's" }
+          }

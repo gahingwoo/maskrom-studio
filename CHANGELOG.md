@@ -21,6 +21,9 @@ over on the first start.
 - "Sign in automatically" for a Windows install that skips setup: signs in
   on every start, with the password kept as an LSA secret instead of plain
   text in the registry.
+- Edge, Chrome and WebView2 render on the GPU at WDDM 2.x: woa-rk3576's
+  rk3576-browser-gpu.ps1 adds --disable-direct-composition to their launch
+  paths at the first start and keeps it there after browser updates.
 
 ## First version
 

@@ -7,7 +7,8 @@ import { planStage, StageError } from '../src/woa/stage-layout';
 import { parsePrimaryGpt } from '../src/woa/gpt';
 import { woaBoard } from '../src/woa/boards';
 import { bytesSource, type ByteSource } from '../src/woa/pieces';
-import { LAUNCHER } from '../src/woa/stage-scripts';
+import { crlf, LAUNCHER } from '../src/woa/stage-scripts';
+import { BROWSER_GPU_PS1 } from '../src/woa/browser-gpu-script';
 import { readArmbianImage, SLOT_LBA, resizeLeavesTableAlone } from '../src/woa/armbian-hybrid';
 import { fakeArmbian } from './armbian-fixture';
 
@@ -106,6 +107,8 @@ describe('staged install layout', () => {
     const at = Buffer.from(raw).indexOf(Buffer.alloc(4096, 0x5a));
     expect(at).toBeGreaterThan(0);
     expect(Buffer.compare(raw.subarray(at, at + (5 << 20)), image.source.read(0, 5 << 20))).toBe(0);
+    // The browser GPU script is on the volume too, with CRLF line ends.
+    expect(Buffer.from(raw).indexOf(Buffer.from(crlf(BROWSER_GPU_PS1).subarray(0, 4000)))).toBeGreaterThan(0);
     if (fsck) expect(spawnSync(fsck, ['-n', vol]).status).toBe(0);
     expect(plan.ini).toMatch(/\r\nindex=6\r\n/);
     expect(plan.ini).toContain(`disk_guid=${plan.diskGuid}`);

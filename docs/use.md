@@ -158,6 +158,25 @@ WebView2 are not touched.
 What each item does and how to undo it on the running Windows:
 [design, Trimming Windows](dev/design.md#trimming-windows).
 
+## Edge, Chrome and WebView2 on the GPU
+
+Every Windows install also gets woa-rk3576's browser GPU switch. With the
+GPU driver at WDDM 2.0 (its default), Edge and Chrome only render on the GPU
+when they are started with `--disable-direct-composition`; otherwise they
+fall back to software rendering. The install adds that switch to their
+Start menu, desktop and taskbar shortcuts, the commands that open links and
+PDFs, and WebView2's arguments, and turns off Edge's startup boost and both
+browsers' background mode. A scheduled task (`\RK3576\Browser GPU`) puts
+the switch back after a browser update, and takes it out again if the GPU
+is not at WDDM 2.x. It works the same with Edge removed and Chrome
+installed (the default), and with a Chrome you install yourself.
+
+Turn it off on the board: `HKLM\SOFTWARE\RK3576\BrowserGpu`, `Mode` = 0
+(DWORD); or, from an administrator prompt,
+`powershell -ExecutionPolicy Bypass -File "%ProgramFiles%\RK3576\browser-gpu\rk3576-browser-gpu.ps1" -Action Disable`.
+`-Action Uninstall` removes it. What it changes and how to check it:
+[woa-rk3576, BROWSER-GPU.md](https://github.com/gahingwoo/woa-rk3576/blob/main/tools/rk3576-tools/BROWSER-GPU.md).
+
 ## Other targets: an SD card or an NVMe drive
 
 Windows can also go onto an SD card in the PC's reader, or an NVMe drive in

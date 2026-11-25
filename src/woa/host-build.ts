@@ -12,6 +12,7 @@ import { stageIni, StageError, winpeVolume, type DiskTarget } from './stage-layo
 import { crlf, HOST_BUILD } from './stage-scripts';
 import { anyTrim, trimCmd } from './trim';
 import { SELFTEST_FILE, selfTestScript } from './selftest';
+import { BROWSER_GPU_FILE, browserGpuScript } from './browser-gpu';
 
 export interface HostBuildInput {
   target: DiskTarget;
@@ -68,6 +69,7 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
     { path: 'host-build.ini', data: new TextEncoder().encode(stageIni(ini)) },
     { path: 'SetupComplete.cmd', data: crlf(setupComplete(o.setup)) },
     { path: SELFTEST_FILE, data: crlf(selfTestScript({ appVersion: o.appVersion })) },
+    ...(o.setup.browserGpu !== false ? [{ path: BROWSER_GPU_FILE, data: crlf(browserGpuScript()) }] : []),
     ...(certs.length ? [{ path: 'woa-certs.cmd', data: crlf(certsCmd(certs)) }] : []),
     ...(o.setup.skipSetup ? [{ path: 'unattend.xml', data: crlf(unattendXml(o.setup.skipSetup)) }] : []),
     ...(o.setup.skipSetup?.autoLogonAlways ? [{ path: AUTOLOGON_FILE, data: crlf(autoLogonScript(o.setup.skipSetup)) }] : []),

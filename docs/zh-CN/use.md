@@ -80,6 +80,12 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新，用不了。应用�
 
 每一项做了什么、在运行中的 Windows 里怎么撤销：见[设计文档的"Trimming Windows"](../dev/design.md#trimming-windows)（英文）。
 
+## 让 Edge、Chrome 和 WebView2 用上 GPU
+
+每次安装 Windows 都会带上 woa-rk3576 的浏览器 GPU 开关。GPU 驱动处于 WDDM 2.0（默认）时，Edge 和 Chrome 只有用 `--disable-direct-composition` 启动才会用 GPU 渲染，否则会退回软件渲染。安装时会把这个开关加到它们在开始菜单、桌面和任务栏上的快捷方式、打开链接和 PDF 的命令，以及 WebView2 的参数里，并关掉 Edge 的启动增强和两个浏览器的后台运行。计划任务（`\RK3576\Browser GPU`）会在浏览器更新后把开关加回去；如果 GPU 不是 WDDM 2.x，就把它去掉。删除 Edge 并安装 Chrome（默认）时一样有效，你自己装的 Chrome 也一样。
+
+在板子上关掉它：`HKLM\SOFTWARE\RK3576\BrowserGpu` 中 `Mode` = 0（DWORD）；或者在管理员命令提示符中运行 `powershell -ExecutionPolicy Bypass -File "%ProgramFiles%\RK3576\browser-gpu\rk3576-browser-gpu.ps1" -Action Disable`。`-Action Uninstall` 会把它卸掉。改了什么、怎么检查：见 [woa-rk3576 的 BROWSER-GPU.zh-CN.md](https://github.com/gahingwoo/woa-rk3576/blob/main/tools/rk3576-tools/BROWSER-GPU.zh-CN.md)。
+
 ## 其他位置：SD 卡或 NVMe 硬盘
 
 Windows 也可以装到插在电脑读卡器里的 SD 卡，或装在 USB 硬盘盒里的 NVMe 硬盘，写好后再装到开发板上（只限有这个位置的开发板，见 README 里的表）。开发板第一次从它启动时自己安装 Windows。在 Windows 电脑上，应用也可以直接用 DISM 生成装好的 Windows，开发板开机就进入 Windows。
