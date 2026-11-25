@@ -109,6 +109,7 @@ rem --- 4b. first start: SetupComplete.cmd, the answer file, OpenSSH -----------
 mkdir W:\Windows\Setup\Scripts 2>nul
 copy /y "%STAGE%\SetupComplete.cmd" W:\Windows\Setup\Scripts\SetupComplete.cmd >nul || goto :faillog
 if exist "%STAGE%\woa-selftest.ps1" copy /y "%STAGE%\woa-selftest.ps1" W:\Windows\Setup\Scripts\woa-selftest.ps1 >nul
+if exist "%STAGE%\rk3576-browser-gpu.ps1" copy /y "%STAGE%\rk3576-browser-gpu.ps1" W:\Windows\Setup\Scripts\rk3576-browser-gpu.ps1 >nul
 if exist "%STAGE%\unattend.xml" (
   echo Setting up the account, so Windows skips its setup screens.
   mkdir W:\Windows\Panther 2>nul

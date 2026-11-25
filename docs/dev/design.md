@@ -424,6 +424,29 @@ SetupComplete.cmd calls `%ProgramFiles%\RK3576\setup\firstboot.cmd` once.
 The interface is woa-rk3576's tools/rk3576-tools/README.md. The option is
 on by default and greyed out when the release has no bundle.
 
+## Edge, Chrome and WebView2 on the GPU
+
+At WDDM 2.x, maliwddm's default since 2026-11-24, Chromium's
+DirectComposition presents fail on the Mali-G52 and Edge and Chrome fall
+back to software rendering after three GPU process crashes. Started with
+`--disable-direct-composition` they render on the GPU (board, 2026-11-25).
+The browser process reads that switch as well, so the driver cannot do it,
+and no Edge or Chrome policy sets a command-line switch.
+
+woa-rk3576's `tools/rk3576-tools/setup/rk3576-browser-gpu.ps1` adds the
+switch to every launch path and keeps it there with a scheduled task; its
+`BROWSER-GPU.md` is the reference. This repository carries a copy in
+`src/woa/browser-gpu/` (with its PowerShell tests), turned into
+`src/woa/browser-gpu-script.ts` by `scripts/sync-browser-gpu.mjs`;
+`test/browser-gpu.test.ts` fails when the two disagree, and CI warns when
+the copy differs from woa-rk3576's main. Every staged install and PC build
+puts it in `\Windows\Setup\Scripts`; `SetupComplete.cmd` runs
+`-Action Install` after Chrome and the RK3576 tools are installed and then
+deletes that copy (`browserGpu: false` in `SetupOptions` leaves it out; there
+is no switch in the UI, it is turned off on the board with `Mode` 0). The
+tools bundle installs the same script into the same place with the same
+task, and the higher `$BgVersion` stays.
+
 ## How much of the disk Windows gets
 
 `src/woa/windows-layout.ts`. By default Windows takes all of it, as

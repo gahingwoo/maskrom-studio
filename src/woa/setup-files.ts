@@ -49,6 +49,7 @@
 import { selfTestRunOnce } from './selftest';
 import type { LayoutChoice } from './windows-layout';
 import { chromeFirstStart, type TrimOptions } from './trim';
+import { browserGpuFirstStart } from './browser-gpu';
 
 export const OPENSSH = {
   version: '9.5.0.0p1-Beta',
@@ -86,6 +87,11 @@ export interface SetupOptions {
   trim?: TrimOptions;
   /** Install the RK3576 tools bundle (rk-monitor, NPU tools) from the woa-rk3576 release. */
   rkTools?: boolean;
+  /**
+   * Edge, Chrome and WebView2 on the GPU at WDDM 2.x (browser-gpu.ts): on
+   * unless false. Turned off on the board, not here: the script's Mode switch.
+   */
+  browserGpu?: boolean;
 }
 
 export const DEFAULT_SETUP: SetupOptions = { skipSetup: null, ssh: true, sshKey: '' };
@@ -330,6 +336,7 @@ export function setupComplete(o: SetupOptions): string {
       'if exist "%ProgramFiles%\\RK3576\\setup\\firstboot.cmd" call "%ProgramFiles%\\RK3576\\setup\\firstboot.cmd" >> "%LOG%" 2>&1',
     );
   }
+  if (o.browserGpu !== false) l.push(...browserGpuFirstStart());
   l.push(...selfTestRunOnce());
   if (o.skipSetup?.autoLogonAlways) {
     const ps = `%WINDIR%\\Setup\\Scripts\\${AUTOLOGON_FILE}`;
