@@ -6,6 +6,7 @@ import type { ArmbianOffer } from '../woa/armbian-restore';
 import type { Extent } from '../woa/udf';
 import type { SetupOptions } from '../woa/setup-files';
 import type { CacheInfo, ClearResult } from '../main/cache';
+import type { ReleaseFeatures } from '../woa/firmware-features';
 
 export type JobProgress = {
   stage: 'download' | 'check' | 'decompress' | 'write' | 'verify';
@@ -20,7 +21,9 @@ export type JobResult = { ok: true; sha256: string } | { ok: false; reason: stri
 
 /** The latest edk2-rk3576 and woa-rk3576 releases, as far as they could be read. */
 export interface Releases {
-  firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>>; tier: ReleaseTier } | null;
+  firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>>;
+    /** What each board's image supports (firmware-features.ts), without the settings section. */
+    features: ReleaseFeatures; tier: ReleaseTier } | null;
   winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier; tools: { file: string; size: number } | null;
     /** The RK3576 Windows driver package of the release; null: the release has none, the WinPE's drivers are installed. */
     drivers?: { file: string; size: number } | null } | null;

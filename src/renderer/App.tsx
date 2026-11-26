@@ -32,6 +32,7 @@ import { applyTheme, readTheme, type Theme } from './theme';
 import { MaskromLive } from './maskrom-live';
 import { MIN_ARMBIAN_BYTES, minArmbianBytes } from '../woa/armbian-hybrid';
 import { BOARD_EXTRA_KINDS } from '../woa/driver-package';
+import { FEATURE_KEYS, hasFeature, type FeatureKey } from '../woa/firmware-features';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
@@ -224,6 +225,28 @@ export function App() {
   const onBoard = via === 'here' && !!here?.boardId && here.boardId === boardId;
   const edition = windows?.editions.find((e) => e.index === index) ?? null;
   const fwRelease = releases?.firmware && boardId ? releases.firmware.boards[boardId] : undefined;
+  // What the chosen release's image for the board supports (firmware-features.ts): true, false, or null when
+  // neither the release (FEATURES.json) nor the built-in table knows.
+  const fwHas = (k: FeatureKey): boolean | null => (board ? hasFeature(releases?.firmware?.features, board.id, k) : null);
+  const fwNoWindows = fwHas('windows') === false;
+  const fwTag = releases?.firmware?.tier.label ?? '';
+  // "Windows, HDMI output, ...; off until turned on in the firmware setup: ...; not in it: ...", or null.
+  const fwFeatureText = (): string | null => {
+    const fs = board ? releases?.firmware?.features.boards[board.id]?.features : undefined;
+    if (!fs) return null;
+    const sep = t('fwFeatures.sep');
+    const on: string[] = []; const off: string[] = []; const no: string[] = [];
+    for (const k of FEATURE_KEYS) {
+      const v = fs[k];
+      if (!v) continue;
+      (v.built ? (v.default === 'off' ? off : on) : no).push(t(`feature.${k}`));
+    }
+    const parts = [on.length ? on.join(sep) : t('fwFeatures.nothing')];
+    if (off.length) parts.push(t('fwFeatures.off', { list: off.join(sep) }));
+    if (no.length) parts.push(t('fwFeatures.no', { list: no.join(sep) }));
+    return parts.join(t('fwFeatures.partSep')) + (releases?.firmware?.features.from === 'builtin' ? t('fwFeatures.builtin') : '');
+  };
+  const fwFeatureRow = (): Array<[string, string]> => { const x = fwFeatureText(); return x ? [[t('review.fwFeatures'), x]] : []; };
 
   // Text from edk2-webflash's board list: its English, or this page's Chinese for the same thing.
   const fwText = (b: WoaBoard, tg: WebflashTarget, field: 'label' | 'note' | 'erases' | 'done'): string => {
@@ -270,8 +293,12 @@ export function App() {
   // Armbian next to Windows, started by the firmware's "Armbian (U-Boot)" (boards.ts hybrid): on the TaishanPi 3M
   // both on the eMMC, staged over MaskROM; on the ROCK 4D Windows on the NVMe drive and Armbian on an SD card.
   const hybridKind = board?.hybrid ?? null;
-  const hybridPossible = !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard
+  // Offered only when the chosen firmware release can start it (FEATURES.json armbianOnce); on the ROCK 4D the
+  // SPL on the board is still read over MaskROM before anything is written (armbian-once.ts).
+  const hybridFirmware = fwHas('armbianOnce') !== false;
+  const hybridPossible = !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && hybridFirmware
     && (hybridKind === 'one-emmc' ? staged && dest === 'emmc' : dest === 'nvme');
+  const hybridNoFirmware = !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && !hybridFirmware;
   const hybridOn = hybridPossible && withArmbian;
   const hybridEmmc = hybridOn && hybridKind === 'one-emmc';
   const hybridSd = hybridOn && hybridKind === 'nvme-and-sd';
@@ -729,6 +756,12 @@ export function App() {
               onChange={() => { setTask('uefi-sd'); setStick(null); refreshDrives(); }}
               description={t(`sd.boot.${board.sdBoot}.uefi`, { board: board.name })} />
           )}
+          {/* What the release's image for this board supports (FEATURES.json, or the built-in table for older releases). */}
+          {fwRelease && fwFeatureText() && (
+            <FormHelperText><HelperText><HelperTextItem id="fw-features" variant={fwNoWindows ? 'warning' : 'default'}>
+              {t('fwFeatures.lead', { tag: fwTag, list: fwFeatureText()! })}{fwNoWindows ? ` ${t('fwFeatures.noWindows')}` : ''}
+            </HelperTextItem></HelperText></FormHelperText>
+          )}
         </FormGroup>
         {/* Armbian alone and the factory restore write the eMMC; a board without one gets Armbian only next to Windows. */}
         {ARMBIAN_RESTORE[board.id] && board.emmc && (
@@ -766,7 +799,13 @@ export function App() {
               )}
             </FormGroup>
           )}
-          {!board.windowsBooted && <Alert isInline variant="warning" title={t('untried.title', { board: board.name })}>{t('untried.text')}</Alert>}
+          {fwNoWindows ? (
+            <Alert isInline variant="danger" id="fw-no-windows" title={t('noWindows.title', { board: board.name, tag: fwTag })}>
+              <Content component="p">{t('noWindows.text', { board: board.name, tag: fwTag })}</Content>
+              <Content component="p">{t(releases?.firmware?.tier.used === 'ci' ? 'noWindows.ci' : 'noWindows.useCi')}</Content>
+            </Alert>
+          ) : !board.windowsBooted && <Alert isInline variant="warning" title={t('untried.title', { board: board.name })}>{t('untried.text')}</Alert>}
+          {hybridNoFirmware && <Content component="p" className="muted" id="hybrid-no-firmware">{t('hybrid.noFirmware', { board: board.name, tag: fwTag })}</Content>}
         </Form>
       )}
       {onBoard && task === 'windows' && here?.emmcRefusal && (
@@ -1279,6 +1318,7 @@ export function App() {
       else if (hybridOn && !hybridId) why = t('why.hybrid.pick');
       else if (!setupOk) why = t('why.setup');
       if (!releases?.winpe) why = t('why.winpe');
+      if (fwNoWindows) why = t('why.noWindows', { board: board.name, tag: fwTag });
       if (onBoard && here?.emmcRefusal) why = msg(here.emmcRefusal);
       if (dest !== 'emmc' && !disk) why = t('review.disk.choose');
       else if (hybridSd && (!sdDrive || sdDrive === disk)) why = t('review.sd.choose');
@@ -1299,6 +1339,7 @@ export function App() {
         [t('review.written'), task === 'armbian'
           ? (armbianFound ? `${t('review.restore.armbian', { what: `${offerWords(armbianFound)}, ${distroWords(armbianFound.distro)}`, version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.drive.written.armbian')}` : t('review.unavailable'))
           : (sdRelease ? t('review.drive.written.uefi', { tag: releases!.firmware!.tier.label, file: sdRelease.file }) : t('review.unavailable'))],
+        ...(task === 'uefi-sd' ? fwFeatureRow() : []),
         [t('review.erased'), drive ? t('review.stick.erased', { drive }) : t('review.drive.choose')],
         [t('review.checked'), t('review.stick.checked')],
         [t('review.then'), t(`sd.boot.${board.sdBoot}.${task === 'armbian' ? 'armbian' : 'uefi'}`, { board: board.name })],
@@ -1329,6 +1370,7 @@ export function App() {
       const tg = firmwareTargets(board).find((x) => x.id === task)!;
       reviewRows = reviewRows.concat([
         [t('review.firmware'), fwRelease ? `edk2-rk3576 ${releases!.firmware!.tier.label}, ${fwRelease.file}${tierWord(releases!.firmware!.tier)}` : t('review.unavailable')],
+        ...(fwRelease ? fwFeatureRow() : []),
         [t('review.written'), tg.slice ? t('review.fw.slice', { a: tg.slice[0], b: tg.slice[1], lba: tg.lba }) : t('review.fw.whole', { lba: tg.lba })],
         [t('review.erased'), fwText(board, tg, 'erases')],
         [t('review.checked'), onBoard ? t('review.checked.fw.here') : board.spi ? t('review.checked.fw.spi') : t('review.checked.fw.maskrom')],
