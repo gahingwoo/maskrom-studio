@@ -8,7 +8,7 @@ export interface WindowsSource {
   id: string;
   /** false: the page offers no image that runs on RK3576; shown so it is not mistaken for one. */
   fits: boolean;
-  /** A short label such as "recommended in China", or null. */
+  /** A short label such as "recommended", or null. */
   recommended: Record<Lang, string> | null;
   url: string;
   /** When the page was last checked (YYYY-MM-DD). */

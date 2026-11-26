@@ -89,8 +89,9 @@ tested with the current drivers. An ISO is read in place, never copied.
 
 Microsoft's ARM64 ISO page offers only the current release, which is too
 new. The Windows step lists sources for 23H2 ARM64:
-[NTriver](https://ntriver.org/download-windows-11) (works from China;
-volume licence Pro and IoT Enterprise media) and
+[NTriver](https://ntriver.org/download-windows-11) (recommended: direct
+downloads that also work from mainland China; volume licence Pro and IoT
+Enterprise media) and
 [UUP dump](https://uupdump.net/known.php?q=22631+arm64), which builds the
 ISO on your computer from Microsoft's update servers
 ([step by step](windows-image.md)). You need a valid licence.

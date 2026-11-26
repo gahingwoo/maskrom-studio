@@ -347,9 +347,10 @@ Read on the PC in TypeScript (`src/main/windows-image.ts`, `src/woa/wim.ts`,
 
 The app does not ship, mirror or download Windows. The sources the Windows
 step lists come from `src/shared/windows-sources.json` (in order, each with
-a last-checked date; the app opens only those URLs): NTriver (works from
-China; 23H2 ARM64 VL Pro and IoT Enterprise media, its Consumer 23H2 is x64
-only), UUP dump, Visual Studio subscriptions (not checked) and Microsoft's
+a last-checked date; the app opens only those URLs): NTriver (recommended
+for everyone: direct downloads that also work from mainland China; 23H2
+ARM64 VL Pro and IoT Enterprise media, its Consumer 23H2 is x64 only),
+UUP dump, Visual Studio subscriptions (not checked) and Microsoft's
 ARM64 ISO page, marked unsuitable (current release only).
 
 ## Armbian or the firmware onto an SD card or USB drive

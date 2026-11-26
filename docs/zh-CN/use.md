@@ -47,7 +47,7 @@ eMMC 上要先有用完整映像写入的固件。没有的话，先写一次"UE
 
 测试过的版本是 Windows 11 23H2（版本号 22631）。会被拒绝：不是 ARM64 的映像、版本号大于 25999 的（24H2 及以后需要 ARMv8.1）、早于 Windows 10 1809 的、PC 用的 ISO（有 bootx64.efi 没有 bootaa64.efi）。Windows 11 21H2 和 Windows 10 可以装，但会提示没有用当前驱动测试过。ISO 原地读取，不会复制。
 
-Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows 一步列出了 23H2 ARM64 的来源：[NTriver](https://ntriver.org/download-windows-11)（中国大陆可用；批量许可专业版和 IoT 企业版介质）和 [UUP dump](https://uupdump.net/known.php?q=22631+arm64)，后者在你自己的电脑上从 Microsoft 更新服务器生成 ISO（[详细步骤](windows-image.md)）。你需要有效的许可证。
+Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows 一步列出了 23H2 ARM64 的来源：[NTriver](https://ntriver.org/download-windows-11)（推荐：可直接下载，在中国大陆也能用；批量许可专业版和 IoT 企业版介质）和 [UUP dump](https://uupdump.net/known.php?q=22631+arm64)，后者在你自己的电脑上从 Microsoft 更新服务器生成 ISO（[详细步骤](windows-image.md)）。你需要有效的许可证。
 
 ## 磁盘布局
 

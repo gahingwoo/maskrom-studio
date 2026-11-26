@@ -29,6 +29,8 @@ over on the first start.
   over MaskROM selects the SPI NOR (`cs 9`), refuses any other storage,
   checks the image is the ROCK 4D's, copies the whole flash to the PC first
   and reads back what it wrote.
+- NTriver is the recommended place to get Windows for everyone, not only
+  in mainland China.
 
 ## First version
 
