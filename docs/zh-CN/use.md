@@ -69,7 +69,7 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows �
 
 ## 精简 Windows
 
-推荐组合（默认开启；简单模式一个开关，高级模式逐项列出）：删除后台应用、OneDrive 自动设置、Copilot 和小组件，关闭推荐应用、Edge 后台运行和 SysMain，延迟启动搜索索引，诊断数据设为"必需"，恢复经典右键菜单，不让 Windows 更新安装驱动，删除 Edge 并安装 Chrome arm64 作为默认浏览器。删除应用商店是可选项，默认不选。不会动 Windows 更新本身、激活、驱动和 WebView2。每一项做了什么、怎么撤销：见[设计文档的"Trimming Windows"](../dev/design.md#trimming-windows)（英文）。
+推荐组合（默认开启；简单模式一个开关，高级模式逐项列出）：删除后台应用、OneDrive 自动设置、Copilot 和小组件，关闭推荐应用、Edge 后台运行和 SysMain，延迟启动搜索索引，诊断数据设为"必需"，恢复经典右键菜单，不让 Windows 更新安装驱动，安装 Chrome arm64 作为默认浏览器。Edge 保留：它是有硬件视频解码的浏览器。删除 Edge 和删除应用商店是可选项，默认不选。不会动 Windows 更新本身、激活、驱动和 WebView2。每一项做了什么、怎么撤销：见[设计文档的"Trimming Windows"](../dev/design.md#trimming-windows)（英文）。
 
 ## 让 Edge、Chrome 和 WebView2 用上 GPU
 

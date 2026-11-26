@@ -141,9 +141,10 @@ The recommended set (on by default; one switch in Simple mode, a list in
 Advanced mode) removes background apps, OneDrive setup, Copilot and
 Widgets, turns off suggested apps, Edge's background mode and SysMain,
 delays the search indexer, sets diagnostic data to Required, brings back
-the classic right-click menu, stops Windows Update from installing drivers,
-removes Edge and installs Chrome arm64 as the default browser. Removing the
-Store is a choice that is off. Windows Update itself, activation, the
+the classic right-click menu, stops Windows Update from installing drivers
+and installs Chrome arm64 as the default browser. Edge stays: it is the
+browser with hardware video decode. Removing Edge and removing the Store are
+choices that are off. Windows Update itself, activation, the
 drivers and WebView2 are not touched. Each item and how to undo it:
 [design, Trimming Windows](dev/design.md#trimming-windows).
 

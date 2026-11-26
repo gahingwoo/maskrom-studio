@@ -65,12 +65,14 @@ export const NO_TRIM: TrimOptions = {
 
 /**
  * The recommended set (Simple mode's switch, Advanced mode's starting
- * point): what stops background work, plus (decided 2026-11-25) Edge
- * replaced by Chrome, and no drivers from Windows Update. Not the Store.
+ * point): what stops background work, plus (decided 2026-11-25) Chrome
+ * installed as the default browser, and no drivers from Windows Update.
+ * Not the Store, and Edge is kept: it is the browser the RK3576 hardware
+ * video decode is shipped for (2026-11-26).
  */
 export const RECOMMENDED_TRIM: TrimOptions = {
   ...NO_TRIM, apps: true, onedrive: true, copilot: true, widgets: true, edgeBackground: true, suggestions: true,
-  telemetry: true, searchDelayed: true, sysmain: true, classicMenu: true, removeEdge: true, chrome: true, wuDrivers: true,
+  telemetry: true, searchDelayed: true, sysmain: true, classicMenu: true, chrome: true, wuDrivers: true,
 };
 
 export const TRIM_KEYS = Object.keys(NO_TRIM) as Array<keyof TrimOptions>;
