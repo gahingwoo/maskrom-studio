@@ -56,9 +56,8 @@ over on the first start.
   collect diagnostics, fix SSH, browser GPU switch, user guide.
 - SSH: port 22 is opened on every firewall profile. It was Private and
   Domain only, so on a first network that came up as Public (a ROCK 4D,
-  2026-11-26) SSH was blocked. Installs from before this: "Fix SSH" in the
-  desktop folder of a new install, or
-  `Set-NetFirewallRule -DisplayName 'OpenSSH Server (sshd)' -Profile Any`.
+  2026-11-26) SSH was blocked. Installs from before this: see Known issues
+  in docs/use.md.
 
 ## First version
 

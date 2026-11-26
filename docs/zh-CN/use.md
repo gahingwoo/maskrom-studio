@@ -146,6 +146,12 @@ Get-AppxPackage -AllUsers Microsoft.WindowsNotepad | Remove-AppxPackage -AllUser
 
 新安装的系统会自动做第二种处理。
 
+**SSH 的 22 端口连不上。** 出现在此修复之前安装、第一个网络被识别为公用网络的开发板上：防火墙规则只放行了域和专用网络。运行新安装的 RK3576 工具文件夹里的"修复 SSH"，或者（以管理员身份运行 PowerShell）：
+
+```powershell
+Set-NetFirewallRule -DisplayName 'OpenSSH Server (sshd)' -Profile Any
+```
+
 ## 出错时
 
 任何失败都不会让你从头再来。结果页提供**重试**（同样的任务和选择；重新寻找开发板，下载好的或下到一半的文件从缓存取）、**返回步骤**、**报告问题**（GitHub issue，带版本、系统、失败的步骤和日志的最后几行；主目录、用户名、地址和序列号会被去掉）和**保存完整日志**。开发板从 USB 上掉了时，页面显示"开发板已断开"，并再次给出 MaskROM 步骤。

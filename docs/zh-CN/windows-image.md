@@ -4,6 +4,8 @@
 
 Maskrom Studio 需要 **ARM64** 版 Windows 11 **23H2**（版本号 22631）。应用本身不下载、不托管、也不分发 Windows。微软官网的 ARM64 ISO 页面只提供最新版本（24H2 及以后），它们需要 ARMv8.1，不能在 RK3576 上运行。[UUP dump](https://uupdump.net) 可以用微软更新服务器公开的文件，在你自己的电脑上生成 23H2 ARM64 ISO。使用生成的系统需要有效的 Windows 许可证。
 
+更快的办法是直接从 [NTriver](https://ntriver.org/download-windows-11) 下载现成的 ISO，应用向所有人推荐这个来源。本页是另一种办法：自己生成。
+
 ## 1. 生成下载包
 
 1. 打开 <https://uupdump.net/known.php?q=22631+arm64>。

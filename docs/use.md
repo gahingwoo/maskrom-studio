@@ -309,6 +309,15 @@ Get-AppxPackage -AllUsers Microsoft.WindowsNotepad | Remove-AppxPackage -AllUser
 
 New installs do the second one by themselves.
 
+**SSH does not answer on port 22.** Boards installed before this fix whose
+first network came up as Public: the firewall rule allowed only Domain and
+Private. Run "Fix SSH" from a new install's RK3576 Tools folder, or
+(PowerShell as administrator):
+
+```powershell
+Set-NetFirewallRule -DisplayName 'OpenSSH Server (sshd)' -Profile Any
+```
+
 ## When something fails
 
 No failure sends you back to the start. The result page offers **Try

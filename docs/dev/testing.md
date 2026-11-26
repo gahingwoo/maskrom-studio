@@ -76,7 +76,7 @@ was seen. Procedure: [hardware-test](hardware-test.md).
   flashing-mode instructions (TaishanPi pads and F4, CM5-IO button);
   switching modes keeps the board; the reset dialog.
 - **Targets per board**: only boards.ts targets offered. Windows from SD
-  has not run on any board; ROCK 4D NVMe waits for ACPI. The ROCK 4D's
+  has not run on any board. The ROCK 4D's
   Chinese MaskROM steps are new text.
 - **ROCK 4D SPI NOR firmware**: "UEFI firmware" and "keep the settings"
   over MaskROM (`cs 9`, size check, the 16 MiB copy, read-back), and on
@@ -95,4 +95,7 @@ was seen. Procedure: [hardware-test](hardware-test.md).
 
 ## Tested
 
-Nothing yet.
+- **ROCK 4D, Windows onto NVMe** (2026-11-26): staged from the PC, WinPE
+  installed it, desktop reached, the driver package installed, Ethernet
+  working after the firmware's RTL8211F delay fix (edk2-rk3576 e43c6d9).
+  Found SSH blocked on a Public first network (fixed since).
