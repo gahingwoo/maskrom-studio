@@ -1,7 +1,7 @@
 // The Maskrom Studio page: one wizard (board, what to write, the Windows
 // image, how Windows comes out, review), then the write itself in place of
 // the wizard. Every text goes through useI18n() (messages.ts).
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionList, ActionListGroup, ActionListItem, Alert, AlertActionCloseButton, AlertActionLink, Button, Card, CardBody,
   CardHeader, CardTitle, Checkbox, Gallery, Popover, CodeBlock, CodeBlockCode, Content, DescriptionList, DescriptionListDescription, DescriptionListGroup,
@@ -24,6 +24,8 @@ import { anyTrim, NO_TRIM, RECOMMENDED_TRIM, TRIM_KEYS, type TrimOptions } from 
 import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal, type UiMode } from './common';
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
+import { defaultLanguage, imageHasLanguage, keyboardChoices, languageChoices, timeZoneChoices, windowsZoneFor } from '../shared/windows-intl';
+import { Picker } from './picker';
 import { ARMBIAN_RESTORE, DESKTOPS, distroWords, simpleOffers, variantWords, type ArmbianOffer } from '../woa/armbian-restore';
 import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, planLayout, type LayoutChoice, type RestUse } from '../woa/windows-layout';
 import { applyTheme, readTheme, type Theme } from './theme';
@@ -58,7 +60,9 @@ interface UpgradeSummary { kind: 'upgrade'; manufacturer: string | null; capacit
 interface FirmwareSummary { kind: 'firmware'; board: string; target: string; lba: number; bytes: number; capacity: number | null; dropped: Array<{ name: string; bytes: number }>; erases: string;
   spi?: { next: string | null; installed: string | null; settings: 'kept' | 'none' | 'reset' } }
 
-const EMPTY_ACCOUNT: Account = { user: '', password: '', computerName: '', locale: '', keyboard: '', timeZone: '', autoLogonAlways: false };
+// The time zone starts as the PC's; the language is preselected once the image is known (defaultLanguage).
+const EMPTY_ACCOUNT: Account = { user: '', password: '', computerName: '', locale: '', keyboard: '', timeZone: windowsZoneFor(api.timeZone) ?? '', autoLogonAlways: false };
+const TIME_ZONES = timeZoneChoices();
 
 function ProgressList({ stages, waiting }: { stages: Stage[]; waiting: string }) {
   return (
@@ -116,6 +120,8 @@ export function App() {
   // A local account and no OOBE by default (decided 2026-11-25); Simple mode has no account fields, so there it is OOBE.
   const [skip, setSkip] = useState(true);
   const [account, setAccount] = useState<Account>(EMPTY_ACCOUNT);
+  // Once the language is picked by hand, a new image no longer changes it.
+  const localePicked = useRef(false);
   const [password2, setPassword2] = useState('');
   const [ssh, setSsh] = useState(DEFAULT_SETUP.ssh);
   const [sshKey, setSshKey] = useState('');
@@ -307,6 +313,10 @@ export function App() {
     if (!r) return;
     if ('error' in r) { setWindowsError(errorText(r.error)); setWindows(null); setIndex(null); return; }
     setWindows(r);
+    if (!localePicked.current) {
+      const locale = defaultLanguage(api.systemLocale, [...new Set(r.editions.flatMap((e) => e.languages))]);
+      setAccount((a) => ({ ...a, locale }));
+    }
     // 22H2 and 23H2 first; an untested or preview edition only when there is nothing else.
     const clean = r.editions.filter((e) => !e.refuse && !e.warn);
     const ok = clean.length ? clean : r.editions.filter((e) => !e.refuse);
@@ -927,6 +937,11 @@ export function App() {
     </StepPage>
   );
 
+  const languages = useMemo(() => languageChoices(lang), [lang]);
+  const keyboards = useMemo(() => keyboardChoices(lang), [lang]);
+  const imageLanguages = windows ? [...new Set(windows.editions.flatMap((e) => e.languages))] : [];
+  // Regional formats are fine in any image; Windows' menus only come in a language the image has.
+  const localeElsewhere = !!windows && imageLanguages.length > 0 && !imageHasLanguage(account.locale, imageLanguages);
   const field = (id: keyof Account, label: string, type: 'text' | 'password' = 'text') => (
     <FormGroup label={label} fieldId={`acc-${id}`} isRequired={id === 'user' || id === 'password'}>
       <TextInput id={`acc-${id}`} type={type} value={account[id] as string} autoComplete="off" spellCheck={false}
@@ -1060,9 +1075,21 @@ export function App() {
                 validated={passwordMismatch && password2 ? 'error' : 'default'} />
             </FormGroup>
             {field('computerName', t('setup.computer'))}
-            {field('locale', t('setup.locale'))}
-            {field('keyboard', t('setup.keyboard'))}
-            {field('timeZone', t('setup.timezone'))}
+            <FormGroup label={t('setup.locale')} fieldId="acc-locale">
+              <Picker id="acc-locale" value={account.locale} choices={languages} none={t('setup.locale.none')} clearLabel={t('picker.clear')} noMatch={t('picker.none')}
+                onChange={(v) => { localePicked.current = true; setAccount((a) => ({ ...a, locale: v })); }} />
+              <FormHelperText><HelperText><HelperTextItem variant={localeElsewhere ? 'warning' : 'default'}>
+                {localeElsewhere ? t('setup.locale.notInImage', { tag: account.locale, has: imageLanguages.join(', ') }) : t('setup.locale.help')}
+              </HelperTextItem></HelperText></FormHelperText>
+            </FormGroup>
+            <FormGroup label={t('setup.keyboard')} fieldId="acc-keyboard">
+              <Picker id="acc-keyboard" value={account.keyboard} choices={keyboards} none={t('setup.keyboard.none')} clearLabel={t('picker.clear')} noMatch={t('picker.none')}
+                onChange={(v) => setAccount((a) => ({ ...a, keyboard: v }))} />
+            </FormGroup>
+            <FormGroup label={t('setup.timezone')} fieldId="acc-timeZone">
+              <Picker id="acc-timeZone" value={account.timeZone} choices={TIME_ZONES} none={t('setup.timezone.none')} clearLabel={t('picker.clear')} noMatch={t('picker.none')}
+                showDetail={false} onChange={(v) => setAccount((a) => ({ ...a, timeZone: v }))} />
+            </FormGroup>
             <Checkbox id="acc-auto" label={t('setup.autologon')} description={t('setup.autologon.desc')} isChecked={account.autoLogonAlways}
               onChange={(_e, v) => setAccount((a) => ({ ...a, autoLogonAlways: v }))} />
             {(accountErr || (passwordMismatch && password2)) && (
@@ -1138,6 +1165,12 @@ export function App() {
         [t('review.windows'), edition ? t('review.windows.value', { edition: edition.name, build: `${edition.build}${edition.spBuild ? `.${edition.spBuild}` : ''}`, file: windows!.fileName }) : t('review.notChosen')],
         [t('review.winpe'), releases?.winpe ? `woa-rk3576 ${releases.winpe.tier.label} (${releases.winpe.file})${tierWord(releases.winpe.tier)}` : t('review.unavailable')],
         [t('review.setup'), skipOn ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
+        // The codes the answer file gets, as picked on the setup step.
+        ...(skipOn ? [[t('review.intl'), t('review.intl.value', {
+          locale: account.locale || t('setup.locale.none'),
+          keyboard: account.keyboard || (account.locale ? account.locale : t('setup.locale.none')),
+          zone: account.timeZone || t('setup.timezone.none'),
+        })] as [string, string]] : []),
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
         [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
         [t('review.trim'), anyTrim(trim) ? TRIM_KEYS.filter((k) => trim[k]).map((k) => t(`trim.${k}`)).join('; ') : t('review.trim.none')],

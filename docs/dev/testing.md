@@ -78,6 +78,14 @@ was seen. Procedure: [hardware-test](hardware-test.md).
   (scripts/electron-rock4d-e2e.mjs). Steps in hardware-test.md.
 - **Mode menu**: masthead menu, the dialog going back to Simple, Settings'
   copy, at 100% and 125%.
+- **Language, keyboard, time zone pickers** ("Skip setup"): a staged
+  install with picked values (zh-CN with Microsoft Pinyin, en-GB with
+  0809:00000809, a non-UTC zone) comes up in that language, keyboard and
+  zone. A language the image cannot display (en-NZ on an en-US image,
+  UILanguage en-NZ) has not run: whether setup stays in en-US or stops.
+  The preselection on Windows and macOS hosts (app.getSystemLocale, the
+  IANA zone there); only Linux so far. In CI:
+  scripts/electron-setup-pickers-e2e.mjs.
 
 ## Tested
 

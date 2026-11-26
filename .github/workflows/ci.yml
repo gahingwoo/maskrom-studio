@@ -68,6 +68,8 @@ jobs:
         run: xvfb-run -a node scripts/electron-retry-e2e.mjs
       - name: Scrolling and text selection inside Electron at small window sizes
         run: xvfb-run -a node scripts/electron-scroll-e2e.mjs
+      - name: Language, keyboard and time zone pickers of the setup step inside Electron
+        run: xvfb-run -a node scripts/electron-setup-pickers-e2e.mjs
       - name: Screenshots
         run: xvfb-run -a node scripts/shots.mjs shots
       - uses: actions/upload-artifact@v4

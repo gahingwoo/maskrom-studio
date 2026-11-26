@@ -1026,6 +1026,9 @@ ipcMain.on('app:info', (e) => {
     // Screenshots only (unpackaged builds): the page as another system shows it (the Windows driver steps).
     platform: (!app.isPackaged && process.env.WOA_IMAGER_SHOW_PLATFORM) || process.platform,
     version: app.getVersion(), dataDir: shownPath(app.getPath('userData')),
+    // What the "skip setup" page preselects; tests set their own (unpackaged builds).
+    systemLocale: (!app.isPackaged && process.env.WOA_IMAGER_TEST_LOCALE) || app.getSystemLocale(),
+    timeZone: (!app.isPackaged && process.env.WOA_IMAGER_TEST_TZ) || Intl.DateTimeFormat().resolvedOptions().timeZone,
     // Screenshots only (unpackaged builds): a worker with a pretend board.
     ...(!app.isPackaged && process.env.WOA_IMAGER_TEST_WORKER ? { testWorker: process.env.WOA_IMAGER_TEST_WORKER } : {}),
   };

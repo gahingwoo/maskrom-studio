@@ -207,6 +207,19 @@ Chosen on the Windows setup page:
   AutoLogon, optional computer name (specialize), languages and time zone,
   each component `processorArchitecture="arm64"`. Not validated against
   Microsoft's schema; tests check it is well-formed.
+- **Language, keyboard, time zone pickers.** Searchable selects
+  (`src/renderer/picker.tsx`) over `src/shared/windows-intl.json`, made by
+  `scripts/windows-intl-lists.mjs` from Microsoft's "Available language
+  packs" and "Default input profiles" tables and CLDR's windowsZones.xml
+  (with its bcp47 aliases). The values are the codes the answer file took
+  before (zh-CN, 1409:00001409 or a language tag for an input method,
+  New Zealand Standard Time); names come from Intl.DisplayNames in the
+  page's language, time zones keep Windows' English display names. The
+  time zone is preselected from the PC's IANA zone; the language from the
+  PC's region (`app.getSystemLocale()`) only when the image has it as a
+  display language, else the image's language of the same family, else
+  none. A language the image cannot display stays allowed, with a warning,
+  since UILanguage takes the same value.
 - **The password.** Never logged, not in `woa-stage.ini`. In the answer
   file it is encoded as Windows SIM does (PlainText false, base64 of
   UTF-16LE password + "Password"), which is not encryption. SetupComplete.cmd
@@ -347,9 +360,10 @@ Read on the PC in TypeScript (`src/main/windows-image.ts`, `src/woa/wim.ts`,
 
 The app does not ship, mirror or download Windows. The sources the Windows
 step lists come from `src/shared/windows-sources.json` (in order, each with
-a last-checked date; the app opens only those URLs): NTriver (works from
-China; 23H2 ARM64 VL Pro and IoT Enterprise media, its Consumer 23H2 is x64
-only), UUP dump, Visual Studio subscriptions (not checked) and Microsoft's
+a last-checked date; the app opens only those URLs): NTriver (recommended
+for everyone: direct downloads that also work from mainland China; 23H2
+ARM64 VL Pro and IoT Enterprise media, its Consumer 23H2 is x64 only),
+UUP dump, Visual Studio subscriptions (not checked) and Microsoft's
 ARM64 ISO page, marked unsuitable (current release only).
 
 ## Armbian or the firmware onto an SD card or USB drive

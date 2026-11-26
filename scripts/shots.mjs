@@ -23,7 +23,7 @@ put('sys/block/mmcblk1/size', '121110528\n');
 
 const base = {
   ...process.env, WOA_IMAGER_HIDDEN: '1', WOA_IMAGER_UI_MODE: 'advanced', WOA_IMAGER_FAKE_RELEASES: '1', WOA_IMAGER_FAKE_UPDATE: 'current',
-  WOA_IMAGER_TEST_PICK: iso,
+  WOA_IMAGER_TEST_PICK: iso, WOA_IMAGER_TEST_LOCALE: 'en-NZ', WOA_IMAGER_TEST_TZ: 'Pacific/Auckland',
 };
 delete base.ELECTRON_RUN_AS_NODE;
 const errors = [];
@@ -74,6 +74,15 @@ const flow = async (page, shot) => {
   await page.fill('#acc-password', 'example');
   await page.fill('#acc-password2', 'example');
   await shot('4-setup');
+  // The keyboard picker open, searched; then the time zone list as it opens.
+  await page.locator('#acc-keyboard').scrollIntoViewIfNeeded();
+  await page.click('#acc-keyboard');
+  await page.fill('#acc-keyboard', 'english');
+  await shot('4-setup-keyboard');
+  await page.keyboard.press('Escape');
+  await page.click('#acc-timeZone');
+  await shot('4-setup-timezone');
+  await page.keyboard.press('Escape');
   // A chosen disk layout: 40 GB of Windows, an exFAT data partition, 8 GB kept for Linux.
   await page.click('label[for="layout-custom"]');
   await page.fill('#layout-win', '40');

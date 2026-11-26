@@ -222,4 +222,8 @@ describe('where to get Windows', () => {
     expect(isWindowsSourceUrl('https://uupdump.net/get.php?id=x')).toBe(false);
     expect(readFileSync(join(__dirname, '..', 'src', 'shared', 'windows-sources.json'), 'utf8')).not.toMatch(/\.iso"/i);
   });
+  it('recommends NTriver to everyone, not only in mainland China, and nothing else', () => {
+    expect(WINDOWS_SOURCES.filter((s) => s.recommended).map((s) => s.id)).toEqual(['ntriver']);
+    expect(WINDOWS_SOURCES[0].recommended).toEqual({ en: 'recommended', 'zh-CN': '推荐' });
+  });
 });

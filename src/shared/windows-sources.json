@@ -5,8 +5,8 @@
       "id": "ntriver",
       "fits": true,
       "recommended": {
-        "en": "recommended in China",
-        "zh-CN": "中国大陆推荐"
+        "en": "recommended",
+        "zh-CN": "推荐"
       },
       "url": "https://ntriver.org/download-windows-11",
       "fetched": "2026-11-23",
@@ -15,8 +15,8 @@
         "zh-CN": "NTriver：Download Windows 11"
       },
       "text": {
-        "en": "Lists Windows 11 ISOs, with downloads that work from China. The 23H2 ARM64 ones are the Business (volume licence) media, SW_DVD9_Win_Pro_11_23H2.23_Arm64_<language>_Pro_Ent_EDU_N_MLF, and the IoT Enterprise 23H2 arm64 ISO. The 23H2 Consumer media there is x64 only.",
-        "zh-CN": "列出 Windows 11 ISO，下载在中国大陆可用。其中 23H2 ARM64 的是商业版（批量许可）介质 SW_DVD9_Win_Pro_11_23H2.23_Arm64_<语言>_Pro_Ent_EDU_N_MLF，以及 IoT Enterprise 23H2 arm64 ISO。那里的 23H2 消费者版介质只有 x64。"
+        "en": "Lists Windows 11 ISOs with direct downloads, which also work from mainland China. The 23H2 ARM64 ones are the Business (volume licence) media, SW_DVD9_Win_Pro_11_23H2.23_Arm64_<language>_Pro_Ent_EDU_N_MLF, and the IoT Enterprise 23H2 arm64 ISO. The 23H2 Consumer media there is x64 only.",
+        "zh-CN": "列出 Windows 11 ISO，可直接下载，在中国大陆也能用。其中 23H2 ARM64 的是商业版（批量许可）介质 SW_DVD9_Win_Pro_11_23H2.23_Arm64_<语言>_Pro_Ent_EDU_N_MLF，以及 IoT Enterprise 23H2 arm64 ISO。那里的 23H2 消费者版介质只有 x64。"
       }
     },
     {

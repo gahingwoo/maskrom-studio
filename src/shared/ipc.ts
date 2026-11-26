@@ -162,6 +162,10 @@ export interface ImagerApi {
   version: string;
   /** The app's data folder (settings, caches, the settings backups). */
   dataDir: string;
+  /** The PC's region setting (app.getSystemLocale(), such as en-NZ): the language preselected for Windows. */
+  systemLocale?: string;
+  /** The PC's IANA time zone (such as Pacific/Auckland): the time zone preselected for Windows. */
+  timeZone?: string;
   /** Unpackaged builds, screenshots only: the Maskrom worker script to use instead of woa-worker.js. */
   testWorker?: string;
   releases(force?: boolean): Promise<Releases>;

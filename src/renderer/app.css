@@ -53,7 +53,8 @@ input, textarea, [contenteditable="true"],
 :focus-visible { outline-color: var(--pf-t--global--focus-ring--color--default); }
 /* A text field shows focus once, with its own border (PatternFly's hover
    border, in the focus colour), not with the inset browser outline on top. */
-.pf-v6-c-form-control > :is(input, textarea):focus-visible { outline: none; }
+.pf-v6-c-form-control > :is(input, textarea):focus-visible,
+.pf-v6-c-menu-toggle.pf-m-typeahead input:focus-visible { outline: none; }
 .pf-v6-c-form-control:focus-within {
   --pf-v6-c-form-control--after--BorderWidth: var(--pf-t--global--border--width--control--hover);
   --pf-v6-c-form-control--after--BorderColor: var(--pf-t--global--focus-ring--color--default);
