@@ -40,6 +40,11 @@ over on the first start.
   audio, storage, network and the rest), checked against the release's
   SHA-256, with each board's own list. "Add a driver folder" is now only
   for extra drivers.
+- .txt files open again on installs from the 22621 ARM64 media: its Notepad
+  app is x64 only without the x64 framework it needs, so it is
+  unprovisioned and notepad.exe opens them. The self-test shows its whole
+  report in its message box. The trim lists are checked against a recorded
+  inventory of that image: no framework, no app that stays.
 
 ## First version
 

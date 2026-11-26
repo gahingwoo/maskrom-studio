@@ -1,0 +1,574 @@
+{
+ "comment": "Recorded 2026-11-26 from a Windows 11 IoT Enterprise ARM64 install.wim (index 2, build 22621.2428, en-US, created 2023-10-01), read offline with wimlib: provisioned = the AppxAllUserStore\\Applications keys of its SOFTWARE hive (what DISM /Get-ProvisionedAppxPackages lists), packages = the Identity, Framework and PackageDependency of every architecture package under Program Files\\WindowsApps (resource and bundle packages left out).",
+ "image": {
+  "edition": "IoTEnterprise",
+  "build": "22621.2428",
+  "arch": "arm64"
+ },
+ "provisioned": [
+  "Clipchamp.Clipchamp_2.2.8.0_neutral_~_yxz26nhyzhsrt",
+  "Microsoft.549981C3F5F10_3.2204.14815.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.BingNews_4.2.27001.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.BingWeather_4.53.33420.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.DesktopAppInstaller_2022.310.2333.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.GetHelp_10.2201.421.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.Getstarted_2021.2204.1.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.HEIFImageExtension_1.0.43012.0_arm64__8wekyb3d8bbwe",
+  "Microsoft.HEVCVideoExtension_1.0.50361.0_arm64__8wekyb3d8bbwe",
+  "Microsoft.MicrosoftOfficeHub_18.2204.1141.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.MicrosoftSolitaireCollection_4.12.3171.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.MicrosoftStickyNotes_4.2.2.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.Paint_11.2201.22.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.People_2020.901.1724.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.RawImageExtension_2.1.30391.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.ScreenSketch_2022.2201.12.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.SecHealthUI_1000.22621.1.0_arm64__8wekyb3d8bbwe",
+  "Microsoft.StorePurchaseApp_12008.1001.113.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.Todos_2.54.42772.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.VCLibs.140.00_14.0.30704.0_arm64__8wekyb3d8bbwe",
+  "Microsoft.VP9VideoExtensions_1.0.50901.0_arm64__8wekyb3d8bbwe",
+  "Microsoft.WebMediaExtensions_1.0.42192.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WebpImageExtension_1.0.42351.0_arm64__8wekyb3d8bbwe",
+  "Microsoft.Windows.Photos_21.21030.25003.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsAlarms_2022.2202.24.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsCalculator_2020.2103.8.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsCamera_2022.2201.4.0_neutral_~_8wekyb3d8bbwe",
+  "microsoft.windowscommunicationsapps_16005.14326.20544.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsFeedbackHub_2022.106.2230.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsMaps_2022.2202.6.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsNotepad_11.2112.32.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsSoundRecorder_2021.2103.28.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsStore_22204.1400.4.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.WindowsTerminal_3001.12.10983.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.Xbox.TCUI_1.23.28004.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.XboxGameOverlay_1.47.2385.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.XboxGamingOverlay_2.622.3232.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.XboxIdentityProvider_12.50.6001.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.XboxSpeechToTextOverlay_1.17.29001.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.YourPhone_1.22022.147.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.ZuneMusic_11.2202.46.0_neutral_~_8wekyb3d8bbwe",
+  "Microsoft.ZuneVideo_2019.22020.10021.0_neutral_~_8wekyb3d8bbwe",
+  "MicrosoftCorporationII.QuickAssist_2022.414.1758.0_neutral_~_8wekyb3d8bbwe",
+  "MicrosoftWindows.Client.WebExperience_421.20070.195.0_neutral_~_cw5n1h2txyewy"
+ ],
+ "packages": [
+  {
+   "name": "Clipchamp.Clipchamp",
+   "version": "2.2.8.0",
+   "arch": "neutral",
+   "framework": false,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.549981C3F5F10",
+   "version": "3.2204.14815.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.VCLibs.140.00.UWPDesktop"
+   ]
+  },
+  {
+   "name": "Microsoft.BingNews",
+   "version": "1.0.1.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.BingWeather",
+   "version": "1.0.6.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.DesktopAppInstaller",
+   "version": "1.17.10691.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.VCLibs.140.00.UWPDesktop"
+   ]
+  },
+  {
+   "name": "Microsoft.GetHelp",
+   "version": "10.2201.421.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.Getstarted",
+   "version": "10.2204.1.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2"
+   ]
+  },
+  {
+   "name": "Microsoft.HEIFImageExtension",
+   "version": "1.0.43012.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.HEVCVideoExtension",
+   "version": "1.0.50361.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.MicrosoftOfficeHub",
+   "version": "18.2204.1141.0",
+   "arch": "x64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00.UWPDesktop",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.MicrosoftSolitaireCollection",
+   "version": "4.12.3171.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.MicrosoftStickyNotes",
+   "version": "4.0.422.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.NET.Native.Framework.2.2",
+   "version": "2.2.29512.0",
+   "arch": "arm",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.NET.Native.Framework.2.2",
+   "version": "2.2.29512.0",
+   "arch": "arm64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.NET.Native.Runtime.2.2",
+   "version": "2.2.28604.0",
+   "arch": "arm",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.NET.Native.Runtime.2.2",
+   "version": "2.2.28604.0",
+   "arch": "arm64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.Paint",
+   "version": "11.2201.22.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.VCLibs.140.00.UWPDesktop",
+    "Microsoft.UI.Xaml.2.7"
+   ]
+  },
+  {
+   "name": "Microsoft.People",
+   "version": "10.1909.12456.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.RawImageExtension",
+   "version": "2.1.30391.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.ScreenSketch",
+   "version": "11.2201.12.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.SecHealthUI",
+   "version": "1000.22621.1.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.UI.Xaml.2.4"
+   ]
+  },
+  {
+   "name": "Microsoft.StorePurchaseApp",
+   "version": "12008.1001.1.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2"
+   ]
+  },
+  {
+   "name": "Microsoft.Todos",
+   "version": "0.54.42772.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.UI.Xaml.2.4",
+   "version": "2.42007.9001.0",
+   "arch": "arm",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.UI.Xaml.2.4",
+   "version": "2.42007.9001.0",
+   "arch": "arm64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.UI.Xaml.2.7",
+   "version": "7.2203.17001.0",
+   "arch": "arm",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.UI.Xaml.2.7",
+   "version": "7.2203.17001.0",
+   "arch": "arm64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.VCLibs.140.00",
+   "version": "14.0.30704.0",
+   "arch": "arm",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.VCLibs.140.00",
+   "version": "14.0.30704.0",
+   "arch": "arm64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.VCLibs.140.00",
+   "version": "14.0.30704.0",
+   "arch": "x64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.VCLibs.140.00.UWPDesktop",
+   "version": "14.0.30704.0",
+   "arch": "arm",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.VCLibs.140.00.UWPDesktop",
+   "version": "14.0.30704.0",
+   "arch": "arm64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.VCLibs.140.00.UWPDesktop",
+   "version": "14.0.30704.0",
+   "arch": "x64",
+   "framework": true,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.VP9VideoExtensions",
+   "version": "1.0.50901.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.WebMediaExtensions",
+   "version": "1.0.42192.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WebpImageExtension",
+   "version": "1.0.42351.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": []
+  },
+  {
+   "name": "Microsoft.Windows.Photos",
+   "version": "21.21030.25003.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.4",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsAlarms",
+   "version": "1.0.75.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsCalculator",
+   "version": "10.2103.8.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.4",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsCamera",
+   "version": "2022.2201.4.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "microsoft.windowscommunicationsapps",
+   "version": "16005.14326.20544.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsFeedbackHub",
+   "version": "1.2201.61.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsMaps",
+   "version": "1.0.39.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsNotepad",
+   "version": "11.2112.32.0",
+   "arch": "x64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00.UWPDesktop",
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsSoundRecorder",
+   "version": "1.0.42.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsStore",
+   "version": "22204.1400.4.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2"
+   ]
+  },
+  {
+   "name": "Microsoft.WindowsTerminal",
+   "version": "1.12.10983.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00.UWPDesktop",
+    "Microsoft.UI.Xaml.2.7"
+   ]
+  },
+  {
+   "name": "Microsoft.Xbox.TCUI",
+   "version": "1.23.28004.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2"
+   ]
+  },
+  {
+   "name": "Microsoft.XboxGameOverlay",
+   "version": "1.47.2385.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.XboxGamingOverlay",
+   "version": "2.622.3232.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.XboxIdentityProvider",
+   "version": "12.50.6001.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.XboxSpeechToTextOverlay",
+   "version": "1.17.29001.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.YourPhone",
+   "version": "0.22022.147.0",
+   "arch": "x64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.ZuneMusic",
+   "version": "11.2202.46.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.UI.Xaml.2.7",
+    "Microsoft.NET.Native.Framework.2.2",
+    "Microsoft.NET.Native.Runtime.2.2",
+    "Microsoft.VCLibs.140.00"
+   ]
+  },
+  {
+   "name": "Microsoft.ZuneVideo",
+   "version": "10.22020.10021.0",
+   "arch": "arm",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00",
+    "Microsoft.UI.Xaml.2.7"
+   ]
+  },
+  {
+   "name": "MicrosoftCorporationII.QuickAssist",
+   "version": "2.0.5.0",
+   "arch": "x64",
+   "framework": false,
+   "dependencies": []
+  },
+  {
+   "name": "MicrosoftWindows.Client.WebExperience",
+   "version": "421.20070.195.0",
+   "arch": "arm64",
+   "framework": false,
+   "dependencies": [
+    "Microsoft.VCLibs.140.00"
+   ]
+  }
+ ]
+}

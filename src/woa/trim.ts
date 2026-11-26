@@ -105,6 +105,59 @@ export const TRIM_APPS = [
   'MicrosoftTeams',
   'microsoft.windowscommunicationsapps', // Mail and Calendar
 ];
+/**
+ * Framework packages: other apps run on them, so no list here may ever name
+ * one (by prefix: VCLibs.140.00 covers VCLibs.140.00.UWPDesktop). DISM lists
+ * some of them among the provisioned packages (22621 lists VCLibs.140.00).
+ */
+export const FRAMEWORK_PREFIXES = [
+  'Microsoft.VCLibs', 'Microsoft.UI.Xaml', 'Microsoft.NET.Native', 'Microsoft.WindowsAppRuntime', 'Microsoft.WinAppRuntime',
+  'Microsoft.Services.Store.Engagement', 'Microsoft.DirectXRuntime', 'Microsoft.Advertising.Xaml', 'Microsoft.NET.CoreRuntime',
+  'Microsoft.NET.CoreFramework', 'Microsoft.WindowsAppSDK',
+];
+/** Apps that stay whatever is chosen (the Store only unless removeStore). */
+export const KEEP_APPS = [
+  'Microsoft.WindowsNotepad', 'Microsoft.Windows.Photos', 'Microsoft.WindowsTerminal', 'Microsoft.WindowsCalculator', 'Microsoft.Paint',
+  'Microsoft.ScreenSketch', 'Microsoft.SecHealthUI', 'Microsoft.DesktopAppInstaller', 'Microsoft.WindowsStore', 'Microsoft.StorePurchaseApp',
+  'Microsoft.HEIFImageExtension', 'Microsoft.HEVCVideoExtension', 'Microsoft.RawImageExtension', 'Microsoft.VP9VideoExtensions',
+  'Microsoft.WebMediaExtensions', 'Microsoft.WebpImageExtension', 'Microsoft.WindowsCamera', 'Microsoft.WindowsSoundRecorder',
+  'Microsoft.MicrosoftStickyNotes', 'Microsoft.WindowsAlarms', 'MicrosoftCorporationII.QuickAssist',
+];
+
+/**
+ * CONFIGURE lines, whatever is trimmed: the Notepad app in the 22621 ARM64
+ * media (IoT Enterprise 22621.2428 at least) is x64 only and depends on
+ * Microsoft.UI.Xaml.2.7, which that image has for arm64 and arm but not for
+ * x64. Its registration then fails with 0x80073CF3 ("Package failed updates,
+ * dependency or conflict validation") whenever a .txt file is opened. When
+ * the image has exactly that (an x64 Notepad, no arm64 one, no x64
+ * UI.Xaml.2.7) and the classic notepad.exe, the app is unprovisioned: .txt
+ * files then open in notepad.exe, and the Store installs the current (arm64)
+ * Notepad app when wanted. An image without the problem is left alone.
+ * Runs with W: the applied Windows and %LOG% the log; never fails the install.
+ */
+export function notepadFixCmd(): string {
+  const wa = 'W:\\Program Files\\WindowsApps\\';
+  return [
+    'set NP_X64=',
+    'set NP_ARM64=',
+    'set XAML27_X64=',
+    `for /d %%d in ("${wa}Microsoft.WindowsNotepad_*_x64__8wekyb3d8bbwe") do set NP_X64=1`,
+    `for /d %%d in ("${wa}Microsoft.WindowsNotepad_*_arm64__8wekyb3d8bbwe") do set NP_ARM64=1`,
+    `for /d %%d in ("${wa}Microsoft.UI.Xaml.2.7_*_x64__8wekyb3d8bbwe") do set XAML27_X64=1`,
+    'if defined NP_X64 if not defined NP_ARM64 if not defined XAML27_X64 if exist W:\\Windows\\System32\\notepad.exe (',
+    '  echo Notepad: the image has only an x64 Notepad app, without the x64 framework it needs; .txt files go to notepad.exe.',
+    '  echo Notepad app is x64 only and Microsoft.UI.Xaml.2.7 x64 is missing: unprovisioning it >> "%LOG%"',
+    '  dism /English /Image:W:\\ /Get-ProvisionedAppxPackages > "%TEMP%\\woa-notepad.txt" 2>&1',
+    '  for /f "usebackq tokens=1,2 delims=: " %%a in ("%TEMP%\\woa-notepad.txt") do if /i "%%a"=="PackageName" (',
+    '    set "NPKG=%%b"',
+    '    if /i "!NPKG:~0,25!"=="Microsoft.WindowsNotepad_" dism /English /Image:W:\\ /Remove-ProvisionedAppxPackage /PackageName:!NPKG! >> "%LOG%" 2>&1',
+    '  )',
+    ')',
+    '',
+  ].join('\n');
+}
+
 export const COPILOT_APPS = ['Microsoft.Copilot', 'Microsoft.Windows.Ai.Copilot.Provider'];
 export const STORE_APPS = ['Microsoft.WindowsStore', 'Microsoft.StorePurchaseApp'];
 /** The Edge package stub in the image; WebView2 is not an app package and is never touched. */

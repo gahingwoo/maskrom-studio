@@ -24,6 +24,8 @@
 // Written with \n here and given to the board with \r\n (cmd.exe needs CRLF
 // for labels and goto to work reliably).
 
+import { notepadFixCmd } from './trim';
+
 export const LAUNCHER = String.raw`@echo off
 rem ---------------------------------------------------------------------------
 rem Maskrom Studio, staged install. This file replaces woa-debug\collect.cmd
@@ -139,7 +141,9 @@ if exist "%STAGE%\openssh\sshd.exe" (
   if exist "%STAGE%\ssh-key\administrators_authorized_keys" copy /y "%STAGE%\ssh-key\administrators_authorized_keys" "W:\Program Files\OpenSSH\administrators_authorized_keys" >nul
 )
 
-rem --- 4c. trimming and the RK3576 tools (each optional; neither stops the install)
+rem --- 4c. Notepad: only on images whose Notepad app cannot start (trim.ts, notepadFixCmd)
+${notepadFixCmd()}
+rem --- 4d. trimming and the RK3576 tools (each optional; neither stops the install)
 if exist "%STAGE%\woa-trim.cmd" (
   echo Trimming Windows: apps and background services, as chosen.
   call "%STAGE%\woa-trim.cmd"
