@@ -118,10 +118,17 @@ describe('signing in automatically', () => {
 });
 
 describe('SetupComplete.cmd and SSH', () => {
-  it('registers sshd from Program Files, opens port 22 on the private and domain profiles, locks the key file down, removes the answer file', () => {
+  it('registers sshd from Program Files, opens port 22 on every profile, locks the key file down, removes the answer file', () => {
     const s = setupComplete({ skipSetup: null, ssh: true, sshKey: '' });
     expect(s).toContain('install-sshd.ps1');
-    expect(s).toContain('localport=22 profile=private,domain');
+    // A first network is often Public: a Private/Domain rule left port 22 shut on a ROCK 4D (2026-11-26).
+    expect(s).toContain('localport=22 profile=any');
+    expect(s).not.toMatch(/profile=(private|domain|public)/);
+    // A rule of that name from an earlier run is replaced, not doubled, and before the new one is added.
+    const del = s.indexOf('netsh advfirewall firewall delete rule name="OpenSSH Server (sshd)"');
+    expect(del).toBeGreaterThan(0);
+    expect(del).toBeLessThan(s.indexOf('netsh advfirewall firewall add rule name="OpenSSH Server (sshd)"'));
+    expect(s).toContain('echo [ssh] firewall rule');
     expect(s).toMatch(/RunOnce" \/v WoaUnattendCleanup .*Panther\\unattend\.xml/);
     expect(s).toContain('/inheritance:r /grant "*S-1-5-32-544:F" /grant "*S-1-5-18:F"');
     expect(s).toContain('Panther\\unattend.xml');

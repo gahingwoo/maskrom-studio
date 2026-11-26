@@ -78,7 +78,8 @@ staging partitions stay, so a restart tries again. To give up, write "UEFI
 firmware, whole image" again.
 
 After the install: the log is `C:\Windows\Logs\woa-stage.log`; with SSH on,
-`ssh <user>@<board address>` opens cmd.exe; the desktop shows "Test Mode"
+`ssh <user>@<board address>` opens cmd.exe (port 22 is open on every
+network, Public too); the desktop shows "Test Mode"
 because the drivers are test-signed. Windows' clock is read as UTC and
 synced after every start.
 
@@ -167,6 +168,29 @@ system disk and read back. A message box shows the whole report and can open a
 prefilled GitHub issue (no user name, computer name or serial numbers);
 nothing is sent unless you submit it. The report is also saved as
 `RK3576-selftest.txt` on the desktop.
+
+## The RK3576 Tools folder on the desktop
+
+Every install puts a folder **RK3576 Tools** (**RK3576 工具** on a Chinese
+Windows) on the desktop of every account. It holds shortcuts only;
+deleting it changes nothing. A shortcut is there only when what it opens
+is installed.
+
+- **Self-test:** runs the self-test again and shows the report.
+- **RK3576 Monitor:** the monitor widget (with the RK3576 tools).
+- **Drivers, install and update:** how to add or update a driver.
+- **Collect diagnostics:** writes `RK3576-diag-<date>-<time>.txt` to your
+  desktop (network, devices, drivers, GPU, temperatures, SSH, boot
+  settings, the first-start log). It changes nothing. It holds the board's
+  addresses: check it before posting it.
+- **Fix SSH** (with SSH on): registers and starts the OpenSSH server and
+  opens port 22 on every network.
+- **Browser GPU switch:** turns GPU rendering for Edge and Chrome on or off.
+- **User guide:** this page.
+
+Collect diagnostics, Fix SSH and the browser switch ask for administrator
+rights. To bring the folder back, run as administrator:
+`powershell -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\woa-desktop-tools.ps1`
 
 ## Trimming Windows
 

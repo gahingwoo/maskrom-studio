@@ -100,9 +100,13 @@ Repeat test 2 (or run it once with these on):
   value and no AutoLogonCount.
 - SSH on, with your public key: `ssh <user>@<board>` from the PC with the
   key, and with the password. `sc query sshd` RUNNING, `netsh advfirewall
-  firewall show rule name="OpenSSH Server (sshd)"`. The key file's ACL:
+  firewall show rule name="OpenSSH Server (sshd)"` says Profiles: Domain,Private,Public,
+  and `ssh` works while `Get-NetConnectionProfile` says Public. The key file's ACL:
   `icacls C:\ProgramData\ssh\administrators_authorized_keys` lists only
   SYSTEM and Administrators.
+- Desktop folder: "RK3576 Tools" (or "RK3576 工具") on the desktop of a second
+  account too; each shortcut opens; Collect diagnostics writes the .txt; Fix
+  SSH after `sc.exe delete sshd` and the rule set to Private brings both back.
 - Certificates: `certutil -store Root` and `certutil -store
   TrustedPublisher` list "woa-rk3576 test signing"; Device Manager shows
   no driver waiting for approval.
