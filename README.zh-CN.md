@@ -12,11 +12,17 @@
 
 ## 开发板
 
-| 开发板 | 固件位置 | Windows 可装到 | MaskROM |
-|---|---|---|---|
-| 立创泰山派 3M | eMMC | eMMC、SD 卡 | 短接 MSK 焊盘，或在固件中按 F4 |
-| ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe | 按键 |
-| Radxa ROCK 4D | SPI NOR | NVMe、SD 卡（需要比 0.4.1 新的 edk2-rk3576：`ci` 预发布版） | 按键 |
+<!-- generated:boards -->
+
+| 开发板 | 固件位置 | Windows 装到 | MaskROM | Windows 和 Armbian 同时装 |
+|---|---|---|---|---|
+| 立创泰山派 3M | eMMC | eMMC、SD 卡 | 短接 MSK 焊盘，或在固件里按 F4 | 都装在 eMMC 上（高级模式） |
+| ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe | 按键 | 不支持 |
+| Radxa ROCK 4D | SPI NOR | NVMe、SD 卡 | 按键 | Windows 在 NVMe，Armbian 在 SD 卡（高级模式） |
+
+<!-- /generated -->
+
+由 `scripts/gen-docs` 根据 `src/woa/boards.ts` 生成。ROCK 4D 上的 Windows 需要比 0.4.1 新的 edk2-rk3576：`ci` 预发布版。
 
 ## 现状
 

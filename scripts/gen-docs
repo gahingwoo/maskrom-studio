@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+"""Fill the generated sections of the docs from src/woa/boards.ts.
+
+A generated section is a marker pair in a Markdown file:
+
+    <!-- generated:NAME -->
+    ...filled in by this script...
+    <!-- /generated -->
+
+or the same pair inline, for one value in a sentence.  Everything between
+the markers is replaced; everything outside them is left alone.  Pages under
+docs/zh-CN/ and *.zh-CN.md get Chinese headers.
+
+    scripts/gen-docs           rewrite the sections in place
+    scripts/gen-docs --check   fail if a committed page differs
+
+Sources: src/woa/boards.ts (WOA_BOARDS) and the edk2-webflash board list it
+builds on, src/web/webflash/boards.js (BOARDS, the firmware choices and
+their sectors).  Both are read as object literals, without Node.
+
+Sector numbers of the firmware writes may appear in the user pages (README,
+docs/*.md, docs/zh-CN/) only inside generated sections.
+"""
+
+import argparse
+import difflib
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BOARDS_TS = os.path.join(ROOT, "src/woa/boards.ts")
+WEBFLASH_JS = os.path.join(ROOT, "src/web/webflash/boards.js")
+MARK = re.compile(r"<!-- generated:([a-z0-9-]+) -->(.*?)<!-- /generated -->", re.S)
+
+
+class GenError(Exception):
+    pass
+
+
+# ------------------------------------------------------------------ JS literals
+
+def js_literal(src, names):
+    """Turn a JS object or array literal into a Python value.  Keys become
+    strings, true/false/null map, identifiers come from names (constants or
+    callables, for wf('x')); anything else is an error."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c in "'\"`":
+            j = i + 1
+            while src[j] != c:
+                j += 2 if src[j] == "\\" else 1
+            s = src[i + 1:j]
+            if c == "`" and "${" in s:
+                raise GenError("template literal with ${} in a board list")
+            out.append(repr(bytes(s, "utf-8").decode("unicode_escape").encode("latin-1").decode("utf-8")))
+            i = j + 1
+        elif src.startswith("//", i):
+            i = src.index("\n", i)
+        elif src.startswith("/*", i):
+            i = src.index("*/", i) + 2
+        elif c.isalpha() or c == "_":
+            m = re.match(r"[A-Za-z_]\w*", src[i:])
+            w = m.group(0)
+            rest = src[i + len(w):].lstrip()
+            if rest.startswith(":") and not rest.startswith("::"):
+                out.append(repr(w))
+            elif w in ("true", "false", "null"):
+                out.append({"true": "True", "false": "False", "null": "None"}[w])
+            elif w in names:
+                out.append(f"_n[{w!r}]")
+            else:
+                raise GenError(f"unknown name {w} in a board list; update scripts/gen-docs")
+            i += len(w)
+        else:
+            out.append(c)
+            i += 1
+    return eval("".join(out), {"__builtins__": {}}, {"_n": names})
+
+
+def block(text, start):
+    """The bracketed literal that starts at the first [ or { after start."""
+    i = text.index(start)
+    i = min(x for x in (text.find("[", i + len(start)), text.find("{", i + len(start))) if x >= 0)
+    open_c = text[i]
+    close_c = "]" if open_c == "[" else "}"
+    depth, j = 0, i
+    while True:
+        c = text[j]
+        if text.startswith("//", j):
+            j = text.index("\n", j)
+            continue
+        if text.startswith("/*", j):
+            j = text.index("*/", j) + 2
+            continue
+        if c in "'\"`":
+            q = c
+            j += 1
+            while text[j] != q:
+                j += 2 if text[j] == "\\" else 1
+        elif c == open_c:
+            depth += 1
+        elif c == close_c:
+            depth -= 1
+            if depth == 0:
+                return text[i:j + 1]
+        j += 1
+
+
+def number_consts(text):
+    names = {}
+    for m in re.finditer(r"^const (\w+) = ([0-9.e *+()A-Z_]+);", text, re.M):
+        names[m.group(1)] = eval(m.group(2), {"__builtins__": {}}, dict(names))
+    return names
+
+
+_cache = {}
+
+
+def load():
+    if _cache:
+        return _cache["boards"]
+    js = open(WEBFLASH_JS, encoding="utf-8").read()
+    names = number_consts(js)
+    for m in re.finditer(r"^const (\w+) = [\[{]", js, re.M):
+        if m.group(1) not in names:
+            names[m.group(1)] = js_literal(block(js, f"const {m.group(1)} ="), names)
+    webflash = js_literal(block(js, "export const BOARDS ="), names)
+    ts = open(BOARDS_TS, encoding="utf-8").read()
+    tnames = number_consts(ts)
+    tnames["wf"] = lambda bid: next(b for b in webflash if b["id"] == bid)
+    woa = js_literal(block(ts, "export const WOA_BOARDS: WoaBoard[] ="), tnames)
+    _cache["boards"] = woa
+    return woa
+
+
+def firmware_writes(b):
+    """(label, first sector, last sector or None for the whole file) of the
+    UEFI firmware choices, as firmwareTargets() in boards.ts makes them."""
+    out = []
+    for t in b["webflash"]["targets"]:
+        if t["id"] not in ("uefi", "uefi-keep"):
+            continue
+        if "slice" in t:
+            first = t["lba"]
+            last = first + (t["slice"][1] - t["slice"][0]) // 512 - 1
+            out.append((t["label"], first, last))
+        else:
+            out.append((t["label"], t["lba"], None))
+    if b.get("spi") and not any(t["id"] == "uefi-keep" for t in b["webflash"]["targets"]):
+        out.append(("UEFI firmware, keep the settings", 0, b["spi"]["nvdataLba"] - 1))
+    return out
+
+
+# ------------------------------------------------------------------ sections
+
+ZH = {
+    "Board": "开发板", "Firmware on": "固件位置", "Windows on": "Windows 装到", "MaskROM": "MaskROM",
+    "Windows and Armbian": "Windows 和 Armbian 同时装", "Choice": "选项", "Writes": "写入",
+    "eMMC": "eMMC", "SPI NOR": "SPI NOR", "SD card": "SD 卡", "NVMe": "NVMe",
+    "button": "按键", "pads": "短接 MSK 焊盘，或在固件里按 F4",
+    "one-emmc": "都装在 eMMC 上（高级模式）", "nvme-and-sd": "Windows 在 NVMe，Armbian 在 SD 卡（高级模式）",
+    "no": "不支持",
+    "whole": "整个映像，从扇区 {first} 开始", "range": "扇区 {first} 到 {last}",
+    "UEFI firmware": "UEFI 固件", "UEFI firmware, whole image": "UEFI 固件，整个映像",
+    "UEFI firmware, keep the partitions": "UEFI 固件，保留分区",
+    "UEFI firmware, keep the settings": "UEFI 固件，保留设置",
+}
+EN = {
+    "pads": "short the MSK pads, or F4 in the firmware",
+    "one-emmc": "both on the eMMC (Advanced mode)",
+    "nvme-and-sd": "Windows on NVMe, Armbian on an SD card (Advanced mode)",
+    "whole": "the whole image, from sector {first}", "range": "sectors {first} to {last}",
+}
+
+
+def tr(lang, s, **kw):
+    t = ZH.get(s, EN.get(s, s)) if lang == "zh" else EN.get(s, s)
+    return t.format(**kw)
+
+
+def table(lang, headers, rows):
+    out = ["| " + " | ".join(tr(lang, h) for h in headers) + " |", "|" + "---|" * len(headers)]
+    out += ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
+    return "\n".join(out)
+
+
+def name(b, lang):
+    return {"LCKFB TaishanPi 3M": "立创泰山派 3M"}.get(b["name"], b["name"]) if lang == "zh" else b["name"]
+
+
+def sec_boards(lang):
+    rows = []
+    for b in load():
+        storage = {"emmc": "eMMC", "spinor": "SPI NOR"}[b["firmwareStorage"]]
+        targets = ("、" if lang == "zh" else ", ").join(
+            tr(lang, {"emmc": "eMMC", "sd": "SD card", "nvme": "NVMe"}[t]) for t in b["windowsTargets"])
+        rows.append([name(b, lang), tr(lang, storage), targets, tr(lang, b["maskromEntry"]),
+                     tr(lang, b["hybrid"] or "no")])
+    return table(lang, ["Board", "Firmware on", "Windows on", "MaskROM", "Windows and Armbian"], rows)
+
+
+def sec_firmware_writes(lang):
+    rows = []
+    for b in load():
+        for label, first, last in firmware_writes(b):
+            what = tr(lang, "whole", first=first) if last is None else tr(lang, "range", first=first, last=last)
+            rows.append([name(b, lang), tr(lang, label), what])
+    return table(lang, ["Board", "Choice", "Writes"], rows)
+
+
+SECTIONS = {"boards": sec_boards, "firmware-writes": sec_firmware_writes}
+
+
+def fixed_facts():
+    facts = {}
+    for b in load():
+        for _, first, last in firmware_writes(b):
+            if last is not None:
+                facts[str(last)] = "firmware-writes"
+                facts[str(last + 1)] = "firmware-writes"
+    return facts
+
+
+# ------------------------------------------------------------------ driver
+
+def md_files():
+    out = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "*.md"],
+                         cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    return [f for f in out.split() if os.path.exists(os.path.join(ROOT, f))]
+
+
+def user_page(f):
+    return f.startswith("README") or re.match(r"^docs/(zh-CN/)?[^/]+\.md$", f)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--check", action="store_true")
+    a = ap.parse_args()
+    changed, problems = [], []
+    try:
+        facts = fixed_facts()
+        for f in md_files():
+            text = open(os.path.join(ROOT, f), encoding="utf-8").read()
+            lang = "zh" if "zh-CN" in f else "en"
+
+            def sub(m):
+                if m.group(1) not in SECTIONS:
+                    raise GenError(f"{f}: unknown generated section '{m.group(1)}'")
+                body = SECTIONS[m.group(1)](lang)
+                return f"<!-- generated:{m.group(1)} -->" + (body if "\n" not in m.group(2)
+                                                            else "\n\n" + body + "\n\n") + "<!-- /generated -->"
+
+            new = MARK.sub(sub, text)
+            if user_page(f):
+                outside = MARK.sub(lambda m: "\n" * m.group(0).count("\n"), new)
+                for n, line in enumerate(outside.split("\n"), 1):
+                    for val, sec in facts.items():
+                        if re.search(r"(?<!\d)" + val + r"(?!\d)", line):
+                            problems.append(f"{f}:{n}: sector {val} typed by hand; use the generated:{sec} section")
+            if new != text:
+                changed.append(f)
+                if a.check:
+                    sys.stdout.writelines(difflib.unified_diff(text.splitlines(True), new.splitlines(True),
+                                                               f"a/{f}", f"b/{f}"))
+                else:
+                    open(os.path.join(ROOT, f), "w", encoding="utf-8").write(new)
+    except GenError as e:
+        print(f"gen-docs: {e}", file=sys.stderr)
+        return 2
+    for p in problems:
+        print(p)
+    if a.check and changed:
+        print(f"gen-docs: {len(changed)} page(s) out of date: {', '.join(changed)}")
+        print("run scripts/gen-docs to update")
+        return 1
+    print(f"gen-docs: {len(changed)} page(s) updated" if not a.check else "gen-docs: generated sections are up to date")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

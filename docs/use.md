@@ -244,12 +244,27 @@ itself.
   "Reset the settings" writes the image as it is.
 - **Radxa ROCK 4D** (firmware on the 16 MiB SPI NOR; Advanced mode only):
   "UEFI firmware" rewrites the whole flash and resets the settings. "UEFI
-  firmware, keep the settings" writes sectors 0 to 32255 and leaves the
-  settings (from 0xFC0000 to the end) alone; it refuses a flash that does
+  firmware, keep the settings" leaves the settings at the end of the flash
+  alone (sectors in the table below); it refuses a flash that does
   not already hold edk2-rk3576 firmware. Both select the SPI NOR
   explicitly and stop if the loader reports any other storage (a UFS
   module), copy the whole flash to the PC first, and read back everything
   written. Disks are never touched.
+
+What each firmware choice writes (from `src/woa/boards.ts`):
+
+<!-- generated:firmware-writes -->
+
+| Board | Choice | Writes |
+|---|---|---|
+| LCKFB TaishanPi 3M | UEFI firmware, whole image | the whole image, from sector 0 |
+| LCKFB TaishanPi 3M | UEFI firmware, keep the partitions | sectors 64 to 43647 |
+| ArmSoM CM5-IO | UEFI firmware, whole image | the whole image, from sector 0 |
+| ArmSoM CM5-IO | UEFI firmware, keep the partitions | sectors 64 to 43647 |
+| Radxa ROCK 4D | UEFI firmware | the whole image, from sector 0 |
+| Radxa ROCK 4D | UEFI firmware, keep the settings | sectors 0 to 32255 |
+
+<!-- /generated -->
 
 Simple mode always writes the Stable release; Advanced mode follows the
 tier in Settings.

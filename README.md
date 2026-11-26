@@ -17,11 +17,18 @@ has the whole path from a new board to Windows or Linux.
 
 ## Boards
 
-| Board | Firmware on | Windows on | MaskROM |
-|---|---|---|---|
-| LCKFB TaishanPi 3M | eMMC | eMMC, SD card | short the MSK pads, or F4 in the firmware |
-| ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe | button |
-| Radxa ROCK 4D | SPI NOR | NVMe, SD card (needs edk2-rk3576 newer than 0.4.1: the `ci` pre-release) | button |
+<!-- generated:boards -->
+
+| Board | Firmware on | Windows on | MaskROM | Windows and Armbian |
+|---|---|---|---|---|
+| LCKFB TaishanPi 3M | eMMC | eMMC, SD card | short the MSK pads, or F4 in the firmware | both on the eMMC (Advanced mode) |
+| ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe | button | no |
+| Radxa ROCK 4D | SPI NOR | NVMe, SD card | button | Windows on NVMe, Armbian on an SD card (Advanced mode) |
+
+<!-- /generated -->
+
+Generated from `src/woa/boards.ts` by `scripts/gen-docs`. Windows on the
+ROCK 4D needs edk2-rk3576 newer than 0.4.1: the `ci` pre-release.
 
 ## Status
 

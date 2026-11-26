@@ -91,8 +91,8 @@ ROCK 4D's SPI NOR) and Windows.
 
 ## What is reused
 
-- **edk2-webflash**: its board list (`src/boards.js`) and `prepare()`
-  (`src/flash.js`), copied unchanged into `src/web/webflash/`, so "whole
+- **edk2-webflash**: its board list (`boards.js`) and `prepare()`
+  (`flash.js`), copied unchanged from its `src` into `src/web/webflash/`, so "whole
   image" and "keep the partitions" write what the web flasher writes. Its
   command sequence (db, wl, rd, no cs) is what `src/woa/maskrom-regions.ts`
   follows; storage is identified by its size from `rfi`. The ROCK 4D's
