@@ -46,7 +46,10 @@ write "UEFI firmware, whole image" first ([UEFI firmware](#uefi-firmware)).
 4. **Windows setup:**
    - First start: "Windows setup (OOBE)", or "Skip setup, create this
      account" with user name and password (optional computer name,
-     language, keyboard, time zone).
+     language, keyboard, time zone). Language, keyboard and time zone are
+     lists you search by typing a name or code. The time zone starts as
+     this computer's; the language as this computer's region when the
+     image has that language (else the image's).
    - Sign in automatically (with "Skip setup" only, off by default): signs
      in on every start, not only the first.
    - OpenSSH server: on by default; paste a public key to sign in without

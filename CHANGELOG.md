@@ -31,6 +31,10 @@ over on the first start.
   and reads back what it wrote.
 - NTriver is the recommended place to get Windows for everyone, not only
   in mainland China.
+- "Skip setup": language, keyboard and time zone are searchable lists
+  with names (Microsoft's language and input profile tables, CLDR's
+  Windows zones) instead of typed codes, preselected from this computer.
+  The answer file gets the same codes as before.
 
 ## First version
 
