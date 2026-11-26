@@ -199,11 +199,11 @@ export function planStage(o: StageInput): StagePlan {
 
   // The staging data volume. Its size does not depend on where it goes, and
   // the script's numbers do not change its cluster count, so two passes settle it.
-  // The drivers' test certificates: WinPE's driver catalogs and those of the extra drivers.
+  // The drivers' test certificates: WinPE's driver catalogs, the driver package's and those of the extra drivers.
   const setup = o.setup ?? { skipSetup: null, ssh: false, sshKey: '' };
   const extras = (o.extras ?? []).filter((e) => e.data.length > 0);
   for (const e of extras) {
-    if (!/^(openssh|extra-drivers|chrome|rk3576-tools)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
+    if (!/^(openssh|extra-drivers|rk3576-drivers|chrome|rk3576-tools)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
       throw new StageError(`${e.path} cannot go on the staging volume.`);
     }
   }
@@ -212,7 +212,8 @@ export function planStage(o: StageInput): StagePlan {
   if (setup.rkTools && !extras.some((e) => e.path === 'rk3576-tools/offline-install.cmd')) throw new StageError('The RK3576 tools are chosen, but the bundle is missing.');
   const catalogs = [
     ...fat.listFiles('woa-drivers').filter((p) => /\.cat$/i.test(p)).map((p) => fat.readFile(p)),
-    ...extras.filter((e) => /^extra-drivers\/.*\.cat$/i.test(e.path)).map((e) => e.data),
+    ...fat.listFiles('woa-audio').filter((p) => /\.cat$/i.test(p)).map((p) => fat.readFile(p)),
+    ...extras.filter((e) => /^(extra-drivers|rk3576-drivers)\/.*\.cat$/i.test(e.path)).map((e) => e.data),
   ];
   const certs = trustedCerts(catalogs);
   const generated = [

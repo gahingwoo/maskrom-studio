@@ -38,10 +38,11 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
   const fat = new FatVolume(winpeVolume(o.winpe));
   const drivers = fat.listFiles('woa-drivers');
   if (!drivers.some((p) => /dwcsdhc\.inf$/i.test(p))) throw new StageError('The WinPE image has no woa-drivers\\dwcsdhc. Use woa-rk3576 release 0.1.1 or later.');
-  const out: Array<{ path: string; data: Uint8Array }> = drivers.map((p) => ({ path: p, data: fat.readFile(p) }));
+  // woa-audio: the WinPE image's audio drivers, added when the release has no driver package.
+  const out: Array<{ path: string; data: Uint8Array }> = [...drivers, ...fat.listFiles('woa-audio')].map((p) => ({ path: p, data: fat.readFile(p) }));
   const catalogs = [
     ...out.filter((f) => /\.cat$/i.test(f.path)).map((f) => f.data),
-    ...o.extras.filter((e) => /^extra-drivers\/.*\.cat$/i.test(e.path)).map((e) => e.data),
+    ...o.extras.filter((e) => /^(extra-drivers|rk3576-drivers)\/.*\.cat$/i.test(e.path)).map((e) => e.data),
   ];
   const certs = trustedCerts(catalogs);
   const ini: Record<string, string | number> = {

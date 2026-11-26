@@ -195,6 +195,17 @@ Chosen on the Windows setup page:
   (`Certificates\<SHA-1>`, value `Blob`, the certificate as serialized
   property 32), where `certutil -addstore` puts them. Not yet seen on a
   board whether Windows accepts a blob with only that property.
+- **The driver package.** woa-rk3576's `rk3576-drivers-arm64*.zip`
+  (its `tools/rk3576-drivers`; `src/woa/driver-package.ts`) is downloaded
+  with the WinPE image and checked against the release's SHA-256. The
+  board's default list in its `manifest.json` is staged under
+  `rk3576-drivers\`, each file checked against the package's
+  `SHA256SUMS.txt`; a package without `dwcsdhc` and `dwcmshc` for the board
+  is refused. The install script adds that folder instead of the WinPE's
+  `woa-drivers\`. Optional entries (untested on a board) are never
+  installed. A release without the package (0.1.1) adds `woa-drivers\` and
+  `woa-audio\` as before. For a build not yet released:
+  `WOA_IMAGER_RK3576_DRIVERS_URL`, `_SHA256`, `_SIZE`.
 - **More drivers.** A user folder is staged under `extra-drivers\` and
   added with `dism /Add-Driver /Recurse /ForceUnsigned`; its certificates
   are trusted as above.

@@ -35,6 +35,11 @@ over on the first start.
   with names (Microsoft's language and input profile tables, CLDR's
   Windows zones) instead of typed codes, preselected from this computer.
   The answer file gets the same codes as before.
+- The RK3576 Windows driver package is installed automatically: the
+  woa-rk3576 release's rk3576-drivers-arm64.zip (GPU, video decoder, NPU,
+  audio, storage, network and the rest), checked against the release's
+  SHA-256, with each board's own list. "Add a driver folder" is now only
+  for extra drivers.
 
 ## First version
 

@@ -21,7 +21,9 @@ export type JobResult = { ok: true; sha256: string } | { ok: false; reason: stri
 /** The latest edk2-rk3576 and woa-rk3576 releases, as far as they could be read. */
 export interface Releases {
   firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>>; tier: ReleaseTier } | null;
-  winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier; tools: { file: string; size: number } | null } | null;
+  winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier; tools: { file: string; size: number } | null;
+    /** The RK3576 Windows driver package of the release; null: the release has none, the WinPE's drivers are installed. */
+    drivers?: { file: string; size: number } | null } | null;
   problems: string[];
 }
 
@@ -205,8 +207,8 @@ export interface ImagerApi {
   serveWindows(token: string): Promise<Served | { error: string }>;
   /** Choose a folder of extra driver packages (wddm-mali-g52, gt9271, ...). Errors are translation keys or messages. */
   pickDrivers(): Promise<DriverFolder | { error: string } | null>;
-  /** The files that go onto the staging volume besides the image: OpenSSH (pinned release) and the chosen drivers. */
-  prepareExtras(o: { ssh: boolean; drivers: string | null }): Promise<{ files: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
+  /** The files that go onto the staging volume besides the image: OpenSSH (pinned release), the board's drivers from the release's driver package (boardId), the added driver folder, Chrome, the RK3576 tools. */
+  prepareExtras(o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId }): Promise<{ files: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
   /** Is this app running on an RK3576 board (Linux)? */
   boardHere(): Promise<BoardHereInfo>;
   /** Windows host only: build a finished Windows with DISM on a drive here, or in a VHD for the eMMC. */

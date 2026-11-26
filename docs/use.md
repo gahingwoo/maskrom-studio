@@ -54,8 +54,15 @@ write "UEFI firmware, whole image" first ([UEFI firmware](#uefi-firmware)).
      in on every start, not only the first.
    - OpenSSH server: on by default; paste a public key to sign in without
      a password.
-   - More drivers: a folder with .inf, .cat and .sys files, for example
-     [wddm-mali-g52](https://github.com/gahingwoo/wddm-mali-g52) or gt9271.
+   - Drivers: installed automatically. The app downloads the woa-rk3576
+     release's RK3576 driver package (`rk3576-drivers-arm64.zip`), checks
+     it, and installs the board's list: storage, Ethernet, GPU, video
+     decoder, NPU, audio and the rest on every board, plus the touch screen
+     and Bluetooth on the TaishanPi 3M, the power button on the CM5-IO and
+     ROCK 4D, and the EEPROM on the ROCK 4D. A release without the package
+     installs the WinPE image's drivers (no GPU or NPU).
+   - Add a driver folder (optional): only for a driver that is not in the
+     package, as a folder with .inf, .cat and .sys files.
    - Trimming: the recommended set ([Trimming Windows](#trimming-windows)).
    - RK3576 tools (monitor widget, NPU tools): on when the WinPE release
      carries them.
