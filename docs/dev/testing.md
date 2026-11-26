@@ -72,6 +72,10 @@ was seen. Procedure: [hardware-test](hardware-test.md).
 - **Targets per board**: only boards.ts targets offered. Windows from SD
   has not run on any board; ROCK 4D NVMe waits for ACPI. The ROCK 4D's
   Chinese MaskROM steps are new text.
+- **ROCK 4D SPI NOR firmware**: "UEFI firmware" and "keep the settings"
+  over MaskROM (`cs 9`, size check, the 16 MiB copy, read-back), and on
+  the board itself with flashcp; only against the pretend board so far
+  (scripts/electron-rock4d-e2e.mjs). Steps in hardware-test.md.
 - **Mode menu**: masthead menu, the dialog going back to Simple, Settings'
   copy, at 100% and 125%.
 

@@ -54,3 +54,24 @@ export function edk2Image(opts: { dt?: string; stamp?: string; version?: string;
 
 /** A UEFI variable store as the nvdata slot holds one ("_FVH" at 0x28). */
 export const store = () => { const b = new Uint8Array(0x30000).fill(0x5a); b.set(new TextEncoder().encode('_FVH'), 0x28); return b; };
+
+/**
+ * A made-up edk2-rk3576 SPI NOR image for the ROCK 4D: 16 MiB, a FIT at
+ * sector 768 with an edk2 image holding the build stamp, the UEFI settings
+ * area from sector 32256 erased (0xFF), as ROCK4D-spi-edk2-<ver>.img.
+ */
+export function spiImage(opts: { dt?: string; stamp?: string; version?: string; settings?: Uint8Array } = {}): Uint8Array {
+  const img = new Uint8Array(16 * 1024 * 1024).fill(0x11);
+  const fit = 768 * SECTOR;
+  img.set(fdt({
+    description: 'FIT Image with ATF/OP-TEE/UEFI for RK3576',
+    images: { edk2: { 'data-size': 0x100000, 'data-offset': 0 } },
+    configurations: { default: 'conf', conf: { description: opts.dt ?? 'rk3576-rock-4d' } },
+  }), fit);
+  const stamp = `rk3576-${opts.stamp ?? 'ROCK4D'}-${opts.version ?? '0.4.2'}`;
+  const at = fit + 4096 + 0x8000;
+  for (let i = 0; i < stamp.length; i++) { img[at + i * 2] = stamp.charCodeAt(i); img[at + i * 2 + 1] = 0; }
+  img.fill(0xff, 32256 * SECTOR, 32256 * SECTOR + 0x30000);
+  if (opts.settings) img.set(opts.settings, 32256 * SECTOR);
+  return img;
+}

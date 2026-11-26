@@ -155,7 +155,7 @@ export type BoardJobRequest =
   | { kind: 'stage-disk'; target: 'sd' | 'nvme'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
   | { kind: 'stage'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
   | { kind: 'firmware'; boardId: BoardId; device: string; targetId: string }
-  | { kind: 'spinor'; boardId: BoardId; device: string };
+  | { kind: 'spinor'; boardId: BoardId; device: string; targetId?: string };
 
 export interface ImagerApi {
   platform: string;

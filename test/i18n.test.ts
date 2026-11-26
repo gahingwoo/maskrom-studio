@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pickLang, translateMessage, translator } from '../src/shared/i18n';
 import { MESSAGE_PATTERNS, MESSAGES } from '../src/renderer/messages';
-import { WOA_BOARDS } from '../src/woa/boards';
+import { firmwareTargets, WOA_BOARDS } from '../src/woa/boards';
 
 const src = (f: string) => readFileSync(join(__dirname, '..', 'src', 'renderer', f), 'utf8');
 
@@ -40,10 +40,14 @@ describe('i18n', () => {
       if (b.webflash.maskromNote) keys.push(`maskrom.${b.id}.note`);
       if (b.factoryPage) keys.push(`restore.factory.${b.id}`, `sd.boot.${b.sdBoot}.title`, `sd.boot.${b.sdBoot}.armbian`, `sd.boot.${b.sdBoot}.uefi`, `next.drive.${b.sdBoot}`);
       if (b.emmc) keys.push(`s.ready.${b.id}.1`);
+      // The firmware choices' Chinese, for edk2-webflash's and the app's own (ROCK 4D "keep the settings").
+      for (const tg of firmwareTargets(b)) keys.push(...['note', 'erases', 'done'].map((f) => `fw.${b.id}.${tg.id}.${f}`));
     }
     expect(keys.filter((k) => !MESSAGES[k])).toEqual([]);
     expect(translateMessage('Windows is not installed to an NVMe drive on the LCKFB TaishanPi 3M. Nothing was written.', MESSAGE_PATTERNS, 'zh-CN'))
       .toBe('LCKFB TaishanPi 3M 不支持把 Windows 装到 NVMe 硬盘。没有写入任何内容。');
+    expect(translateMessage('The loader selected a 59.6 GiB storage, not the Radxa ROCK 4D\'s 16.0 MiB SPI NOR flash (a UFS module, or another board?). Nothing was written.', MESSAGE_PATTERNS, 'zh-CN'))
+      .toBe('引导组件选中的是 59.6 GiB 的存储，不是 Radxa ROCK 4D 的 16.0 MiB SPI NOR 闪存（UFS 模块，或者接错了板子？）。没有写入任何内容。');
   });
 
   it('fills placeholders and translates known messages', () => {

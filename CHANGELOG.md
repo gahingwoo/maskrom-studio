@@ -24,6 +24,11 @@ over on the first start.
 - Edge, Chrome and WebView2 render on the GPU at WDDM 2.x: woa-rk3576's
   rk3576-browser-gpu.ps1 adds --disable-direct-composition to their launch
   paths at the first start and keeps it there after browser updates.
+- Radxa ROCK 4D: "UEFI firmware, keep the settings" for its SPI NOR flash
+  (sectors 0 to 32255; the settings at 0xFC0000 stay). Every ROCK 4D write
+  over MaskROM selects the SPI NOR (`cs 9`), refuses any other storage,
+  checks the image is the ROCK 4D's, copies the whole flash to the PC first
+  and reads back what it wrote.
 
 ## First version
 

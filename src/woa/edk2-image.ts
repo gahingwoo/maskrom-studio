@@ -21,6 +21,8 @@ const FDT_MAGIC = 0xd00dfeed;
 export const EDK2_BOARDS: Partial<Record<BoardId, { dt: string; stamp: string }>> = {
   tspi3m: { dt: 'rk3576-lckfb-tspi-3m', stamp: 'TaishanPi3M' },
   cm5io: { dt: 'rk3576-armsom-cm5-io', stamp: 'CM5IO' },
+  // The SPI NOR image (ROCK4D-spi-edk2-<ver>.img): its FIT is at SPI sector 768 (spi-image.ts).
+  rock4d: { dt: 'rk3576-rock-4d', stamp: 'ROCK4D' },
 };
 
 export interface FitImage { offset: number; size: number }
@@ -36,8 +38,8 @@ export interface Fit {
 const be32 = (b: Uint8Array, o: number) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
 
 /** The FIT header at the start of `b` (a few KiB), or a sentence saying why it is not one. */
-export function parseFit(b: Uint8Array): Fit | string {
-  if (b.length < 40 || be32(b, 0) !== FDT_MAGIC) return 'There is no FIT (d00dfeed) at sector 16384.';
+export function parseFit(b: Uint8Array, lba = FIT_LBA): Fit | string {
+  if (b.length < 40 || be32(b, 0) !== FDT_MAGIC) return `There is no FIT (d00dfeed) at sector ${lba}.`;
   const total = be32(b, 4);
   const offStruct = be32(b, 8);
   const offStrings = be32(b, 12);
@@ -78,10 +80,10 @@ export function parseFit(b: Uint8Array): Fit | string {
 }
 
 /** Where an image of the FIT lies on the eMMC (FIT data follows the header, 4-byte aligned). */
-export function fitImageLba(fit: Fit, name: string): { lba: number; sectors: number; byte: number } | null {
+export function fitImageLba(fit: Fit, name: string, fitLba = FIT_LBA): { lba: number; sectors: number; byte: number } | null {
   const i = fit.images[name];
   if (!i) return null;
-  const byte = FIT_LBA * SECTOR + ((fit.totalsize + 3) & ~3) + i.offset;
+  const byte = fitLba * SECTOR + ((fit.totalsize + 3) & ~3) + i.offset;
   return { lba: byte / SECTOR, sectors: Math.ceil(i.size / SECTOR), byte };
 }
 
@@ -111,7 +113,7 @@ export interface FirmwareInfo {
 }
 
 /** The board both names agree on (or the one that is there); null when they disagree or name none of ours. */
-function boardOf(dt: string, stamp: string | null): BoardId | null {
+export function boardOf(dt: string, stamp: string | null): BoardId | null {
   const byDt = Object.entries(EDK2_BOARDS).find(([, b]) => b!.dt === dt)?.[0] as BoardId | undefined;
   const byStamp = stamp ? Object.entries(EDK2_BOARDS).find(([, b]) => b!.stamp === stamp)?.[0] as BoardId | undefined : undefined;
   if (byDt && byStamp && byDt !== byStamp) return null;

@@ -3,7 +3,11 @@
 // edk2-webflash's own prepare() so the sectors are exactly the ones
 // flash.gahingwoo.com writes. Added: "keep the partitions" is refused on an
 // eMMC whose partition table is not the edk2-rk3576 layout, where writing
-// only the firmware part would leave a board that does not start.
+// only the firmware part would leave a board that does not start. On an SPI
+// NOR board (ROCK 4D): the image must be this board's SPI image, the storage
+// the loader selected must be the SPI NOR flash (not a UFS module), and
+// "keep the settings" needs edk2-rk3576 firmware and a variable store (or an
+// empty one) already on the flash.
 
 import { checkSettingsSlot, prepare } from '../web/webflash/flash';
 import type { WebflashTarget } from '../web/webflash/boards';
@@ -11,6 +15,7 @@ import type { WoaBoard } from './boards';
 import { findFirmwarePartition, parsePrimaryGpt, type GptPartition } from './gpt';
 import { sliceSource, type ByteSource } from './pieces';
 import type { Region } from './stage-layout';
+import { checkSpiImage, readSpiBoard, spiKeepProblem, spiStorageProblem } from './spi-image';
 
 export interface FirmwareSummary {
   board: string;
@@ -21,6 +26,8 @@ export interface FirmwareSummary {
   /** Partitions the whole image drops from the table (the data on them stays where it was, unreachable). */
   dropped: Array<{ name: string; bytes: number }>;
   erases: string;
+  /** SPI NOR: the firmware the image holds, what was on the board, and whether the board's settings stay. */
+  spi?: { next: string | null; installed: string | null; settings: 'kept' | 'none' | 'reset' };
 }
 
 /** edk2-webflash's prepare() over a ByteSource: it only needs size and slice(). */
@@ -39,7 +46,7 @@ function blobLike(src: ByteSource): { size: number; slice(a: number, b: number):
 }
 
 export async function firmwareRegions(board: WoaBoard, target: WebflashTarget, image: ByteSource,
-  probe: { capacity: number | null; head: Uint8Array | null }): Promise<{ regions: Region[]; summary: FirmwareSummary } | { stop: string }> {
+  probe: { capacity: number | null; head: Uint8Array | null; read?: (lba: number, sectors: number) => Promise<Uint8Array | null> }): Promise<{ regions: Region[]; summary: FirmwareSummary } | { stop: string }> {
   let part: { size: number; src?: ByteSource };
   try {
     part = prepare(board.webflash, target, blobLike(image));
@@ -51,6 +58,25 @@ export async function firmwareRegions(board: WoaBoard, target: WebflashTarget, i
   }
   const src = part.src ?? image;
   let dropped: FirmwareSummary['dropped'] = [];
+  let spi: FirmwareSummary['spi'];
+  if (board.spi) {
+    const next = await checkSpiImage(image, board);
+    if (typeof next === 'string') return { stop: `${next} Nothing was written.` };
+    const where = spiStorageProblem(board, probe.capacity);
+    if (where) return { stop: where };
+    let installed: string | null = null;
+    let settings: NonNullable<FirmwareSummary['spi']>['settings'] = 'reset';
+    if (target.id === 'uefi-keep') {
+      if (!probe.read) return { stop: 'The SPI NOR flash cannot be read, so "keep the settings" cannot be checked. Nothing was written.' };
+      const state = await readSpiBoard(probe.read, board);
+      if (typeof state === 'string') return { stop: state };
+      const why = spiKeepProblem(state, board);
+      if (why) return { stop: why };
+      installed = typeof state.installed === 'string' ? null : state.installed.dt;
+      settings = state.settings === 'store' ? 'kept' : 'none';
+    }
+    spi = { next: next.version, installed, settings };
+  }
   if (board.firmwareStorage === 'emmc') {
     let existing: GptPartition[] | null = null;
     let fwOk = false;
@@ -75,6 +101,6 @@ export async function firmwareRegions(board: WoaBoard, target: WebflashTarget, i
   }
   return {
     regions: [{ lba: target.lba, source: src, label: target.label }],
-    summary: { board: board.name, target: target.label, lba: target.lba, bytes: src.size, capacity: probe.capacity, dropped, erases: target.erases },
+    summary: { board: board.name, target: target.label, lba: target.lba, bytes: src.size, capacity: probe.capacity, dropped, erases: target.erases, ...(spi ? { spi } : {}) },
   };
 }
