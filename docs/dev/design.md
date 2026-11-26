@@ -251,12 +251,22 @@ Chosen on the Windows setup page:
   and SHA-256 pinned in `src/woa/setup-files.ts`) is unpacked on the PC and
   copied into `\Program Files\OpenSSH` of the new Windows. On first start
   SetupComplete.cmd runs `install-sshd.ps1`, sets sshd automatic, opens TCP
-  22 on the Private and Domain profiles (not Public) and starts it. The
+  22 on every profile (rule "OpenSSH Server (sshd)", replaced if there; a
+  first Ethernet network comes up Public, and the earlier Private/Domain
+  rule blocked SSH on a ROCK 4D on 2026-11-26) and starts it. The
   shell is cmd.exe. A public key goes to
   `C:\ProgramData\ssh\administrators_authorized_keys`, inheritance removed,
   only SYSTEM and Administrators (by SID). `Add-WindowsCapability
   OpenSSH.Server` hung for over 20 minutes on the TaishanPi 3M and is not
   used.
+- **Desktop folder** (always). `src/woa/desktop-tools.ts`: SetupComplete.cmd
+  runs `woa-desktop-tools.ps1` as SYSTEM after the RK3576 tools and the
+  browser switch; it makes "RK3576 Tools" / "RK3576 工具" (by the system UI
+  language) on the Public Desktop with .lnk/.url files only, each only when
+  its target exists. The scripts stay in `\Windows\Setup\Scripts`:
+  `woa-diag.ps1` (read only), `woa-ssh-fix.ps1`, `woa-browser-gpu-switch.ps1`
+  (those three elevate through UAC). The drivers entry is a link to
+  woa-rk3576 docs/drivers.md: no driver installer is left on the board.
 - **RK3576 tools** (on when the release has them). `rk3576-tools-arm64*.zip`
   from the woa-rk3576 release (checked against SHA256SUMS.txt and GitHub's
   digest) is unpacked to `rk3576-tools\` on the staging volume; CONFIGURE

@@ -33,13 +33,15 @@ const psString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 /** The script. Saved with a UTF-8 BOM so Windows PowerShell 5.1 reads the Chinese text right. */
 export function selfTestScript(o: { appVersion: string }): string {
-  return `﻿# Written by Maskrom Studio (src/woa/selftest.ts). Runs once on the first desktop.
+  return `﻿# Written by Maskrom Studio (src/woa/selftest.ts). Runs once on the first desktop;
+# -Now (the desktop folder's shortcut) runs it again without the wait.
+param([switch]$Now)
 $ErrorActionPreference = 'Continue'
 $Board = (Get-CimInstance Win32_ComputerSystem).Model
 $AppVersion = ${psString(o.appVersion)}
 $zh = (Get-Culture).Name -like 'zh*'
 function T($en, $cn) { if ($zh) { $cn } else { $en } }
-Start-Sleep -Seconds 90
+if ($Now) { Write-Host (T 'RK3576 self-test: running, about a minute...' 'RK3576 自检：正在运行，大约一分钟...') } else { Start-Sleep -Seconds 90 }
 
 $problems = New-Object System.Collections.Generic.List[string]
 $notes = New-Object System.Collections.Generic.List[string]

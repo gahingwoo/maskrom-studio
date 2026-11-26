@@ -51,6 +51,14 @@ over on the first start.
   unprovisioned and notepad.exe opens them. The self-test shows its whole
   report in its message box. The trim lists are checked against a recorded
   inventory of that image: no framework, no app that stays.
+- An "RK3576 Tools" folder (Chinese name on a Chinese Windows) on the
+  Public Desktop, shortcuts only: self-test, RK3576 Monitor, drivers guide,
+  collect diagnostics, fix SSH, browser GPU switch, user guide.
+- SSH: port 22 is opened on every firewall profile. It was Private and
+  Domain only, so on a first network that came up as Public (a ROCK 4D,
+  2026-11-26) SSH was blocked. Installs from before this: "Fix SSH" in the
+  desktop folder of a new install, or
+  `Set-NetFirewallRule -DisplayName 'OpenSSH Server (sshd)' -Profile Any`.
 
 ## First version
 

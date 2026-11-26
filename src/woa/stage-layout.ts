@@ -32,6 +32,7 @@ import { certsCmd, trustedCerts } from './certs';
 import { AUTOLOGON_FILE, autoLogonScript, setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { anyTrim, CHROME_MSI, trimCmd } from './trim';
 import { SELFTEST_FILE, selfTestScript } from './selftest';
+import { desktopScripts } from './desktop-tools';
 import { BROWSER_GPU_FILE, browserGpuScript } from './browser-gpu';
 import { layoutIni, planLayout, WHOLE_DISK, type Layout, type LayoutChoice } from './windows-layout';
 import { ATTR_LEGACY_BOOTABLE, resizeLeavesTableAlone, SLOT_LBA, SLOT_SECTORS, TYPE_LINUX_ROOT_ARM64, type ArmbianParts } from './armbian-hybrid';
@@ -220,6 +221,7 @@ export function planStage(o: StageInput): StagePlan {
     ...(certs.length ? [{ name: 'woa-certs.cmd', source: bytesSource(crlf(certsCmd(certs))) }] : []),
     { name: 'SetupComplete.cmd', source: bytesSource(crlf(setupComplete(setup))) },
     { name: SELFTEST_FILE, source: bytesSource(crlf(selfTestScript({ appVersion: o.appVersion }))) },
+    ...desktopScripts().map((f) => ({ name: f.name, source: bytesSource(crlf(f.text)) })),
     ...(setup.browserGpu !== false ? [{ name: BROWSER_GPU_FILE, source: bytesSource(crlf(browserGpuScript())) }] : []),
     ...(setup.skipSetup ? [{ name: 'unattend.xml', source: bytesSource(crlf(unattendXml(setup.skipSetup))) }] : []),
     ...(setup.skipSetup?.autoLogonAlways ? [{ name: AUTOLOGON_FILE, source: bytesSource(crlf(autoLogonScript(setup.skipSetup))) }] : []),

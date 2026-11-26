@@ -42,7 +42,8 @@
 // the files inherit that folder's permissions (moving them from %TEMP% kept
 // Temp's ACL and broke sshd's privilege-separated child on this board), then
 // registered on the first start by SetupComplete.cmd with the release's
-// install-sshd.ps1. Add-WindowsCapability OpenSSH.Server hung for over 20
+// install-sshd.ps1, with TCP 22 open on every firewall profile (desktop-tools.ts
+// has the fix script for boards installed before that). Add-WindowsCapability OpenSSH.Server hung for over 20
 // minutes on a fresh install here and is not used. The default shell stays
 // sshd's default, cmd.exe.
 
@@ -50,6 +51,7 @@ import { selfTestRunOnce } from './selftest';
 import type { LayoutChoice } from './windows-layout';
 import { chromeFirstStart, type TrimOptions } from './trim';
 import { browserGpuFirstStart } from './browser-gpu';
+import { desktopToolsFirstStart, SSH_RULE } from './desktop-tools';
 
 export const OPENSSH = {
   version: '9.5.0.0p1-Beta',
@@ -315,15 +317,22 @@ export function setupComplete(o: SetupOptions): string {
   if (o.ssh) {
     l.push(
       'rem OpenSSH server: the release files are already in Program Files\\OpenSSH.',
+      'echo [ssh] registering sshd with install-sshd.ps1 >> "%LOG%"',
       'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ProgramFiles%\\OpenSSH\\install-sshd.ps1" >> "%LOG%" 2>&1',
       'sc.exe config sshd start= auto >> "%LOG%" 2>&1',
-      'netsh advfirewall firewall add rule name="OpenSSH Server (sshd)" dir=in action=allow protocol=TCP localport=22 profile=private,domain >> "%LOG%" 2>&1',
+      'rem Every profile: the first network is often Public (an Ethernet link nobody was',
+      'rem asked about is), and a Private/Domain rule left port 22 shut on a ROCK 4D (2026-11-26).',
+      'rem install-sshd.ps1 makes no rule; this is the only one. Delete first so a rerun does not add a second.',
+      `echo [ssh] firewall rule "${SSH_RULE}": TCP 22 inbound, every profile >> "%LOG%"`,
+      `netsh advfirewall firewall delete rule name="${SSH_RULE}" >nul 2>&1`,
+      `netsh advfirewall firewall add rule name="${SSH_RULE}" dir=in action=allow protocol=TCP localport=22 profile=any >> "%LOG%" 2>&1`,
       'if exist "%ProgramFiles%\\OpenSSH\\administrators_authorized_keys" (',
       '  mkdir "%ProgramData%\\ssh" 2>nul',
       '  move /y "%ProgramFiles%\\OpenSSH\\administrators_authorized_keys" "%ProgramData%\\ssh\\administrators_authorized_keys" >> "%LOG%" 2>&1',
       '  rem Only SYSTEM and Administrators, or sshd ignores the file.',
       '  icacls "%ProgramData%\\ssh\\administrators_authorized_keys" /inheritance:r /grant "*S-1-5-32-544:F" /grant "*S-1-5-18:F" >> "%LOG%" 2>&1',
       ')',
+      'echo [ssh] starting sshd >> "%LOG%"',
       'net start sshd >> "%LOG%" 2>&1',
       'sc.exe query sshd >> "%LOG%" 2>&1',
     );
@@ -343,6 +352,7 @@ export function setupComplete(o: SetupOptions): string {
   }
   if (o.browserGpu !== false) l.push(...browserGpuFirstStart());
   l.push(...selfTestRunOnce());
+  l.push(...desktopToolsFirstStart());
   if (o.skipSetup?.autoLogonAlways) {
     const ps = `%WINDIR%\\Setup\\Scripts\\${AUTOLOGON_FILE}`;
     l.push(
