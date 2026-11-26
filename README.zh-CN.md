@@ -16,18 +16,20 @@
 |---|---|---|---|
 | 立创泰山派 3M | eMMC | eMMC、SD 卡 | 短接 MSK 焊盘，或在固件中按 F4 |
 | ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe | 按键 |
-| Radxa ROCK 4D | SPI NOR | NVMe、SD 卡（Windows 暂时不能启动：没有 ACPI 表） | 按键 |
+| Radxa ROCK 4D | SPI NOR | NVMe、SD 卡（需要比 0.4.1 新的 edk2-rk3576：`ci` 预发布版） | 按键 |
 
 ## 现状
 
-所有功能都还没有在开发板上跑过；CI 用模拟开发板运行它们。还要上板检查的项目见 [docs/dev/testing.md](docs/dev/testing.md)（英文）。
+2026-11-26 上板测试通过：为 ROCK 4D 把 Windows 写到 NVMe 硬盘，全程（安装、桌面、驱动、以太网）。其余功能只在 CI 里用模拟开发板跑过。还要上板检查的项目见 [docs/dev/testing.md](docs/dev/testing.md)（英文）。
 
 | 功能 | 状态 |
 |---|---|
 | 通过 MaskROM 把 Windows 装到 eMMC（开发板从暂存的 WinPE 自行安装） | 仅 CI |
-| 把 Windows 写到电脑上的 SD 卡或 NVMe 硬盘 | 仅 CI |
+| 把 Windows 写到电脑上的 NVMe 硬盘 | 上板测试通过（ROCK 4D） |
+| 把 Windows 写到电脑上的 SD 卡 | 仅 CI |
 | 在 Windows 电脑上用 DISM 生成 Windows | 仅 CI |
 | 同一块 eMMC 上装 Windows 和 Armbian（泰山派 3M，高级模式） | 默认关闭 |
+| ROCK 4D：Windows 装到 NVMe，Armbian 写到 SD 卡（高级模式） | 仅 CI，需要未发布的固件 |
 | 精简 Windows（推荐组合） | 仅 CI |
 | Edge、Chrome 和 WebView2 使用 GPU（浏览器 GPU 开关） | 仅 CI |
 | Windows 第一次进桌面时的自检 | 仅 CI |

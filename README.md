@@ -21,19 +21,23 @@ has the whole path from a new board to Windows or Linux.
 |---|---|---|---|
 | LCKFB TaishanPi 3M | eMMC | eMMC, SD card | short the MSK pads, or F4 in the firmware |
 | ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe | button |
-| Radxa ROCK 4D | SPI NOR | NVMe, SD card (Windows does not start yet: no ACPI tables) | button |
+| Radxa ROCK 4D | SPI NOR | NVMe, SD card (needs edk2-rk3576 newer than 0.4.1: the `ci` pre-release) | button |
 
 ## Status
 
-No feature has run on a board yet; CI runs them against a pretend board.
-The list of board checks still to do is [docs/dev/testing.md](docs/dev/testing.md).
+Board-tested on 2026-11-26: Windows onto an NVMe drive for the ROCK 4D,
+end to end (install, desktop, drivers, Ethernet). Everything else has run
+only in CI, against a pretend board. Board checks still to do:
+[docs/dev/testing.md](docs/dev/testing.md).
 
 | Feature | Status |
 |---|---|
 | Windows onto the eMMC over MaskROM (the board installs it from a staged WinPE) | CI only |
-| Windows onto an SD card or NVMe drive in the PC | CI only |
+| Windows onto an NVMe drive in the PC | board-tested (ROCK 4D) |
+| Windows onto an SD card in the PC | CI only |
 | Windows built on a Windows PC with DISM | CI only |
 | Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode) | off by default |
+| ROCK 4D: Windows on NVMe and Armbian on an SD card (Advanced mode) | CI only, needs unreleased firmware |
 | Windows trimming, recommended set | CI only |
 | Edge, Chrome and WebView2 on the GPU (browser GPU switch) | CI only |
 | Self-test on Windows' first desktop | CI only |

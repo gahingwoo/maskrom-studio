@@ -128,9 +128,9 @@ booted Windows.
 - **NVMe, staged.** An NVMe drive in a USB enclosure; then in the CM5-IO.
   If the board boots something else, pick the NVMe in the boot manager.
   (The TaishanPi 3M has no M.2 slot: the app does not offer NVMe for it.)
-- **ROCK 4D, NVMe or SD card.** Only these two are offered (no eMMC). The
-  drive is prepared; Windows is not expected to start until the ROCK 4D's
-  ACPI tables are released.
+- **ROCK 4D, NVMe or SD card.** Only these two are offered (no eMMC).
+  Needs edk2-rk3576 with the ROCK 4D's ACPI (the `ci` pre-release; no
+  release yet). NVMe passed on 2026-11-26; SD has not run.
 - **ROCK 4D, SPI NOR firmware over MaskROM.** Never run on a board. Have
   `rkdeveloptool` and the release's `ROCK4D-spi-edk2-<ver>.img` ready to
   go back (`rkdeveloptool db rk3576_spl_loader.bin; rkdeveloptool wl 0

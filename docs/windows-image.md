@@ -9,6 +9,10 @@ does not run on RK3576. [UUP dump](https://uupdump.net) builds a 23H2 ARM64
 ISO on your own computer from the files Microsoft's update servers publish.
 You need a valid Windows licence for the result.
 
+The quicker way is a ready ISO from
+[NTriver](https://ntriver.org/download-windows-11), the source the app
+recommends to everyone. This page is the alternative: building it yourself.
+
 ## 1. Make the download package
 
 1. Open <https://uupdump.net/known.php?q=22631+arm64>.

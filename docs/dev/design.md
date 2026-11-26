@@ -172,8 +172,9 @@ On the CM5-IO an SD card in the slot caused WinPE freezes (fixed in
 firmware at ExitBootServices). Windows from SD has not run on any board.
 
 **NVMe.** stornvme is inbox; the firmware must boot NVMe and describe PCIe
-in ACPI (done and verified on the CM5-IO). The ROCK 4D's ACPI is not
-released; the app says so and still prepares the drive.
+in ACPI (done and verified on the CM5-IO and, since 2026-11-26, the ROCK
+4D, whose ACPI is on edk2-rk3576 main but in no release yet). The app
+still shows its "not started on this board yet" notice for the ROCK 4D.
 
 ## How the installed Windows comes out
 
@@ -555,7 +556,6 @@ is written MaskROM; "Maskrom" only in the product name and code identifiers.
 
 ## Not done
 
-- Windows on the ROCK 4D (the drive is prepared; ACPI not ready).
 - Building on the PC from Linux or macOS.
 - A USB stick holding the Windows image (the stick is WinPE only).
 - Downloading Windows from Microsoft (UUP): shelved.
