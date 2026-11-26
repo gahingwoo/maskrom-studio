@@ -58,6 +58,11 @@ over on the first start.
   Domain only, so on a first network that came up as Public (a ROCK 4D,
   2026-11-26) SSH was blocked. Installs from before this: see Known issues
   in docs/use.md.
+- What the chosen firmware supports, per board, from the release's
+  FEATURES.json (checked like the images; a built-in table for 0.4.x):
+  listed where the firmware is chosen, Windows refused with a pointer to
+  the CI builds when the board's image has no ACPI tables, and Armbian
+  next to Windows offered only when the image has "Armbian (U-Boot)".
 
 ## First version
 

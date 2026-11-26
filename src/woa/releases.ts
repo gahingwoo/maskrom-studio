@@ -8,6 +8,7 @@ import type { BoardId } from './boards';
 import { WOA_BOARDS } from './boards';
 import { pickRelease, type Channel } from '../shared/channel';
 import { DRIVERS_ASSET } from './driver-package';
+import { builtinFeatures, checkedFeatures, FEATURES_ASSET, type ReleaseFeatures } from './firmware-features';
 
 export const FIRMWARE_REPO = 'gahingwoo/edk2-rk3576';
 export const WINPE_REPO = 'gahingwoo/woa-rk3576';
@@ -48,6 +49,8 @@ export interface FirmwareRelease {
   images: Partial<Record<BoardId, ReleaseAsset>>;
   /** The SD card variant (<Board>-sdcard-edk2-<tag>.img), for the boards whose release has one. */
   sdcard: Partial<Record<BoardId, ReleaseAsset>>;
+  /** What each board's image supports: the release's FEATURES.json (loadFirmwareFeatures), else the built-in table. */
+  features: ReleaseFeatures;
   problems: string[];
 }
 
@@ -69,7 +72,27 @@ export function firmwareRelease(rel: GithubRelease, sums: Map<string, string>): 
     const a = asset(rel, sums, name);
     if (typeof a === 'string') problems.push(a); else sdcard[b.id] = a;
   }
-  return { tag: rel.tag_name, url: rel.html_url ?? null, images, sdcard, problems };
+  return { tag: rel.tag_name, url: rel.html_url ?? null, images, sdcard, features: builtinFeatures(rel.tag_name), problems };
+}
+
+/**
+ * Read the release's FEATURES.json into fw.features, checked like the images
+ * (SHA256SUMS.txt and GitHub's digest). Optional: a release without one keeps
+ * the built-in table; one that cannot be read or checked keeps it too and
+ * adds a problem.
+ */
+export async function loadFirmwareFeatures(fw: FirmwareRelease, rel: GithubRelease, sums: Map<string, string>, fetchFn: Fetch): Promise<FirmwareRelease> {
+  if (!rel.assets.some((a) => a.name === FEATURES_ASSET)) return fw;
+  const a = asset(rel, sums, FEATURES_ASSET);
+  if (typeof a === 'string') return { ...fw, problems: [...fw.problems, a] };
+  try {
+    const r = await fetchFn(a.url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const boards = checkedFeatures(new Uint8Array(await r.arrayBuffer()), a.sha256);
+    return { ...fw, features: { from: 'release', boards } };
+  } catch (e) {
+    return { ...fw, problems: [...fw.problems, `${rel.tag_name}: ${FEATURES_ASSET}: ${(e as Error).message}`] };
+  }
 }
 
 export interface WinpeRelease {
