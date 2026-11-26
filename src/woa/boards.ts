@@ -127,8 +127,9 @@ export const WOA_BOARDS: WoaBoard[] = [
     emmc: null,
     windowsTargets: ['nvme', 'sd'],
     sdBoot: 'spi-firmware',
-    // Its ACPI tables are not in a release yet.
-    windowsBooted: false,
+    // Windows 11 23H2 installed to NVMe by this app reached the desktop on 2026-11-26, with
+    // edk2-rk3576 main (ACPI for the ROCK 4D is not in a release yet: 0.4.1 has none).
+    windowsBooted: true,
     // The SPL and the firmware are on the SPI NOR flash and there is no eMMC: the one-shot request and
     // Armbian's U-Boot are on the SD card (docs/ARMBIAN-CHAINLOAD.md "SPI NOR boards"). Only firmware built
     // with the U-Boot v2026.10 SPL (edk2-rk3576 c81c13f, branch rock4d-parity) has it; the app checks.
