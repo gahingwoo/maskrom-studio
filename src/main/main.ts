@@ -39,6 +39,7 @@ import type { BoardId } from '../woa/boards';
 import { fileSource, planDiskStage, type BoardJob } from '../helper/board-write';
 import { hostBuildFiles } from '../woa/host-build';
 import { MIN_DISK_BYTES, targetRefusal } from '../woa/stage-layout';
+import { backupFileProblem } from '../woa/pre-write-backup';
 import { WOA_BOARDS, woaBoard } from '../woa/boards';
 import type { HostBuildRequest, HostBuildResult } from '../shared/ipc';
 
@@ -388,7 +389,8 @@ ipcMain.handle('backup:save-before-write', (_e, board: BoardId, files: Array<{ n
     if (!woaBoard(board)) return { error: 'Unknown board.' };
     if (!Array.isArray(files) || files.length === 0 || files.length > 4) return { error: 'Nothing to keep.' };
     for (const f of files) {
-      if (!/^[a-z0-9.-]{1,64}\.bin$/.test(f?.name ?? '') || !(f.data instanceof Uint8Array) || f.data.length > 1 << 20) return { error: 'Not a backup file.' };
+      const why = backupFileProblem(f);
+      if (why) return { error: why };
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const dir = join(nvdataDir(), `${board}-before-write-${stamp}`);

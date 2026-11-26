@@ -6,8 +6,9 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SECTOR } from '../src/woa/edk2-image';
-import { readPreWriteBackup } from '../src/woa/pre-write-backup';
-import { edk2Image as image, store } from './edk2-fixture';
+import { backupFileProblem, readPreWriteBackup, readSpiPreWriteBackup } from '../src/woa/pre-write-backup';
+import { woaBoard } from '../src/woa/boards';
+import { edk2Image as image, spiImage, store } from './edk2-fixture';
 
 const head = new Uint8Array(readFileSync(join(__dirname, 'fixtures', 'tspi3m-emmc-head.bin')));
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
@@ -58,5 +59,21 @@ describe('the copy taken before a write', () => {
   });
   it('gives nothing when nothing could be read', async () => {
     expect(await readPreWriteBackup('tspi3m', { capacity: null, head: null }, () => {})).toBeNull();
+  });
+});
+
+describe('what the main process saves of a backup', () => {
+  it('takes every file a ROCK 4D backup makes, the 16 MiB copy of its SPI NOR flash too', async () => {
+    const flash = spiImage({ settings: store() });
+    const b = await readSpiPreWriteBackup(woaBoard('rock4d')!, { capacity: flash.length, head: null, read: async (lba, n) => flash.slice(lba * SECTOR, (lba + n) * SECTOR) }, () => {});
+    expect(b!.files.map((f) => [f.name, f.data.length])).toEqual([['spi-nor-before.bin', 16 << 20], ['nvdata-spi-sector-32256-384.bin', 0x30000]]);
+    for (const f of b!.files) expect(backupFileProblem(f)).toBeNull();
+  });
+  it('refuses other names, other types and files larger than their kind', () => {
+    expect(backupFileProblem({ name: 'spi-nor-before.bin', data: new Uint8Array((16 << 20) + 1) })).toBe('Not a backup file.');
+    expect(backupFileProblem({ name: 'nvdata-sector-43648-384.bin', data: new Uint8Array((1 << 20) + 1) })).toBe('Not a backup file.');
+    expect(backupFileProblem({ name: '../x.bin', data: new Uint8Array(1) })).toBe('Not a backup file.');
+    expect(backupFileProblem({ name: 'x.bin', data: 'text' })).toBe('Not a backup file.');
+    expect(backupFileProblem({ name: 'gpt-sectors-0-33.bin', data: new Uint8Array(34 * 512) })).toBeNull();
   });
 });

@@ -27,6 +27,16 @@ export interface PreWriteBackup {
   settings: 'kept' | 'empty' | 'none';
 }
 
+/** The whole SPI NOR flash of a ROCK 4D (readSpiPreWriteBackup); every other file kept is under 1 MiB. */
+const MAX_BACKUP_FILE = (name: string) => (name === 'spi-nor-before.bin' ? 16 << 20 : 1 << 20);
+
+/** Why the main process must not save this file of a backup (name, type, size), or null. */
+export function backupFileProblem(f: { name?: unknown; data?: unknown } | null | undefined): string | null {
+  const name = typeof f?.name === 'string' ? f.name : '';
+  if (!/^[a-z0-9.-]{1,64}\.bin$/.test(name) || !(f?.data instanceof Uint8Array) || f.data.length > MAX_BACKUP_FILE(name)) return 'Not a backup file.';
+  return null;
+}
+
 async function sha256Hex(b: Uint8Array): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', b as unknown as ArrayBuffer);
   return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, '0')).join('');
