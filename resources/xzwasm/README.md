@@ -3,7 +3,7 @@
 The WebAssembly XZ decoder from the npm package `xzwasm` 0.1.2
 (https://github.com/SteveSanderson/xzwasm), taken from the base64 data URL in
 `dist/package/xzwasm.js` and stored here as a plain file. Only the wasm is
-used; `src/xz.js` is the JavaScript side.
+used; `src/web/webflash/xz.js` is the JavaScript side.
 
 - xzwasm: (c) Steve Sanderson, MIT License.
 - xz-embedded (the decoder inside): Lasse Collin and Igor Pavlov, public domain.

@@ -173,7 +173,7 @@ sources it as bash. Variables: `PRESET_NET_CHANGE_DEFAULTS`,
 `PRESET_TIMEZONE`, `PRESET_ROOT_PASSWORD`, `PRESET_ROOT_KEY`,
 `PRESET_USER_NAME`, `PRESET_USER_PASSWORD`, `PRESET_USER_KEY`,
 `PRESET_DEFAULT_REALNAME`, `PRESET_USER_SHELL`, `PRESET_CONFIGURATION`
-(Armbian's `docs/user-guide/autoconfig.md`). Passwords there are plaintext;
+(Armbian's user-guide page on autoconfig). Passwords there are plaintext;
 there is no host name, keyboard or SSH variable; `/root/provisioning.sh`
 does not run on desktop images. The marker is removed only after success.
 
@@ -201,7 +201,7 @@ UUID in `/etc/fstab` and `rootdev=` in `/boot/armbianEnv.txt`.
 
 The rk35xx images have no FAT boot partition (one ext4 `rootfs` from sector
 32768, U-Boot at 64), so this needs an ext4 writer. Chosen: a small
-TypeScript `src/woa/ext4.ts` (fallback: Armbian Imager's Rust
+TypeScript ext4 writer in `src/woa/`, not written yet (fallback: Armbian Imager's Rust
 `armbian-write-conf` in WASM). Scope: read superblock, 64-bit descriptors,
 extents, linear and htree directories; write only file contents and modes,
 new files up to 64 KiB in existing linear directories, and the UUID (the

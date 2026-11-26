@@ -1,0 +1,24 @@
+name: docs
+
+# scripts/check-docs: relative links, repository paths in backticks, em and
+# en dashes.  scripts/gen-docs --check: the board and firmware tables made
+# from src/woa/boards.ts.  Python only, no npm install.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: Docs drift
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Links, paths and dashes
+        run: python3 scripts/check-docs
+      - name: Generated sections (run scripts/gen-docs to update)
+        run: python3 scripts/gen-docs --check
