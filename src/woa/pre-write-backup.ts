@@ -13,6 +13,8 @@
 
 import { readFirmware, isEmptySlot, isVariableStore, SECTOR } from './edk2-image';
 import { TRUSTED_READ_BYTES, type Probe } from './maskrom-regions';
+import { SPI_SETTINGS_BYTES } from './spi-image';
+import type { WoaBoard } from './boards';
 
 export interface BackupFile { name: string; data: Uint8Array }
 
@@ -65,4 +67,39 @@ export async function readPreWriteBackup(boardId: string, probe: Probe, log: (li
   }
   if (files.length === 0) return null;
   return { files, notes, table, settings };
+}
+
+/**
+ * The same copy on an SPI NOR board (ROCK 4D): the whole flash as it was
+ * (16 MiB, all of it below 32 MiB, so it reads back reliably), which is
+ * also the way back, and the UEFI settings blocks on their own when they
+ * hold a variable store. Read only after the storage was confirmed to be
+ * the SPI NOR flash (spiStorageProblem).
+ */
+export async function readSpiPreWriteBackup(board: WoaBoard, probe: Probe, log: (line: string) => void, now = new Date()): Promise<PreWriteBackup | null> {
+  const spi = board.spi;
+  const read = probe.read;
+  if (!spi || !read) return null;
+  const CHUNK = 2048; // sectors, 1 MiB
+  const total = spi.bytes / SECTOR;
+  const whole = new Uint8Array(spi.bytes);
+  for (let lba = 0; lba < total; lba += CHUNK) {
+    const got = await read(lba, Math.min(CHUNK, total - lba));
+    if (!got) { log(`The SPI NOR flash could not be read for the backup (sector ${lba}).`); return null; }
+    whole.set(got, lba * SECTOR);
+  }
+  const notes = [`Maskrom Studio: what the SPI NOR flash held before a write over MaskROM.`, `board: ${board.id}`, `taken: ${now.toISOString()}`];
+  const name = 'spi-nor-before.bin';
+  notes.push(`${name}: the whole SPI NOR flash, sectors 0..${total - 1}, sha256 ${await sha256Hex(whole)}. To go back, write it from sector 0 (rkdeveloptool wl 0 ${name}).`);
+  const files: BackupFile[] = [{ name, data: whole }];
+  const nv = whole.subarray(spi.nvdataLba * SECTOR, spi.nvdataLba * SECTOR + SPI_SETTINGS_BYTES);
+  let settings: PreWriteBackup['settings'] = 'none';
+  if (isVariableStore(nv)) {
+    const nvName = `nvdata-spi-sector-${spi.nvdataLba}-${SPI_SETTINGS_BYTES / SECTOR}.bin`;
+    files.push({ name: nvName, data: nv.slice() });
+    notes.push(`${nvName}: the UEFI settings (store, FTW working, FTW spare), sha256 ${await sha256Hex(nv)}`);
+    settings = 'kept';
+  } else if (isEmptySlot(nv)) settings = 'empty';
+  else log(`The SPI NOR flash holds no UEFI variable store at sector ${spi.nvdataLba}.`);
+  return { files, notes, table: false, settings };
 }

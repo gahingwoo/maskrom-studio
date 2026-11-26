@@ -127,6 +127,17 @@ booted Windows.
 - **ROCK 4D, NVMe or SD card.** Only these two are offered (no eMMC). The
   drive is prepared; Windows is not expected to start until the ROCK 4D's
   ACPI tables are released.
+- **ROCK 4D, SPI NOR firmware over MaskROM.** Never run on a board. Have
+  `rkdeveloptool` and the release's `ROCK4D-spi-edk2-<ver>.img` ready to
+  go back (`rkdeveloptool db rk3576_spl_loader.bin; rkdeveloptool wl 0
+  <img>`). Check, in the log: `cs 9` answers and "Selected storage:
+  16777216 bytes" (also with a UFS module fitted, if there is one); the
+  copy `spi-nor-before.bin` (16 MiB) and `nvdata-spi-sector-32256-384.bin`
+  land in the backup folder; the read-back passes. "Keep the settings":
+  change a setting (boot order) first, then confirm it survives and the
+  board boots. "UEFI firmware": the settings are reset and the board boots.
+  Also the refusals: a flash with Radxa's U-Boot (keep refused), and a
+  board on the wrong storage.
 - **Windows PC, built here (needs administrator rights).** The same two
   targets with "Finished here": the console of host-build.cmd shows in the
   app; the log stays in the app's data folder (host-build\host-build.log)

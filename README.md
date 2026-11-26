@@ -40,6 +40,7 @@ The list of board checks still to do is [docs/dev/testing.md](docs/dev/testing.m
 | Automatic sign-in on every start | off by default |
 | UEFI firmware: whole image, keep the partitions | CI only |
 | UEFI firmware upgrade keeping Windows and the settings | CI only |
+| ROCK 4D: UEFI firmware to the SPI NOR, whole or keeping the settings | CI only |
 | Armbian onto the eMMC, an SD card or a USB drive | CI only |
 | Factory `update.img` (Advanced mode) | CI only |
 | Writing the board from Linux running on it | CI only |

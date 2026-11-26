@@ -884,7 +884,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       const path = await firmwareFile(wc, req.boardId, signal);
       bj = req.kind === 'firmware'
         ? { kind: 'firmware', device: req.device, boardId: req.boardId, targetId: req.targetId, image: path }
-        : { kind: 'spinor', device: req.device, boardId: req.boardId, image: path };
+        : { kind: 'spinor', device: req.device, boardId: req.boardId, image: path, ...(req.targetId ? { targetId: req.targetId } : {}) };
       total = firmware!.images[req.boardId]!.size;
     }
   } catch (err) {

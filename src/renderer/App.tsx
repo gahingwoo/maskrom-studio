@@ -55,7 +55,8 @@ interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; 
 interface WholeSummary { kind: 'whole'; label: string; capacity: number | null; bytes: number; clearsBackupGpt: boolean }
 interface FactorySummary { kind: 'factory'; capacity: number | null; chip: string; model: string; version: string; partitions: Array<{ name: string; lba: number; bytes: number }>; skipped: string[]; bytes: number }
 interface UpgradeSummary { kind: 'upgrade'; manufacturer: string | null; capacity: number | null; installed: string | null; next: string | null; settings: 'kept' | 'reset' | 'none'; backup: string | null; nvdataLba: number; nvdataSectors: number; lba: number; bytes: number }
-interface FirmwareSummary { kind: 'firmware'; board: string; target: string; lba: number; bytes: number; capacity: number | null; dropped: Array<{ name: string; bytes: number }>; erases: string }
+interface FirmwareSummary { kind: 'firmware'; board: string; target: string; lba: number; bytes: number; capacity: number | null; dropped: Array<{ name: string; bytes: number }>; erases: string;
+  spi?: { next: string | null; installed: string | null; settings: 'kept' | 'none' | 'reset' } }
 
 const EMPTY_ACCOUNT: Account = { user: '', password: '', computerName: '', locale: '', keyboard: '', timeZone: '', autoLogonAlways: false };
 
@@ -214,7 +215,7 @@ export function App() {
 
   // Text from edk2-webflash's board list: its English, or this page's Chinese for the same thing.
   const fwText = (b: WoaBoard, tg: WebflashTarget, field: 'label' | 'note' | 'erases' | 'done'): string => {
-    if (field === 'label') return t(b.id === 'rock4d' && tg.id === 'uefi' ? 'fw.rock4d.uefi.label' : `fw.${tg.id}.label`);
+    if (field === 'label') { const k = `fw.${b.id}.${tg.id}.label`; const own = t(k); return own && own !== k ? own : t(`fw.${tg.id}.label`); }
     const original = (tg[field] as string | undefined) ?? '';
     return lang === 'en' ? original : (t(`fw.${b.id}.${tg.id}.${field}`) || original);
   };
@@ -400,7 +401,7 @@ export function App() {
         });
       } else if (m.type === 'pre-backup') {
         api.saveBeforeWrite(m.boardId as BoardId, m.files, m.notes).then((r) => {
-          if ('path' in r) { const path = r.path; update((x) => ({ ...x, backup: path })); addLog(t('backup.where', { path })); }
+          if ('path' in r) { const path = r.path; update((x) => ({ ...x, backup: path })); addLog(t(board?.spi ? 'backup.where.spinor' : 'backup.where', { path })); }
           w.postMessage({ type: 'woa-backup-saved', path: 'path' in r ? r.path : null, ...('error' in r ? { error: r.error } : {}) } satisfies WoaWorkerRequest);
         });
       } else if (m.type === 'planned') {
@@ -503,7 +504,7 @@ export function App() {
       const device = board.firmwareStorage === 'spinor' && task !== 'windows' ? here!.mtd[0]?.device : here!.emmc?.device;
       const r = await withProgress('write', () => api.writeBoard(
         task === 'windows' ? { kind: 'stage', boardId: board.id, device: device!, windowsToken: windows!.token, index: index!, setup, drivers: drivers?.token ?? null }
-          : board.firmwareStorage === 'spinor' ? { kind: 'spinor', boardId: board.id, device: device! }
+          : board.firmwareStorage === 'spinor' ? { kind: 'spinor', boardId: board.id, device: device!, targetId: task }
             : { kind: 'firmware', boardId: board.id, device: device!, targetId: task },
       ));
       finish(resultOf(r, task === 'windows' ? t('result.stagedHere') : t('result.firmwareHere'),
@@ -596,7 +597,7 @@ export function App() {
                 setBoardId(b.id);
                 if (b.id !== here?.boardId) setVia('maskrom');
                 if (!b.windowsTargets.includes(dest)) setDest(b.windowsTargets[0]);
-                if (task === 'uefi-keep' && b.firmwareStorage !== 'emmc') setTask(null);
+                if ((task === 'uefi' || task === 'uefi-keep') && !firmwareTargets(b).some((x) => x.id === task)) setTask(null);
                 if (task === 'uefi-sd' && !releases?.firmware?.sdcard?.[b.id]) setTask(null);
                 if ((task === 'armbian' || task === 'factory') && !ARMBIAN_RESTORE[b.id]) setTask(null);
                 setFactory(null);
@@ -1208,7 +1209,7 @@ export function App() {
         [t('review.firmware'), fwRelease ? `edk2-rk3576 ${releases!.firmware!.tier.label}, ${fwRelease.file}${tierWord(releases!.firmware!.tier)}` : t('review.unavailable')],
         [t('review.written'), tg.slice ? t('review.fw.slice', { a: tg.slice[0], b: tg.slice[1], lba: tg.lba }) : t('review.fw.whole', { lba: tg.lba })],
         [t('review.erased'), fwText(board, tg, 'erases')],
-        [t('review.checked'), onBoard ? t('review.checked.fw.here') : t('review.checked.fw.maskrom')],
+        [t('review.checked'), onBoard ? t('review.checked.fw.here') : board.spi ? t('review.checked.fw.spi') : t('review.checked.fw.maskrom')],
         [t('review.then'), fwText(board, tg, 'done')],
       ]);
       if (!fwRelease) why = t('why.firmware');
@@ -1533,7 +1534,11 @@ export function App() {
   ) : (
     <Review rows={[
       [t('confirm.write'), t('confirm.write.value', { target: c.target, size: formatBytes(c.bytes), lba: c.lba })],
-      [t('confirm.storage'), c.capacity ? GB(c.capacity) : t('confirm.storage.unknown')],
+      [t('confirm.storage'), c.capacity ? (c.spi ? `${t('storage.spinor')}, ${formatBytes(c.capacity)}` : GB(c.capacity)) : t('confirm.storage.unknown')],
+      ...(c.spi ? [
+        [t('confirm.spi.next'), c.spi.next ?? t('confirm.spi.unknown')] as [string, string],
+        [t('confirm.spi.settings'), t(`confirm.spi.settings.${c.spi.settings}`)] as [string, string],
+      ] : []),
       ...(c.dropped.length ? [[t('confirm.dropped'), c.dropped.map((p) => `${p.name} (${GB(p.bytes)})`).join(', ')] as [string, string]] : []),
     ]} />
   ));
@@ -1561,7 +1566,7 @@ export function App() {
                 <CardBody>
                   <Stack hasGutter>
                     {confirmText}
-                    {run.backup && <Content component="p" className="muted">{t('backup.where', { path: run.backup })}</Content>}
+                    {run.backup && <Content component="p" className="muted">{t(board?.spi ? 'backup.where.spinor' : 'backup.where', { path: run.backup })}</Content>}
                     <ActionList>
                       <ActionListGroup>
                         <ActionListItem><Button variant={c?.kind === 'upgrade' ? 'primary' : 'danger'} onClick={() => answer(true)}>{t(c?.kind === 'upgrade' ? 'go.upgrade' : 'go.erase')}</Button></ActionListItem>
@@ -1577,7 +1582,7 @@ export function App() {
               <Alert isInline variant={run.result.ok ? 'success' : 'danger'} title={run.result.title}>
                 {run.result.text && <p>{run.result.text}</p>}
                 {run.result.detail && <p className="detail">{run.result.detail}</p>}
-                {run.backup && <p>{t('backup.where', { path: run.backup })}</p>}
+                {run.backup && <p>{t(board?.spi ? 'backup.where.spinor' : 'backup.where', { path: run.backup })}</p>}
               </Alert>
             )}
             {run.result?.ok && run.result.next && (

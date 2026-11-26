@@ -34,6 +34,7 @@
 | 每次开机自动登录 | 默认关闭 |
 | UEFI 固件：完整映像、保留分区 | 仅 CI |
 | 保留 Windows 和设置的固件升级 | 仅 CI |
+| ROCK 4D：把 UEFI 固件写到 SPI NOR，整个写入或保留设置 | 仅 CI |
 | Armbian 写到 eMMC、SD 卡或 U 盘 | 仅 CI |
 | 出厂 `update.img`（高级模式） | 仅 CI |
 | 在开发板上的 Linux 里直接写入本机 | 仅 CI |

@@ -24,7 +24,9 @@ import { planFactoryRegions, planWhole } from './restore-plan';
 import { readUpdateImage } from './rkfw';
 import { TRUSTED_READ_BYTES } from './maskrom-regions';
 import { planUpgrade } from './upgrade-plan';
-import { readPreWriteBackup } from './pre-write-backup';
+import { readPreWriteBackup, readSpiPreWriteBackup } from './pre-write-backup';
+import { spiStorageProblem } from './spi-image';
+import { STORAGES } from '../maskrom/boards';
 import type { Probe } from './maskrom-regions';
 
 export interface FileRef { url: string; size: number }
@@ -108,8 +110,15 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
     // eMMC's partition table or its firmware: keep both on the computer first.
     type Planned = { regions: import('./stage-layout').Region[]; summary: unknown } | { stop: string };
     const keepFirst = (plan: (p: Probe) => Promise<Planned>) => async (p: Probe): Promise<Planned> => {
-      if (board.firmwareStorage !== 'emmc') return plan(p);
-      const b = await readPreWriteBackup(job.boardId, p, hooks.log);
+      let b;
+      if (board.spi) {
+        // Only the SPI NOR flash is read and kept: never a UFS module the loader may have chosen.
+        const where = spiStorageProblem(board, p.capacity);
+        if (where) return { stop: where };
+        b = await readSpiPreWriteBackup(board, p, hooks.log);
+        if (!b) return { stop: 'The SPI NOR flash could not be read for the copy kept before writing. Nothing was written.' };
+      } else if (board.firmwareStorage !== 'emmc') return plan(p);
+      else b = await readPreWriteBackup(job.boardId, p, hooks.log);
       if (b) {
         const s = await new Promise<{ path: string | null; error?: string }>((resolve) => {
           saved = resolve;
@@ -225,6 +234,8 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
       const image = xhrSource(job.image.url, job.image.size);
       result = await writeRegions(runner, {
         loader, readHead: board.firmwareStorage === 'emmc', spotCheck: job.spotCheck, resetAfter: job.resetAfter,
+        // The SPI NOR is selected explicitly, and everything written there (16 MiB) is read back and compared.
+        ...(board.spi ? { storage: { code: STORAGES.spinor.code, label: STORAGES.spinor.label }, checkHeadBytes: board.spi.bytes } : {}),
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
         plan: keepFirst(async (p) => {
           const r = await firmwareRegions(board, target, image, p);

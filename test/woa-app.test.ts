@@ -21,7 +21,7 @@ describe('boards (edk2-webflash data)', () => {
       ['uefi', 0, null], ['uefi-keep', 64, [64 * 512, 43648 * 512]],
     ]);
     expect(firmwareTargets(woaBoard('cm5io')!).find((x) => x.id === 'uefi-keep')!.lba).toBe(64);
-    expect(firmwareTargets(woaBoard('rock4d')!).map((x) => x.id)).toEqual(['uefi']);
+    expect(firmwareTargets(woaBoard('rock4d')!).map((x) => x.id)).toEqual(['uefi', 'uefi-keep']);
     expect(WOA_BOARDS.filter((b) => b.emmc).map((b) => b.id)).toEqual(['tspi3m', 'cm5io']);
   });
 

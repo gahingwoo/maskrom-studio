@@ -26,6 +26,13 @@ export interface WoaBoard {
   webflash: WebflashBoard;
   /** Where the firmware goes: the eMMC, or the SPI NOR flash. */
   firmwareStorage: 'emmc' | 'spinor';
+  /**
+   * The SPI NOR layout edk2-rk3576 builds (docs/dev/image-layout.md), on a board
+   * whose firmware is there: the flash size, the FIT's sector and the first
+   * sector of the UEFI settings (variable store, FTW working and spare blocks),
+   * which run to the end of the flash. Writing sectors 0..nvdataLba-1 keeps them.
+   */
+  spi?: { bytes: number; fitLba: number; nvdataLba: number };
   /** The asset name prefix of the firmware in an edk2-rk3576 release ("TaishanPi3M-emmc-edk2-"). */
   firmwareAsset: string;
   /** The board's eMMC: the size seen on the boards tried, and the sizes accepted. Null: the board has no eMMC. */
@@ -65,7 +72,9 @@ const GB = 1e9;
 //     No MaskROM button: the MSK pads, or F4 in the firmware.
 //   CM5-IO: eMMC on the CM5 module, microSD, NVMe on M.2. The BootROM tries the eMMC before the SD card.
 //     MaskROM button.
-//   ROCK 4D: no eMMC (UFS), microSD, NVMe on M.2. Firmware on the 16 MB SPI NOR flash. MaskROM button.
+//   ROCK 4D: no eMMC (a UFS module connector; Radxa: "eMMC modules are not supported"), microSD, NVMe on
+//     M.2 through the PCIe FPC connector. Firmware on the 16 MB SPI NOR flash. MaskROM button, with a USB-A to
+//     USB-A cable on the upper USB 3.0 port (the USB-C port carries power only).
 export const WOA_BOARDS: WoaBoard[] = [
   {
     id: 'tspi3m', name: 'LCKFB TaishanPi 3M', webflash: wf('tspi3m'), firmwareStorage: 'emmc',
@@ -101,6 +110,9 @@ export const WOA_BOARDS: WoaBoard[] = [
   },
   {
     id: 'rock4d', name: 'Radxa ROCK 4D', webflash: wf('rock4d'), firmwareStorage: 'spinor',
+    // edk2-rk3576 docs/dev/image-layout.md and the board-session flash-keep-nv.sh: GPT at 0, SPL at sector 64,
+    // FIT at sector 768, the UEFI settings from 0xFC0000 (sector 32256) to the end.
+    spi: { bytes: 16 * 1024 * 1024, fitLba: 768, nvdataLba: 32256 },
     firmwareAsset: 'ROCK4D-spi-edk2-',
     emmc: null,
     windowsTargets: ['nvme', 'sd'],
@@ -119,9 +131,30 @@ export function woaBoard(id: string): WoaBoard | undefined {
   return WOA_BOARDS.find((b) => b.id === id);
 }
 
+/**
+ * On an SPI NOR board, the firmware without the saved UEFI settings: the same
+ * image file as "UEFI firmware", sectors 0..nvdataLba-1 of it, written from
+ * sector 0. edk2-webflash has no such choice (it rewrites the whole flash);
+ * the sectors are those of flash-keep-nv.sh "rock4d" used on the board.
+ */
+function spiKeepTarget(b: WoaBoard): WebflashTarget | null {
+  const whole = b.webflash.targets.find((t) => t.id === 'uefi');
+  if (!b.spi || !whole) return null;
+  const end = b.spi.nvdataLba * 512;
+  return {
+    id: 'uefi-keep', label: 'UEFI firmware, keep the settings', image: whole.image, file: whole.file, lba: 0, slice: [0, end],
+    note: 'For a board that already runs this firmware. Only the firmware is written; the saved UEFI settings stay.',
+    erases: `Sectors 0 to ${b.spi.nvdataLba - 1} of the SPI NOR flash (partition table, SPL and firmware) are rewritten. `
+      + `The saved UEFI settings, from sector ${b.spi.nvdataLba} (0x${end.toString(16).toUpperCase()}) to the end, are not written. Disks are not touched.`,
+    done: 'The board restarts into the new firmware, with its settings.',
+  };
+}
+
 /** The firmware choices of a board, from edk2-webflash, without U-Boot (Windows needs UEFI). */
 export function firmwareTargets(b: WoaBoard): WebflashTarget[] {
-  return b.webflash.targets.filter((t) => t.id === 'uefi' || t.id === 'uefi-keep');
+  const out = b.webflash.targets.filter((t) => t.id === 'uefi' || t.id === 'uefi-keep');
+  const keep = out.some((t) => t.id === 'uefi-keep') ? null : spiKeepTarget(b);
+  return keep ? [...out, keep] : out;
 }
 
 /** The board a device tree compatible list or an SMBIOS product name names, if any. */

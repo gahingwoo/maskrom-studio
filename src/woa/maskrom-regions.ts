@@ -3,10 +3,11 @@
 //
 // The commands are edk2-webflash's (src/web/webflash/flash.js), the sequence
 // that has written edk2-rk3576 0.4.0 and 0.4.1 to these boards: db with
-// rk3576_spl_loader.bin, then wl, then rd, and no cs, because that loader
-// already selects the eMMC on the TaishanPi 3M and CM5-IO and the SPI NOR on
-// the ROCK 4D. Added around it, as in Roxora Imager's maskrom/sequence.ts:
-// the board is followed through its re-enumeration without a second click
+// rk3576_spl_loader.bin, then wl, then rd, and no cs on the eMMC boards,
+// because that loader already selects the eMMC on the TaishanPi 3M and
+// CM5-IO. On the ROCK 4D it selects the SPI NOR too, but a UFS module could
+// change that, so its jobs ask for the SPI NOR (cs 9) and check its size.
+// Added around it, as in Roxora Imager's maskrom/sequence.ts: the board is followed through its re-enumeration without a second click
 // (Electron grants Rockchip devices), and rfi asks for the storage size.
 // Added here: rl of sectors 0..33 to read the partition table, several wl
 // at their own sectors, and spot checks of what was written (rl has been
@@ -52,6 +53,14 @@ export interface RegionJob {
   loader: Uint8Array;
   /** Read sectors 0..33 before planning (the partition table). */
   readHead: boolean;
+  /**
+   * Select this storage (rkdeveloptool "cs", code 9 = SPI NOR) once the loader
+   * runs, and ask its size again, before anything is read or planned. Without
+   * it the loader's own choice is used (the eMMC on the eMMC boards). A loader
+   * that refuses the switch is logged; plan() then judges the storage by the
+   * size the loader reports.
+   */
+  storage?: { code: number; label: string };
   /** Turn what was found into the regions to write, or a sentence saying why not. */
   plan(p: Probe): Promise<{ regions: Region[]; summary: unknown } | { stop: string }>;
   /** Ask the user, showing the summary; false stops before anything is written. */
@@ -184,6 +193,14 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
     }
 
     hooks.stage('probe');
+    if (job.storage) {
+      const { code, label } = job.storage;
+      hooks.log(`$ rkdeveloptool cs ${code}`);
+      const cs = await r.run(['cs', String(code)]);
+      if (cs.code !== 0) hooks.log(`The loader did not switch to the ${label} (rkdeveloptool exit ${cs.code}); the storage it reports is checked before anything is written.`);
+      capacity = await rfi();
+      hooks.log(capacity === null ? 'The loader did not report the size of the selected storage (rfi).' : `Selected storage: ${capacity} bytes.`);
+    }
     let head: Uint8Array | null = null;
     if (job.readHead) {
       hooks.log('$ rkdeveloptool rl 0 34');
@@ -292,7 +309,7 @@ export async function writeRegions(r: Runner, job: RegionJob, hooks: RegionHooks
     return { ok: true, capacity, written, checks, summary };
   } catch (e) {
     if (e instanceof Stop) {
-      const partly = written > 0 ? ' The eMMC is only partly written: run the same write again.' : '';
+      const partly = written > 0 ? ` The ${job.storage?.label ?? 'eMMC'} is only partly written: run the same write again.` : '';
       // A command that failed because the board went away (cable pulled, board reset) says so.
       if (e.message !== 'Cancelled.' && !hooks.cancelled()) {
         let gone = false;

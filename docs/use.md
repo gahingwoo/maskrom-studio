@@ -185,6 +185,14 @@ itself.
   settings on the PC, writes the new firmware with the settings put back,
   never touches the partition table, and reads back everything written.
   "Reset the settings" writes the image as it is.
+- **Radxa ROCK 4D** (firmware on the 16 MiB SPI NOR; Advanced mode only):
+  "UEFI firmware" rewrites the whole flash and resets the settings. "UEFI
+  firmware, keep the settings" writes sectors 0 to 32255 and leaves the
+  settings (from 0xFC0000 to the end) alone; it refuses a flash that does
+  not already hold edk2-rk3576 firmware. Both select the SPI NOR
+  explicitly and stop if the loader reports any other storage (a UFS
+  module), copy the whole flash to the PC first, and read back everything
+  written. Disks are never touched.
 
 Simple mode always writes the Stable release; Advanced mode follows the
 tier in Settings.

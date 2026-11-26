@@ -8,6 +8,9 @@ import { syntheticLoader } from './synthetic-loader';
 import { createRunner } from '../src/maskrom/runner';
 import { writeRegions, type RegionHooks, type RegionJob } from '../src/woa/maskrom-regions';
 import { bytesSource } from '../src/woa/pieces';
+import { firmwareTargets, woaBoard } from '../src/woa/boards';
+import { firmwareRegions } from '../src/woa/firmware-plan';
+import { spiImage, store } from './edk2-fixture';
 
 const WASM_DIR = new URL('../vendor/rkdeveloptool-wasm/', import.meta.url);
 const haveWasm = existsSync(new URL('rkdeveloptool.wasm', WASM_DIR));
@@ -89,5 +92,40 @@ describe.skipIf(!haveWasm)('regions over MaskROM', () => {
       confirm: async () => true,
     }, hooks([]));
     expect(res).toMatchObject({ ok: false, reason: expect.stringMatching(/does not fit/) });
+  });
+
+  // The ROCK 4D: the SPI NOR (cs 9) is chosen even when the loader starts on
+  // another storage (a UFS module), and "keep the settings" leaves them alone.
+  const rock4d = woaBoard('rock4d')!;
+  const spiJob = (targetId: string, image: Uint8Array): RegionJob => ({
+    loader, readHead: false, spotCheck: false, resetAfter: false, reconnectTimeout: 5000,
+    storage: { code: 9, label: 'SPI NOR flash' }, checkHeadBytes: 16 * MiB,
+    plan: (p) => firmwareRegions(rock4d, firmwareTargets(rock4d).find((t) => t.id === targetId)!, bytesSource(image), p),
+    confirm: async () => true,
+  });
+
+  it('selects the SPI NOR and keeps the UEFI settings there', async () => {
+    const board = new FakeBoard({ storages: { 1: 128 * MiB, 9: 16 * MiB }, defaultStorage: 1 });
+    const old = spiImage({ version: '0.4.1', settings: store() });
+    board.storages.get(9)!.write(0, old);
+    board.storages.get(1)!.write(0, fill(MiB, 0x77));
+    const runner = await setup(board);
+    const next = spiImage({ version: '0.4.2' });
+    const res = await writeRegions(runner, spiJob('uefi-keep', next), hooks([]));
+    expect(res).toMatchObject({ ok: true, written: 32256 * 512 });
+    const spi = board.storages.get(9)!.read(0, 16 * MiB);
+    expect(Buffer.compare(Buffer.from(spi.subarray(0, 32256 * 512)), Buffer.from(next.subarray(0, 32256 * 512)))).toBe(0);
+    expect(Buffer.compare(Buffer.from(spi.subarray(32256 * 512)), Buffer.from(old.subarray(32256 * 512)))).toBe(0);
+    // The other storage was never written.
+    expect(board.storages.get(1)!.read(0, MiB).every((b) => b === 0x77)).toBe(true);
+    expect(board.storages.get(1)!.read(MiB, MiB).every((b) => b === 0)).toBe(true);
+  });
+
+  it('writes nothing when the loader cannot select a 16 MiB SPI NOR', async () => {
+    const board = new FakeBoard({ storages: { 1: 128 * MiB }, defaultStorage: 1 });
+    const runner = await setup(board);
+    const res = await writeRegions(runner, spiJob('uefi', spiImage()), hooks([]));
+    expect(res).toMatchObject({ ok: false, written: 0, reason: expect.stringMatching(/not the Radxa ROCK 4D's 16\.0 MiB SPI NOR/) });
+    expect(board.storages.get(1)!.read(0, MiB).every((b) => b === 0)).toBe(true);
   });
 });

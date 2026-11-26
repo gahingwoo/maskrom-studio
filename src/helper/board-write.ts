@@ -12,7 +12,9 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, existsSync, fstatSync, fsyncSync, openSync, readFileSync, readSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, fsyncSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { boardHere } from '../main/board-here';
 import { firmwareTargets, woaBoard } from '../woa/boards';
 import { firmwareRegions } from '../woa/firmware-plan';
@@ -30,7 +32,8 @@ export type BoardJob =
         sha256: string | null; index: number; edition: string; build: number };
       setup: SetupOptions; extras: Array<{ path: string; base64: string }> }
   | { kind: 'firmware'; device: string; boardId: string; targetId: string; image: string }
-  | { kind: 'spinor'; device: string; boardId: string; image: string }
+  /** The SPI NOR flash with flashcp; targetId "uefi-keep" writes only up to the saved UEFI settings (default "uefi"). */
+  | { kind: 'spinor'; device: string; boardId: string; image: string; targetId?: string }
   /** The staged layout on an SD card or NVMe drive attached to this computer (not the board). */
   | { kind: 'stage-disk'; target: 'sd' | 'nvme'; device: string; boardId: string; winpe: string; appVersion: string;
       image: { path: string; extents: Extent[] | null; name: 'install.wim' | 'install.esd'; size: number;
@@ -246,17 +249,39 @@ export async function runBoardJob(job: BoardJob, send: (m: HelperMessage) => voi
   if (job.kind === 'spinor') {
     const mtd = here.mtd.find((m) => m.device === job.device);
     if (!mtd) return fail(`${job.device} is not an SPI NOR flash on this board. Nothing was written.`);
-    const img = fileSource(job.image);
-    const size = img.size;
-    img.close();
-    if (size > mtd.bytes) return fail(`The image (${size} bytes) is larger than the SPI NOR flash (${mtd.bytes} bytes). Nothing was written.`);
+    const target = firmwareTargets(board).find((t) => t.id === (job.targetId ?? 'uefi'));
+    if (!target) return fail(`Unknown firmware choice ${job.targetId}.`);
     const flashcp = ['/usr/sbin/flashcp', '/usr/bin/flashcp', '/sbin/flashcp'].find((p) => existsSync(p));
     if (!flashcp) return fail('flashcp is not installed. Install mtd-utils (it erases, writes and checks the flash) and try again. Nothing was written.');
-    send({ type: 'progress', stage: 'write', bytes: 0, percent: 0, speed: 0 });
-    const r = spawnSync(flashcp, ['-v', job.image, job.device], { encoding: 'utf8' });
-    if (r.status !== 0) return fail('flashcp failed. The SPI NOR flash may be partly written: write it again before restarting.', `${r.stdout}\n${r.stderr}`.trim());
-    send({ type: 'progress', stage: 'verify', bytes: size, percent: 100, speed: 0 });
-    return send({ type: 'done', ok: true, sha256: '' });
+    const img = fileSource(job.image);
+    const dev = openSync(job.device, 'r');
+    const dir = mkdtempSync(join(tmpdir(), 'maskrom-studio-spi-'));
+    try {
+      // The same checks as over MaskROM (firmware-plan.ts), reading the flash through its mtd device.
+      const read = async (lba: number, sectors: number) => {
+        const b = Buffer.alloc(sectors * 512);
+        return readSync(dev, b, 0, b.length, lba * 512) === b.length ? new Uint8Array(b) : null;
+      };
+      const r = await firmwareRegions(board, target, img, { capacity: mtd.bytes, head: null, read });
+      if ('stop' in r) return fail(r.stop);
+      const g = r.regions[0];
+      if (g.lba !== 0) return fail('The SPI NOR write does not start at sector 0. Nothing was written.');
+      // flashcp writes a file from the start of the flash and erases only the blocks it covers,
+      // so a file that ends at the settings (a 64 KiB block boundary) leaves them as they are.
+      const part = join(dir, 'firmware.bin');
+      const out = openSync(part, 'w');
+      for (let at = 0; at < g.source.size; at += CHUNK) writeSync(out, g.source.read(at, Math.min(CHUNK, g.source.size - at)));
+      closeSync(out);
+      send({ type: 'progress', stage: 'write', bytes: 0, percent: 0, speed: 0 });
+      const res = spawnSync(flashcp, ['-v', part, job.device], { encoding: 'utf8' });
+      if (res.status !== 0) return fail('flashcp failed. The SPI NOR flash may be partly written: write it again before restarting.', `${res.stdout}\n${res.stderr}`.trim());
+      send({ type: 'progress', stage: 'verify', bytes: g.source.size, percent: 100, speed: 0 });
+      return send({ type: 'done', ok: true, sha256: '' });
+    } finally {
+      img.close();
+      closeSync(dev);
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   if (!here.emmc || here.emmc.device !== job.device) return fail(`${job.device} is not this board's eMMC. Nothing was written.`);

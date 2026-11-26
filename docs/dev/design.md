@@ -95,7 +95,10 @@ ROCK 4D's SPI NOR) and Windows.
   (`src/flash.js`), copied unchanged into `src/web/webflash/`, so "whole
   image" and "keep the partitions" write what the web flasher writes. Its
   command sequence (db, wl, rd, no cs) is what `src/woa/maskrom-regions.ts`
-  follows; storage is identified by its size from `rfi`.
+  follows; storage is identified by its size from `rfi`. The ROCK 4D's
+  writes add `cs 9` and refuse a storage that is not a 16 MiB SPI NOR, and
+  "keep the settings" (sectors 0 to 32255, `src/woa/spi-image.ts`) is the
+  app's own, as the web flasher only rewrites the whole flash.
 - **Roxora Imager**: the Electron shell, rkdeveloptool WASM and byte-source
   devices (`src/maskrom/`), the loader built from rkbin (same SHA-256 as
   edk2-webflash's `rk3576_spl_loader.bin`), checked release downloads, the
