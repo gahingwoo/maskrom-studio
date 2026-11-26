@@ -26,8 +26,9 @@ not the app): `docs/dev/img/hybrid/1-install-mode.png` to `6-confirm.png`.
   more where maliwddm reports `GpuClkHz`, an audio output, network with
   name resolution, 64 MiB written and read back; a message box and a
   prefilled GitHub issue link. Nothing is uploaded. No NPU test.
-- **Windows defaults**: the recommended trimming removes Edge, installs
-  Chrome arm64 and keeps drivers out of Windows Update; OpenSSH on.
+- **Windows defaults**: the recommended trimming installs Chrome arm64 and
+  keeps drivers out of Windows Update; Edge stays (removing it is off);
+  OpenSSH on.
 
 ## Boot path and layout
 

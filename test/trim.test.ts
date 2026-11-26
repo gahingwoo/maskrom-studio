@@ -23,8 +23,8 @@ function balanced(script: string): boolean {
 }
 
 describe('the recommended set', () => {
-  it('stops background work, swaps Edge for Chrome, keeps drivers out of Windows Update, and leaves the Store', () => {
-    expect(RECOMMENDED_TRIM.removeEdge).toBe(true);
+  it('stops background work, adds Chrome, keeps drivers out of Windows Update, and leaves Edge and the Store', () => {
+    expect(RECOMMENDED_TRIM.removeEdge).toBe(false);
     expect(RECOMMENDED_TRIM.chrome).toBe(true);
     expect(RECOMMENDED_TRIM.wuDrivers).toBe(true);
     expect(RECOMMENDED_TRIM.removeStore).toBe(false);
@@ -56,7 +56,8 @@ describe('woa-trim.cmd', () => {
     expect(loop).not.toMatch(/\|/);
     expect(rec).not.toContain('Microsoft.WindowsStore');
     expect(noEdge).not.toContain('Microsoft.MicrosoftEdge.Stable');
-    expect(rec).toContain('Microsoft.MicrosoftEdge.Stable');
+    expect(rec).not.toContain('Microsoft.MicrosoftEdge.Stable');
+    expect(trimCmd({ ...RECOMMENDED_TRIM, removeEdge: true })).toContain('Microsoft.MicrosoftEdge.Stable');
   });
   it('sets the documented policies in the loaded hives and unloads all three', () => {
     for (const v of ['DisableFileSyncNGSC /t REG_DWORD /d "1"', 'TurnOffWindowsCopilot /t REG_DWORD /d "1"', 'AllowNewsAndInterests /t REG_DWORD /d "0"',
