@@ -45,6 +45,12 @@ was seen. Procedure: [hardware-test](hardware-test.md).
   asks; the data partition appears.
 - **Windows + Armbian on one eMMC**: see
   [hybrid-and-presets](hybrid-and-presets.md#to-check-on-a-board).
+- **ROCK 4D, Windows on NVMe + Armbian on SD**: all of it, see the same
+  page. CI: the check against the pretend board (both SPLs) in
+  scripts/electron-rock4d-e2e.mjs, the wizard and the stop before any
+  write in scripts/electron-rock4d-hybrid-e2e.mjs.
+- **WinPE texts per target**: the screen names eMMC, SD card or NVMe drive;
+  only string checks in CI (test/host-build.test.ts), no cmd.exe run.
 - **Self-test**: the message box, the report file, the issue link.
 - **Armbian onto the eMMC**: vendor and edge on both boards; first 32 MiB
   equal; the board starts Armbian.

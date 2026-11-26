@@ -9,7 +9,7 @@ import { homedir, release as osRelease, tmpdir, type as osType, userInfo } from 
 import { fullLog, issueUrl, type ReportFacts, type Who } from '../shared/report';
 import { dirname, join } from 'node:path';
 import * as drivelist from 'drivelist';
-import { classifyDrives, isOfferedTarget, type DriveInfo } from '../shared/targets';
+import { classifyDrives, isOfferedTarget, type DriveInfo, type Target } from '../shared/targets';
 import { withDiskFacts } from './linux-disks';
 import { isWindowsSourceUrl } from '../shared/windows-sources';
 import { checkArmbianSignature, checkFactoryMd5, findArmbian, inspectFactory, listArmbian, type ArmbianImage, type FactoryImage } from './restore';
@@ -400,6 +400,8 @@ ipcMain.handle('backup:save-before-write', (_e, board: BoardId, files: Array<{ n
 
 const armbianFound = new Map<string, ArmbianImage>();
 const armbianKey = (board: BoardId, id: string) => `${board}:${id}`;
+/** The offers last listed that are nightly builds (looked up on dl.armbian.com/nightly/). */
+const armbianNightly = new Set<string>();
 
 /** Screenshots: Armbian's offers as the index had them on 2026-11-24, no network. */
 function fakeArmbianOffers(board: BoardId): ArmbianOffer[] {
@@ -412,14 +414,17 @@ function fakeArmbianOffers(board: BoardId): ArmbianOffer[] {
   ];
   return parseArmbianIndex({ assets: rows.map(([distro, branch, variant, size, promoted]) => ({
     board_slug: ARMBIAN_RESTORE[board]!.slug, file_extension: 'img.xz', file_application: '', distro, branch, variant,
-    redi_url: `https://dl.armbian.com/${ARMBIAN_RESTORE[board]!.slug}/${distro[0].toUpperCase()}${distro.slice(1)}_${branch}_${variant}`,
+    // The ROCK 4D's vendor images are nightly builds only (armbian-restore.ts).
+    redi_url: `https://dl.armbian.com/${board === 'rock4d' && branch === 'vendor' ? 'nightly/' : ''}${ARMBIAN_RESTORE[board]!.slug}/${distro[0].toUpperCase()}${distro.slice(1)}_${branch}_${variant}`,
     file_size: String(size), file_date: '2026-11-20T19:44:46Z', promoted: String(promoted), armbian_version: '26.11.0-trunk.137', kernel_version: k(branch),
   })) }, ARMBIAN_RESTORE[board]!.slug);
 }
 
 ipcMain.handle('restore:list-armbian', async (_e, board: BoardId): Promise<{ offers: ArmbianOffer[] } | { error: string }> => {
   try {
-    return { offers: FAKE_RELEASES ? fakeArmbianOffers(board) : await listArmbian(board, (url, init) => net.fetch(url, init)) };
+    const offers = FAKE_RELEASES ? fakeArmbianOffers(board) : await listArmbian(board, (url, init) => net.fetch(url, init));
+    for (const o of offers) armbianNightly[o.nightly ? 'add' : 'delete'](armbianKey(board, o.id));
+    return { offers };
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
   }
@@ -436,7 +441,7 @@ ipcMain.handle('restore:find-armbian', async (_e, board: BoardId, id: string): P
       a = { board, id, branch: o.branch, file: `Armbian_community_${o.version}_${slugName}_${o.distro}_${o.branch}_${o.kernel}_${o.variant}${o.desktop ? '_desktop' : ''}.img.xz`,
         url: 'https://example.invalid/a.img.xz', size: o.size, sha256: '0'.repeat(64), asc: '', version: o.version, kernel: o.kernel, distro: o.distro,
         variant: o.variant, signed: o.date, desktop: o.desktop, imageBytes, minBytes: minimumDiskBytes(imageBytes, o.desktop) };
-    } else a = await findArmbian(board, id, (url, init) => net.fetch(url, init));
+    } else a = await findArmbian(board, id, (url, init) => net.fetch(url, init), undefined, armbianNightly.has(armbianKey(board, id)));
     armbianFound.set(armbianKey(board, id), a);
     return { id, branch: a.branch, file: a.file, size: a.size, version: a.version, kernel: a.kernel, distro: a.distro, variant: a.variant,
       signed: a.signed, desktop: a.desktop, imageBytes: a.imageBytes, minBytes: a.minBytes };
@@ -935,7 +940,14 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
 
 // --- the fallback: the WinPE image on a USB drive ----------------------------------
 
+// Tests and screenshots: the drives to list instead of this computer's (a JSON array of Target), never in a package.
+const FAKE_DRIVES = !app.isPackaged ? process.env.WOA_IMAGER_FAKE_DRIVES : undefined;
+
 ipcMain.handle('drives:list', async (_e, minSize: number) => {
+  if (FAKE_DRIVES) {
+    const listed = JSON.parse(FAKE_DRIVES) as Target[];
+    return { targets: listed.map((t) => (t.size < minSize ? { ...t, disabled: 'too small' } : t)), hidden: [] };
+  }
   const drives = await withDiskFacts(await drivelist.list() as unknown as DriveInfo[]);
   return classifyDrives(drives, { minSize, platform: process.platform, internal: false });
 });

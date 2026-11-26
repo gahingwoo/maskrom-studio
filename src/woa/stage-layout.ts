@@ -272,6 +272,7 @@ export function planStage(o: StageInput): StagePlan {
     ssh: setup.ssh ? 1 : 0,
     certificates: certs.map((c) => c.thumbprint).join(' ') || 'none',
     linux_offset: o.armbian ? linuxFirst * SECTOR : 'none',
+    ...(setup.armbianOnSd ? { armbian_sd: 1 } : {}),
     ...layoutIni((bootFirst - windowsFirst) * SECTOR, layout, choice.windowsBytes === null),
   });
   const when = o.now ?? new Date();

@@ -69,13 +69,17 @@ async function imageBytesOf(fetchFn: FetchFn, url: string, size: number, signal?
   }
 }
 
-/** One image of the board (an offer's id), from Armbian's redirector. Nothing is downloaded but its .sha, .asc and the end of the file. */
-export async function findArmbian(board: BoardId, id: string, fetchFn: FetchFn, signal?: AbortSignal): Promise<ArmbianImage> {
+/**
+ * One image of the board (an offer's id), from Armbian's redirector (its
+ * nightly one for a nightly offer). Nothing is downloaded but its .sha, .asc
+ * and the end of the file.
+ */
+export async function findArmbian(board: BoardId, id: string, fetchFn: FetchFn, signal?: AbortSignal, nightly = false): Promise<ArmbianImage> {
   const b = ARMBIAN_RESTORE[board];
   if (!b) throw new Error('Armbian has no image for this board.');
   if (!OFFER_ID.test(id)) throw new Error(`Not an Armbian image name: ${id}`);
   const [distro, branch, variant] = id.split('_');
-  const redirect = armbianRedirect(b, id);
+  const redirect = armbianRedirect(b, id, nightly);
   const sha = parseShaLine(await text(fetchFn, `${redirect}.sha`, signal));
   if (!sha) throw new Error('Armbian\'s .sha file for the image could not be read.');
   const name = parseArmbianFileName(sha.file);

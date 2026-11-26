@@ -92,6 +92,11 @@ export interface SetupOptions {
    * unless false. Turned off on the board, not here: the script's Mode switch.
    */
   browserGpu?: boolean;
+  /**
+   * Armbian goes onto an SD card in the same job (WoaBoard.hybrid 'nvme-and-sd'):
+   * WinPE says at the end how to start it. Nothing else changes.
+   */
+  armbianOnSd?: boolean;
 }
 
 export const DEFAULT_SETUP: SetupOptions = { skipSetup: null, ssh: true, sshKey: '' };
