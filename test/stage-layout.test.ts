@@ -134,6 +134,20 @@ describe('staged install layout', () => {
     execFileSync('rm', ['-rf', dir]);
   }, 60000);
 
+  it('stages the board\'s driver package and trusts each package\'s own test certificate', () => {
+    if (!tools) return;
+    const dir = mkdtempSync(join(tmpdir(), 'stage-drivers-'));
+    const cat = new Uint8Array(readFileSync(join(__dirname, 'fixtures', 'wddm-mali-g52-malivop.cat')));
+    const plan = planStage({ board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't',
+      extras: [{ path: 'rk3576-drivers/malivop/malivop.inf', data: new TextEncoder().encode('[Version]\r\n') }, { path: 'rk3576-drivers/malivop/malivop.cat', data: cat }] });
+    // The WinPE's catalog and the GPU package's: two signers.
+    expect(plan.certificates).toContain('FE74B735711614F79FDC6A0F58348419522857F3');
+    expect(plan.certificates.length).toBe(2);
+    expect(() => planStage({ board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't',
+      extras: [{ path: 'rk3576-drivers/../x.inf', data: new Uint8Array(1) }] })).toThrow(/cannot go on the staging volume/);
+    execFileSync('rm', ['-rf', dir]);
+  }, 60000);
+
   it('passes a chosen layout to the install script, and refuses one that does not fit', () => {
     if (!tools) return;
     const dir = mkdtempSync(join(tmpdir(), 'stage-layout-'));

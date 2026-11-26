@@ -31,6 +31,7 @@ import { afterUpdateCleanup, cancelUpdate, checkForUpdate, installUpdate, restar
 import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
 import { boardHere, NO_MTD_HELP } from './board-here';
 import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './windows-image';
+import { selectPackage } from '../woa/driver-package';
 import { firmwareRelease, FIRMWARE_REPO, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
 import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
@@ -202,7 +203,8 @@ ipcMain.handle('woa:releases', async (_e, force: boolean): Promise<Releases> => 
       tier: firmwareTier!,
     } : null,
     winpe: winpe?.image ? { tag: winpe.tag, url: winpe.url, file: winpe.image.file, size: winpe.image.size, tier: winpeTier!,
-      tools: toolsAsset() ? { file: toolsAsset()!.file, size: toolsAsset()!.size } : null } : null,
+      tools: toolsAsset() ? { file: toolsAsset()!.file, size: toolsAsset()!.size } : null,
+      drivers: driversAsset() ? { file: driversAsset()!.file, size: driversAsset()!.size } : null } : null,
     problems: [...problems, ...(firmware?.problems ?? []), ...(winpe?.problems ?? [])],
   };
 });
@@ -650,6 +652,34 @@ async function toolsFiles(wc: WebContents, signal: AbortSignal): Promise<Array<{
 }
 
 /**
+ * The RK3576 Windows driver package: the woa-rk3576 release's
+ * rk3576-drivers-arm64*.zip, or for testing a build not yet released,
+ * WOA_IMAGER_RK3576_DRIVERS_URL with _SHA256 and _SIZE (e.g. the CI
+ * artifact's zip put somewhere reachable).
+ */
+function driversAsset(): { file: string; url: string; size: number; sha256: string } | null {
+  const url = process.env.WOA_IMAGER_RK3576_DRIVERS_URL;
+  const sha = process.env.WOA_IMAGER_RK3576_DRIVERS_SHA256;
+  const size = Number(process.env.WOA_IMAGER_RK3576_DRIVERS_SIZE);
+  if (url && sha && /^[0-9a-f]{64}$/i.test(sha) && size > 0) return { file: 'rk3576-drivers-arm64.zip', url, size, sha256: sha.toLowerCase() };
+  return winpe?.drivers ?? null;
+}
+
+/**
+ * The board's drivers from the package (checked against the release's
+ * SHA-256, then each file against the package's SHA256SUMS.txt), as files
+ * under rk3576-drivers/. None when the release has no package: the install
+ * then adds the WinPE image's drivers, as releases before it did.
+ */
+async function packageDriverFiles(wc: WebContents, signal: AbortSignal, board: BoardId): Promise<Array<{ path: string; data: Uint8Array }>> {
+  const a = driversAsset();
+  if (!a) return [];
+  const zip = await fetchImage({ ...a, sample: false }, cacheDir(), (p) => sendProgress(wc, p), signal);
+  const entries = unzip(new Uint8Array(readFileSync(zip)), (d) => new Uint8Array(inflateRawSync(d)));
+  return selectPackage(entries, board).files;
+}
+
+/**
  * Google's Chrome MSI for Windows on Arm, downloaded from Google at write
  * time (it is not ours to ship) and kept a week. Google publishes no
  * checksum for it: here it must be an MSI for Arm64 of a plausible size;
@@ -687,8 +717,9 @@ async function chromeFiles(wc: WebContents, signal: AbortSignal): Promise<Array<
 }
 
 /** Everything besides the image that goes onto the staging volume (or the PC build's folder). */
-async function extrasFor(wc: WebContents, signal: AbortSignal, o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean }) {
+async function extrasFor(wc: WebContents, signal: AbortSignal, o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId }) {
   return [
+    ...(o.boardId ? await packageDriverFiles(wc, signal, o.boardId) : []),
     ...(o.ssh ? await opensshFiles(wc, signal) : []),
     ...(o.drivers ? driverFiles(o.drivers) : []),
     ...(o.chrome ? await chromeFiles(wc, signal) : []),
@@ -702,7 +733,7 @@ ipcMain.handle('woa:pick-drivers', async () => {
   return readDriverFolder(r.filePaths[0]);
 });
 
-ipcMain.handle('woa:prepare-extras', (e, o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean }) => exclusive(async (signal) => {
+ipcMain.handle('woa:prepare-extras', (e, o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId }) => exclusive(async (signal) => {
   try {
     const files = await extrasFor(e.sender, signal, o);
     return { files };
@@ -735,7 +766,7 @@ ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (
       diskBytes = drives.find((d) => d.device === req.device)!.size ?? undefined;
     }
     const pe = await winpeFile(wc, signal);
-    const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools });
+    const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, boardId: req.boardId });
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     const vhdPath = join(dir, 'woa-emmc.vhd');
@@ -861,7 +892,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
-      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools });
+      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, boardId: req.boardId });
       bj = { kind: 'stage-disk', target: req.target, device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
@@ -874,7 +905,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
-      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools });
+      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, boardId: req.boardId });
       bj = { kind: 'stage', device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,

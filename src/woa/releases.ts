@@ -7,6 +7,7 @@
 import type { BoardId } from './boards';
 import { WOA_BOARDS } from './boards';
 import { pickRelease, type Channel } from '../shared/channel';
+import { DRIVERS_ASSET } from './driver-package';
 
 export const FIRMWARE_REPO = 'gahingwoo/edk2-rk3576';
 export const WINPE_REPO = 'gahingwoo/woa-rk3576';
@@ -77,6 +78,8 @@ export interface WinpeRelease {
   image: ReleaseAsset | null;
   /** The RK3576 tools bundle (rk-monitor, NPU tools; woa-rk3576 tools/rk3576-tools), when the release has it. */
   tools?: ReleaseAsset | null;
+  /** The RK3576 Windows driver package (driver-package.ts; woa-rk3576 tools/rk3576-drivers), when the release has it. */
+  drivers?: ReleaseAsset | null;
   problems: string[];
 }
 
@@ -90,9 +93,13 @@ export function winpeRelease(rel: GithubRelease, sums: Map<string, string>): Win
   const toolsName = rel.assets.map((x) => x.name).find((n) => TOOLS_ASSET.test(n));
   const t = toolsName ? asset(rel, sums, toolsName) : null;
   const tools = t && typeof t !== 'string' ? t : null;
+  const driversName = rel.assets.map((x) => x.name).find((n) => DRIVERS_ASSET.test(n));
+  const dr = driversName ? asset(rel, sums, driversName) : null;
+  const drivers = dr && typeof dr !== 'string' ? dr : null;
+  const later = [t, dr].filter((x): x is string => typeof x === 'string');
   return typeof a === 'string'
-    ? { tag: rel.tag_name, url: rel.html_url ?? null, image: null, tools, problems: [a] }
-    : { tag: rel.tag_name, url: rel.html_url ?? null, image: a, tools, problems: typeof t === 'string' ? [t] : [] };
+    ? { tag: rel.tag_name, url: rel.html_url ?? null, image: null, tools, drivers, problems: [a, ...later] }
+    : { tag: rel.tag_name, url: rel.html_url ?? null, image: a, tools, drivers, problems: later };
 }
 
 export type Fetch = (url: string, init?: { headers?: Record<string, string> }) => Promise<Response>;

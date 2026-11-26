@@ -31,6 +31,7 @@ import { ESP_MIB, freeBytesOf, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB, planLayout
 import { applyTheme, readTheme, type Theme } from './theme';
 import { MaskromLive } from './maskrom-live';
 import { MIN_ARMBIAN_BYTES, minArmbianBytes } from '../woa/armbian-hybrid';
+import { BOARD_EXTRA_KINDS } from '../woa/driver-package';
 
 type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
 type Via = 'maskrom' | 'here';
@@ -277,6 +278,10 @@ export function App() {
     : layoutPlan && 'problem' in layoutPlan ? (layoutPlan.problem === 'layout.number' ? t('layout.number') : msg(layoutPlan.problem)) : null;
   const trim = mode === 'simple' ? (trimSimple ? RECOMMENDED_TRIM : NO_TRIM) : trimPick;
   const toolsThere = !!releases?.winpe?.tools;
+  // The release's RK3576 driver package: installed for the board without asking (driver-package.ts).
+  const packageThere = !!releases?.winpe?.drivers;
+  const kindWords = board ? BOARD_EXTRA_KINDS[board.id].map((k) => t(k)) : [];
+  const boardKinds = kindWords.length > 1 ? `${kindWords.slice(0, -1).join(t('drivers.sep'))}${t('drivers.and')}${kindWords[kindWords.length - 1]}` : kindWords.join('');
   const rkTools = rkToolsOn && toolsThere;
   const skipOn = skip && mode !== 'simple';
   const setup: SetupOptions = { skipSetup: skipOn ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}),
@@ -368,7 +373,7 @@ export function App() {
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
 
   const startMaskrom = async (jobFor: (served: Record<string, Served>, extras: Array<{ path: string; data: Uint8Array }>) => WoaJob,
-    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean } | null) => {
+    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId } | null) => {
     const served: Record<string, Served> = {};
     for (const p of prep) {
       setStage(p.id, { percent: 0, note: t('run.starting') });
@@ -379,7 +384,7 @@ export function App() {
       setStage(p.id, { percent: 100, note: `${s.name}, ${formatBytes(s.size)}` });
     }
     let extraFiles: Array<{ path: string; data: Uint8Array }> = [];
-    if (extras && (extras.ssh || extras.drivers || extras.chrome || extras.rkTools)) {
+    if (extras && (extras.ssh || extras.drivers || extras.chrome || extras.rkTools || extras.boardId)) {
       setStage('extras', { percent: 0, note: t('run.starting') });
       const x = await withProgress('extras', () => api.prepareExtras(extras));
       if ('error' in x) { finish({ ok: false, title: errorText(x.error) }); return; }
@@ -526,7 +531,7 @@ export function App() {
       setRun({ title: t('run.staging'), log: [], confirm: null, result: null, stages: [
         { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
         { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
-        ...(ssh || drivers || trim.chrome || rkTools ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
+        ...(ssh || drivers || trim.chrome || rkTools || packageThere ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
         ...(hybridOn ? [{ id: 'armbian', label: t('run.restore.armbian'), percent: null }] : []),
         { id: 'board', label: t('run.board'), percent: null },
         { id: 'write', label: t('run.write'), percent: 0 },
@@ -544,7 +549,7 @@ export function App() {
         { id: 'winpe', get: () => api.prepareWinpe() },
         { id: 'image', get: () => api.serveWindows(windows!.token) },
         ...(hybridOn ? [{ id: 'armbian', get: () => api.prepareArmbian(board.id, hybridId!) }] : []),
-      ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools });
+      ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, ...(packageThere ? { boardId: board.id } : {}) });
       return;
     }
     setRun({ title: t('run.firmware'), log: [], confirm: null, result: null, stages: [
@@ -1112,7 +1117,9 @@ export function App() {
         {hybridGroup}
         {layoutGroup}
         <FormGroup label={t('setup.drivers')} fieldId="drivers" role="group">
-          <Content component="p">{t('setup.drivers.always')}</Content>
+          <Content component="p" id="drivers-auto">{packageThere
+            ? t('setup.drivers.auto', { all: t('drivers.kind.all'), board: board?.name ?? '', extra: boardKinds })
+            : t('setup.drivers.winpe')}</Content>
           <Content component="p" className="muted">{t('setup.drivers.desc')}</Content>
           <Flex spaceItems={{ default: 'spaceItemsMd' }} alignItems={{ default: 'alignItemsCenter' }}>
             <FlexItem><Button variant="secondary" onClick={chooseDrivers}>{t('setup.drivers.choose')}</Button></FlexItem>
@@ -1172,7 +1179,7 @@ export function App() {
           zone: account.timeZone || t('setup.timezone.none'),
         })] as [string, string]] : []),
         [t('review.ssh'), ssh ? t('review.ssh.on', { key: sshKey.trim() ? t('review.ssh.key') : '' }) : t('review.ssh.off')],
-        [t('review.drivers'), t('review.drivers.value', { extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
+        [t('review.drivers'), t(packageThere ? 'review.drivers.package' : 'review.drivers.value', { file: releases?.winpe?.drivers?.file ?? '', extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
         [t('review.trim'), anyTrim(trim) ? TRIM_KEYS.filter((k) => trim[k]).map((k) => t(`trim.${k}`)).join('; ') : t('review.trim.none')],
         [t('review.tools'), rkTools ? t('tools.on') : t('review.trim.none')],
         [t('review.target'), t(`review.target.${dest}.${method}`)],
@@ -1417,6 +1424,7 @@ export function App() {
             <Switch id="s-trim" label={t('trim.simple')} isChecked={trimSimple} onChange={(_e, v) => setTrimSimple(v)} />
             <FormHelperText><HelperText><HelperTextItem>{t('trim.simple.desc')}</HelperTextItem></HelperText></FormHelperText>
             {toolsGroup}
+            <Content component="p" id="s-drivers">{packageThere ? t('s.drivers', { board: board?.name ?? '' }) : t('setup.drivers.winpe')}</Content>
           </FormGroup>
         )}
         {task === 'armbian' && (

@@ -1,0 +1,306 @@
+{
+  "format": 1,
+  "name": "RK3576 Windows driver package",
+  "version": "ci-test",
+  "boards": [
+    "tspi3m",
+    "cm5io",
+    "rock4d"
+  ],
+  "sources": {
+    "woa-rk3576": "gahingwoo/woa-rk3576@d45012d WinPE run 45762450398",
+    "wddm-mali-g52": "gahingwoo/wddm-mali-g52 CI run 45757033129",
+    "woa-rk3576-npu": "gahingwoo/woa-rk3576-npu CI run 45752139705"
+  },
+  "drivers": [
+    {
+      "dir": "dwcsdhc",
+      "what": "eMMC (dwcsdhc)",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "dwcsdhc.inf"
+      ]
+    },
+    {
+      "dir": "dwcmshc",
+      "what": "SD card and SDIO (dwcmshc)",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "dwcmshc.inf"
+      ]
+    },
+    {
+      "dir": "rk3xgpio",
+      "what": "GPIO",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rk3xgpio.inf"
+      ]
+    },
+    {
+      "dir": "rk3xi2c",
+      "what": "I2C",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rk3xi2c.inf"
+      ]
+    },
+    {
+      "dir": "pl330dma",
+      "what": "DMA (PL330)",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "pl330dma.inf"
+      ]
+    },
+    {
+      "dir": "dwc_eqos",
+      "what": "Ethernet (GMAC)",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "dwc_eqos.inf"
+      ]
+    },
+    {
+      "dir": "rk3xspi",
+      "what": "SPI",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rk3xspi.inf"
+      ]
+    },
+    {
+      "dir": "vdpu383",
+      "what": "Video decoder (VDPU383)",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "vdpu383.inf"
+      ]
+    },
+    {
+      "dir": "rk3xsaradc",
+      "what": "ADC keys and headphone detect (SARADC)",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rk3xsaradc.inf"
+      ]
+    },
+    {
+      "dir": "rk3xuart",
+      "what": "40-pin UART",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rk3xuart.inf"
+      ]
+    },
+    {
+      "dir": "rk806pwrkey",
+      "what": "Power button (RK806)",
+      "from": "woa",
+      "default": [
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rk806pwrkey.inf"
+      ]
+    },
+    {
+      "dir": "rkled",
+      "what": "Board LEDs",
+      "from": "woa",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rkled.inf"
+      ]
+    },
+    {
+      "dir": "rkeeprom",
+      "what": "HAT EEPROM (ROCK 4D)",
+      "from": "woa",
+      "default": [
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rkeeprom.inf"
+      ]
+    },
+    {
+      "dir": "gt9271",
+      "what": "Touch screen (GT9271)",
+      "from": "woa",
+      "default": [
+        "tspi3m"
+      ],
+      "optional": [],
+      "infs": [
+        "gt9271.inf"
+      ]
+    },
+    {
+      "dir": "bcm4345bt",
+      "what": "Bluetooth (BCM4345C5; CM5-IO BCM4362A2 untested)",
+      "from": "woa",
+      "default": [
+        "tspi3m"
+      ],
+      "optional": [
+        "cm5io"
+      ],
+      "infs": [
+        "bcm4345bt.inf"
+      ]
+    },
+    {
+      "dir": "rk3xi2sbus",
+      "what": "Audio: SAI bus",
+      "from": "audio",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rk3xi2sbus.inf"
+      ]
+    },
+    {
+      "dir": "csaudiork3x",
+      "what": "Audio: HDMI and codec endpoints",
+      "from": "audio",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "csaudiork3x.inf"
+      ]
+    },
+    {
+      "dir": "es8323",
+      "what": "Audio: ES8388 codec",
+      "from": "audio",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "es8323.inf"
+      ]
+    },
+    {
+      "dir": "maliwddm",
+      "what": "GPU (Mali-G52, maliwddm, with the D3D and OpenGL user-mode drivers)",
+      "from": "gpu",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "maliwddm.inf"
+      ]
+    },
+    {
+      "dir": "malivop",
+      "what": "Display controller name (VOP2, null driver)",
+      "from": "gpu",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "malivop.inf"
+      ]
+    },
+    {
+      "dir": "rknpu",
+      "what": "NPU (rknpu)",
+      "from": "npu",
+      "default": [
+        "tspi3m",
+        "cm5io",
+        "rock4d"
+      ],
+      "optional": [],
+      "infs": [
+        "rknpu.inf"
+      ]
+    }
+  ]
+}

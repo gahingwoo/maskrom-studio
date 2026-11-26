@@ -12,7 +12,8 @@
 //           when Windows is in place the staging partitions are deleted and
 //           the Windows partition is extended over them. The DISM, driver,
 //           bcdboot and registry steps are deploy-windows.cmd's, unchanged.
-//           Added: extra driver packages, the drivers' test certificates
+//           Added: the board's drivers from the release's driver package
+//           (driver-package.ts), extra driver packages, the drivers' test certificates
 //           (woa-certs.cmd, certs.ts), SetupComplete.cmd, the answer file
 //           when setup is skipped, and OpenSSH (setup-files.ts).
 //
@@ -52,7 +53,7 @@ echo Maskrom Studio: could not copy the install script from %STAGE% to X:.
 /**
  * Everything done to the applied Windows, the same on the board (INSTALL)
  * and on a Windows PC (HOST_BUILD): deploy-windows.cmd's steps and the
- * first-start files. Needs W: (Windows) and S: (ESP), %WIM%, %DRIVERS%,
+ * first-start files. Needs W: (Windows) and S: (ESP), %WIM%, %DRIVERS%, %AUDIO%,
  * %STAGE% (the folder with the generated files), %LOG%, %APPLY_OPTS% and the
  * W_ settings; jumps to :faillog on an error.
  */
@@ -61,8 +62,16 @@ echo.
 echo Applying the image. This takes a while ^(20 to 40 minutes on eMMC^).
 dism /English /Apply-Image /ImageFile:"%WIM%" /Index:%W_index% /ApplyDir:W:\ %APPLY_OPTS% >> "%LOG%" 2>&1 || goto :faillog
 
-echo Adding the RK3576 drivers.
-dism /English /Image:W:\ /Add-Driver /Driver:"%DRIVERS%" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+rem The board's drivers from the release's RK3576 driver package (driver-package.ts),
+rem or, from a release without one, the drivers the WinPE image carries.
+if exist "%STAGE%\rk3576-drivers\dwcsdhc" (
+  echo Adding the RK3576 driver package for this board.
+  dism /English /Image:W:\ /Add-Driver /Driver:"%STAGE%\rk3576-drivers" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+) else (
+  echo Adding the RK3576 drivers of the WinPE image.
+  dism /English /Image:W:\ /Add-Driver /Driver:"%DRIVERS%" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+  if exist "%AUDIO%" dism /English /Image:W:\ /Add-Driver /Driver:"%AUDIO%" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
+)
 if exist "%STAGE%\extra-drivers" (
   echo Adding the extra drivers.
   dism /English /Image:W:\ /Add-Driver /Driver:"%STAGE%\extra-drivers" /Recurse /ForceUnsigned >> "%LOG%" 2>&1 || goto :faillog
@@ -171,6 +180,7 @@ for %%k in (target disk_guid disk_bytes fw_offset fw_size boot_offset data_offse
   )
 )
 set DRIVERS=%PE%\woa-drivers
+set AUDIO=%PE%\woa-audio
 set WIM=%STAGE%\%W_image%
 echo.
 echo ======================================================================
@@ -430,6 +440,7 @@ set HERE=%~dp0
 set HERE=%HERE:~0,-1%
 set STAGE=%HERE%
 set DRIVERS=%HERE%\woa-drivers
+set AUDIO=%HERE%\woa-audio
 set LOG=%HERE%\host-build.log
 set INI=%HERE%\host-build.ini
 echo Maskrom Studio host build, %DATE% %TIME% > "%LOG%"
