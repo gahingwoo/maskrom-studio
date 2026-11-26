@@ -32,14 +32,14 @@ import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
 import { boardHere, NO_MTD_HELP } from './board-here';
 import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './windows-image';
 import { selectPackage } from '../woa/driver-package';
-import { builtinFeatures } from '../woa/firmware-features';
+import { FEATURE_KEYS } from '../woa/firmware-features';
 import { firmwareRelease, FIRMWARE_REPO, loadFirmwareFeatures, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
 import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
 import { fileSource, planDiskStage, type BoardJob } from '../helper/board-write';
 import { hostBuildFiles } from '../woa/host-build';
 import { MIN_DISK_BYTES, targetRefusal } from '../woa/stage-layout';
-import { woaBoard } from '../woa/boards';
+import { WOA_BOARDS, woaBoard } from '../woa/boards';
 import type { HostBuildRequest, HostBuildResult } from '../shared/ipc';
 
 /** The eMMC size the Windows host build makes its virtual disk for (the boards' eMMC as seen). */
@@ -167,11 +167,14 @@ async function tiered(repo: string, channel: Channel, fetchFn: (url: string, ini
 
 // Unpackaged builds only, for the screenshots: made-up releases, no network.
 const FAKE_RELEASES = !app.isPackaged && process.env.WOA_IMAGER_FAKE_RELEASES === '1';
+// The made-up release lists every feature on every board, so the screenshots and e2e runs see every page.
+const FAKE_FEATURES: FirmwareRelease['features'] = { from: 'release', boards: Object.fromEntries(WOA_BOARDS.map((b) => [b.id, {
+  firmwareVersion: null, features: Object.fromEntries(FEATURE_KEYS.map((k) => [k, { built: true }])) }])) };
 if (FAKE_RELEASES) {
   const a = (file: string, size: number) => ({ file, url: `https://example.invalid/${file}`, size, sha256: '0'.repeat(64), sample: false as const });
   firmware = { tag: '0.4.1', url: null, problems: [], images: {
     tspi3m: a('TaishanPi3M-emmc-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-emmc-edk2-0.4.1.img', 33554432), rock4d: a('ROCK4D-spi-edk2-0.4.1.img', 16777216),
-  }, sdcard: { tspi3m: a('TaishanPi3M-sdcard-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-sdcard-edk2-0.4.1.img', 33554432) }, features: builtinFeatures('0.4.1') };
+  }, sdcard: { tspi3m: a('TaishanPi3M-sdcard-edk2-0.4.1.img', 33554432), cm5io: a('CM5IO-sdcard-edk2-0.4.1.img', 33554432) }, features: FAKE_FEATURES };
   winpe = { tag: '0.1.1', url: null, problems: [], image: a('woa-rk3576-winpe-0.1.1.img.xz', 352252908) };
   firmwareTier = { asked: 'stable', used: 'stable', label: '0.4.1', commit: null };
   winpeTier = { asked: 'stable', used: 'stable', label: '0.1.1', commit: null };

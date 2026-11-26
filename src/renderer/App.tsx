@@ -1339,11 +1339,11 @@ export function App() {
         [t('review.written'), task === 'armbian'
           ? (armbianFound ? `${t('review.restore.armbian', { what: `${offerWords(armbianFound)}, ${distroWords(armbianFound.distro)}`, version: armbianFound.version, kernel: armbianFound.kernel, branch: armbianFound.branch, file: armbianFound.file })}. ${t('review.drive.written.armbian')}` : t('review.unavailable'))
           : (sdRelease ? t('review.drive.written.uefi', { tag: releases!.firmware!.tier.label, file: sdRelease.file }) : t('review.unavailable'))],
-        ...(task === 'uefi-sd' ? fwFeatureRow() : []),
         [t('review.erased'), drive ? t('review.stick.erased', { drive }) : t('review.drive.choose')],
         [t('review.checked'), t('review.stick.checked')],
         [t('review.then'), t(`sd.boot.${board.sdBoot}.${task === 'armbian' ? 'armbian' : 'uefi'}`, { board: board.name })],
       ]);
+      if (task === 'uefi-sd') reviewRows.splice(2, 0, ...fwFeatureRow());
       if (task === 'armbian' && !restoreReady) why = t('why.restore.armbian');
       else if (!stick) why = t('review.drive.choose');
       goLabel = t('go.erase');
@@ -1370,12 +1370,12 @@ export function App() {
       const tg = firmwareTargets(board).find((x) => x.id === task)!;
       reviewRows = reviewRows.concat([
         [t('review.firmware'), fwRelease ? `edk2-rk3576 ${releases!.firmware!.tier.label}, ${fwRelease.file}${tierWord(releases!.firmware!.tier)}` : t('review.unavailable')],
-        ...(fwRelease ? fwFeatureRow() : []),
         [t('review.written'), tg.slice ? t('review.fw.slice', { a: tg.slice[0], b: tg.slice[1], lba: tg.lba }) : t('review.fw.whole', { lba: tg.lba })],
         [t('review.erased'), fwText(board, tg, 'erases')],
         [t('review.checked'), onBoard ? t('review.checked.fw.here') : board.spi ? t('review.checked.fw.spi') : t('review.checked.fw.maskrom')],
         [t('review.then'), fwText(board, tg, 'done')],
       ]);
+      if (fwRelease) reviewRows.splice(2, 0, ...fwFeatureRow());
       if (!fwRelease) why = t('why.firmware');
       if (onBoard && board.firmwareStorage === 'emmc' && here?.emmcRefusal) why = msg(here.emmcRefusal);
       if (onBoard && board.firmwareStorage === 'spinor' && !here?.mtd.length) why = t('why.mtd');

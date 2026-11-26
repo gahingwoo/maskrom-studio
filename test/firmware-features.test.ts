@@ -18,7 +18,7 @@ const release = (withFeatures: boolean, digest?: string): GithubRelease => ({
   })),
 });
 const sumsWith = (sum: string | null) => new Map([...imgs.map((n): [string, string] => [n, 'a'.repeat(64)]), ...(sum ? [['FEATURES.json', sum] as [string, string]] : [])]);
-const fetchOf = (body: Uint8Array, status = 200) => async () => new Response(status === 200 ? body : null, { status });
+const fetchOf = (body: Uint8Array, status = 200) => async () => new Response((status === 200 ? body : null) as BodyInit | null, { status });
 
 describe('firmware features', () => {
   it('names boards by their image prefix', () => {
