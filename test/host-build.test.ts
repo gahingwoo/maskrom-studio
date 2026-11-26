@@ -97,4 +97,26 @@ describe('the scripts', () => {
     expect(HOST_BUILD).toMatch(/Mount-DiskImage/);
     expect(CONFIGURE).toMatch(/dwcmshc \/v Start \/t REG_DWORD \/d 0/);
   });
+  // Seen on a ROCK 4D (no eMMC) installing to NVMe, 2026-11-26: the screen said eMMC three times.
+  it('name the disk Windows goes onto, and say eMMC only when it is the eMMC', () => {
+    const lines = `${INSTALL}\n${HOST_BUILD}`.split('\n');
+    const said = lines.filter((l) => /^\s*(if [^e]*)?echo\b.*eMMC/i.test(l) || /^\s*if .*echo\b.*eMMC/.test(l));
+    const unguarded = said.filter((l) => !/"%W_target%"=="emmc"/.test(l)
+      // Inside blocks that run only on the eMMC: the firmware partition found, Armbian next to Windows on the eMMC, the VHD for the eMMC.
+      && !/Firmware partition found at sector 64|Armbian is on the eMMC too|virtual disk the size of the eMMC/.test(l));
+    expect(unguarded).toEqual([]);
+    expect(INSTALL).toContain('onto %TGT%.');
+    expect(INSTALL).toMatch(/set "TGT=this board's eMMC"\nif \/i "%W_target%"=="sd" set "TGT=the SD card"\nif \/i "%W_target%"=="nvme" set "TGT=the NVMe drive"\n/);
+    // TGT is set before anything can jump to :fail, which names it.
+    expect(INSTALL.indexOf('set "TGT=')).toBeLessThan(INSTALL.indexOf('goto :fail'));
+    expect(INSTALL).toContain('The staging partitions are still on %TGT%');
+    for (const target of ['emmc', 'sd', 'nvme']) {
+      expect(CONFIGURE).toMatch(new RegExp(`if /i "%W_target%"=="${target}" [^\\n]*echo Applying the image`));
+      expect(CONFIGURE).toMatch(new RegExp(`if /i "%W_target%"=="${target}" echo [^\n]*sdbus off`));
+    }
+    // The registry is changed the same way for every target.
+    expect(CONFIGURE).toMatch(/\nreg add HKLM\\WOASYS\\ControlSet00!CS!\\Services\\sdstor \/v Start \/t REG_DWORD \/d 0 \/f/);
+    expect(CONFIGURE).toMatch(/\nreg add HKLM\\WOASYS\\ControlSet00!CS!\\Services\\sdbus \/v Start \/t REG_DWORD \/d 4 \/f/);
+    expect(INSTALL).toMatch(/if "%W_armbian_sd%"=="1" \(\n\s+echo\.\n\s+echo Armbian is on the SD card/);
+  });
 });

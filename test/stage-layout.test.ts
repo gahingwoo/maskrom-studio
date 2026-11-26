@@ -130,6 +130,11 @@ describe('staged install layout', () => {
     const t = parsePrimaryGpt(plan.regions[plan.regions.length - 1].source.read(0, 34 * 512));
     expect(t.partitions.map((p) => p.name)).toEqual(['WOA-STAGE-BOOT', 'WOA-STAGE-DATA']);
     expect(plan.ini).toMatch(/target=nvme\r\nfw_offset=none\r\nfw_size=none\r\nwindows_offset_kb=1024\r\n/);
+    expect(plan.ini).not.toMatch(/armbian_sd/);
+    // ROCK 4D with Armbian on an SD card in the same job: WinPE is told, to say how Armbian starts.
+    const withSd = planStage({ board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't',
+      setup: { skipSetup: null, ssh: false, sshKey: '', armbianOnSd: true } });
+    expect(withSd.ini).toMatch(/\r\nlinux_offset=none\r\narmbian_sd=1\r\n/);
     expect(() => planStage({ board: woaBoard('tspi3m')!, target: 'sd', diskBytes: 16e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't' })).toThrow(/at least/);
     execFileSync('rm', ['-rf', dir]);
   }, 60000);

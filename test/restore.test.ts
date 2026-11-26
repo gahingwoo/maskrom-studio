@@ -78,7 +78,24 @@ describe('Armbian images', () => {
     expect(armbianRedirect(ARMBIAN_RESTORE.tspi3m!, 'Trixie_vendor_minimal')).toBe('https://dl.armbian.com/lckfb-taishanpi-3m/Trixie_vendor_minimal');
     expect(armbianRedirect(ARMBIAN_RESTORE.cm5io!, 'Resolute_edge_kde-plasma')).toBe('https://dl.armbian.com/armsom-cm5-io/Resolute_edge_kde-plasma');
     expect(() => armbianRedirect(ARMBIAN_RESTORE.cm5io!, '../x')).toThrow(/Not an Armbian image name/);
-    expect(ARMBIAN_RESTORE.rock4d).toBeUndefined();
+    expect(armbianRedirect(ARMBIAN_RESTORE.rock4d!, 'Trixie_vendor_minimal', true)).toBe('https://dl.armbian.com/nightly/radxa-rock-4d/Trixie_vendor_minimal');
+    expect(armbianRedirect(ARMBIAN_RESTORE.rock4d!, 'Trixie_edge_minimal')).toBe('https://dl.armbian.com/radxa-rock-4d/Trixie_edge_minimal');
+  });
+  // As armbian-images.json had the ROCK 4D on 2026-11-26: vendor only as nightly builds, edge from the 26.8.2 release.
+  it('offers nightly builds where Armbian has nothing else, and a release before a nightly build of the same image', () => {
+    const row = (distro: string, branch: string, variant: string, redirect: string, date: string, version: string) => ({
+      board_slug: 'radxa-rock-4d', file_extension: 'img.xz', file_application: '', distro, branch, variant, redi_url: redirect,
+      file_size: '400000000', file_date: date, promoted: 'false', armbian_version: version, kernel_version: branch === 'edge' ? '7.1.8' : '6.1.172',
+    });
+    const offers = parseArmbianIndex({ assets: [
+      row('trixie', 'vendor', 'minimal', 'https://dl.armbian.com/nightly/radxa-rock-4d/Trixie_vendor_minimal', '2026-11-23T06:32:28Z', '26.11.0-trunk.140'),
+      row('trixie', 'edge', 'minimal', 'https://dl.armbian.com/radxa-rock-4d/Trixie_edge_minimal', '2026-08-17T10:51:04Z', '26.8.2'),
+      row('trixie', 'edge', 'minimal', 'https://dl.armbian.com/nightly/radxa-rock-4d/Trixie_edge_minimal', '2026-11-23T06:00:00Z', '26.11.0-trunk.140'),
+      row('trixie', 'edge', 'gnome', 'https://dl.armbian.com/elsewhere/radxa-rock-4d/Trixie_edge_gnome', '2026-11-23T06:00:00Z', '26.11.0-trunk.140'),
+    ] }, 'radxa-rock-4d');
+    expect(offers.map((o) => [o.id, o.nightly, o.version])).toEqual([
+      ['Trixie_vendor_minimal', true, '26.11.0-trunk.140'], ['Trixie_edge_minimal', false, '26.8.2'],
+    ]);
   });
 
   const index = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'armbian-images.json'), 'utf8'));
@@ -143,6 +160,23 @@ describe('Armbian images', () => {
     await expect(findArmbian('tspi3m', 'Resolute_edge_gnome', answer(file))).rejects.toThrow(/not the Resolute_edge_gnome image/);
     await expect(findArmbian('tspi3m', 'Resolute_vendor_kde-plasma', answer(file))).rejects.toThrow(/not the Resolute_vendor_kde-plasma image/);
     await expect(findArmbian('tspi3m', 'Trixie_vendor_gnome', answer(file))).rejects.toThrow(/not the Trixie_vendor_gnome/);
+  });
+  it('asks the nightly redirector for a nightly offer', async () => {
+    const file = 'Armbian_26.11.0-trunk.140_Radxa-rock-4d_trixie_vendor_6.1.172_minimal.img.xz';
+    const asc = readFileSync(fx(ARMBIAN_ASC), 'utf8');
+    const asked: string[] = [];
+    const answer = async (url: string, init?: { method?: string; headers?: Record<string, string> }) => {
+      asked.push(url);
+      if (url.endsWith('.sha')) return new Response(`${'b'.repeat(64)} ${file}\n`);
+      if (url.endsWith('.asc')) return new Response(asc);
+      if (init?.headers?.Range) return new Response(null, { status: 416 });
+      const r = new Response(null, { headers: { 'content-length': '1000' } });
+      Object.defineProperty(r, 'url', { value: `https://github.com/armbian/ci/releases/download/26.11.0-trunk.140/${file}` });
+      return r;
+    };
+    const a = await findArmbian('rock4d', 'Trixie_vendor_minimal', answer, undefined, true);
+    expect(a).toMatchObject({ file, version: '26.11.0-trunk.140', branch: 'vendor', kernel: '6.1.172', imageBytes: null });
+    expect(asked.slice(0, 3)).toEqual(['sha', 'asc', ''].map((x) => `https://dl.armbian.com/nightly/radxa-rock-4d/Trixie_vendor_minimal${x ? `.${x}` : ''}`));
   });
 });
 

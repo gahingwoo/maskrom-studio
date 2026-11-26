@@ -26,6 +26,7 @@ import { TRUSTED_READ_BYTES } from './maskrom-regions';
 import { planUpgrade } from './upgrade-plan';
 import { readPreWriteBackup, readSpiPreWriteBackup } from './pre-write-backup';
 import { spiStorageProblem } from './spi-image';
+import { checkArmbianOnce } from './armbian-once';
 import { STORAGES } from '../maskrom/boards';
 import type { Probe } from './maskrom-regions';
 
@@ -47,7 +48,9 @@ export type WoaJob =
   /** A factory update.img: its partition table, loader and partitions. */
   | { kind: 'factory'; boardId: string; image: FileRef; resetAfter: boolean }
   /** A new edk2-rk3576 eMMC image from sector 64, keeping the partition table, Windows and (if asked) the saved UEFI settings. */
-  | { kind: 'upgrade'; boardId: string; image: FileRef; keepSettings: boolean; resetAfter: boolean };
+  | { kind: 'upgrade'; boardId: string; image: FileRef; keepSettings: boolean; resetAfter: boolean }
+  /** Read only: does the SPL on the board's SPI NOR flash start Armbian once from the SD card (armbian-once.ts)? */
+  | { kind: 'armbian-once-check'; boardId: string; resetAfter: boolean };
 
 export type WoaWorkerRequest =
   | { type: 'woa-start'; moduleUrl: string; wasmUrl: string; loaderUrl: string; job: WoaJob; reconnectTimeout?: number }
@@ -208,6 +211,23 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
           saveBackup: (data) => new Promise((resolve) => { saved = resolve; post({ type: 'backup', boardId: job.boardId, data }); }),
         }),
         confirm,
+      }, hooks);
+    } else if (job.kind === 'armbian-once-check') {
+      // Nothing is written: the plan reads the SPL and has no regions, and there is nothing to confirm.
+      result = await writeRegions(runner, {
+        loader, readHead: false, spotCheck: false, resetAfter: job.resetAfter,
+        ...(board.spi ? { storage: { code: STORAGES.spinor.code, label: STORAGES.spinor.label } } : {}),
+        ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
+        plan: async (p) => {
+          const where = spiStorageProblem(board, p.capacity);
+          if (where) return { stop: where };
+          if (!p.read) return { stop: 'The SPI NOR flash cannot be read over MaskROM. Nothing was written.' };
+          const r = await checkArmbianOnce(board, p.read);
+          if (!r.ok) return { stop: r.reason };
+          hooks.log(`ArmbianOnce/1 found in the SPL at SPI NOR byte 0x${r.offset.toString(16)}.`);
+          return { regions: [], summary: { kind: 'armbian-once', offset: r.offset } };
+        },
+        confirm: async () => true,
       }, hooks);
     } else if (job.kind === 'factory') {
       const file = xhrSource(job.image.url, job.image.size);

@@ -60,8 +60,10 @@ export const store = () => { const b = new Uint8Array(0x30000).fill(0x5a); b.set
  * sector 768 with an edk2 image holding the build stamp, the UEFI settings
  * area from sector 32256 erased (0xFF), as ROCK4D-spi-edk2-<ver>.img.
  */
-export function spiImage(opts: { dt?: string; stamp?: string; version?: string; settings?: Uint8Array } = {}): Uint8Array {
+export function spiImage(opts: { dt?: string; stamp?: string; version?: string; settings?: Uint8Array; spl?: string } = {}): Uint8Array {
   const img = new Uint8Array(16 * 1024 * 1024).fill(0x11);
+  // The SPL's strings, as U-Boot's SPL carries them (the tag ArmbianOnce/1 at 0x3807c in the rock4d-parity build).
+  if (opts.spl) img.set(new TextEncoder().encode(opts.spl), 0x3807c);
   const fit = 768 * SECTOR;
   img.set(fdt({
     description: 'FIT Image with ATF/OP-TEE/UEFI for RK3576',

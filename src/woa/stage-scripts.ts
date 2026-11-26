@@ -61,7 +61,11 @@ echo Maskrom Studio: could not copy the install script from %STAGE% to X:.
  */
 export const CONFIGURE = String.raw`rem --- 4. apply, drivers, boot (deploy-windows.cmd) ----------------------------
 echo.
-echo Applying the image. This takes a while ^(20 to 40 minutes on eMMC^).
+rem Only the eMMC install on the board has been timed (20 to 40 minutes).
+if /i "%W_target%"=="emmc" if /i not "%W_mode%"=="vhd" echo Applying the image. This takes a while ^(20 to 40 minutes on eMMC^).
+if /i "%W_target%"=="emmc" if /i "%W_mode%"=="vhd" echo Applying the image. This takes a while.
+if /i "%W_target%"=="sd" echo Applying the image. This takes a while; SD cards are slow to write.
+if /i "%W_target%"=="nvme" echo Applying the image. This takes a while.
 dism /English /Apply-Image /ImageFile:"%WIM%" /Index:%W_index% /ApplyDir:W:\ %APPLY_OPTS% >> "%LOG%" 2>&1 || goto :faillog
 
 rem The board's drivers from the release's RK3576 driver package (driver-package.ts),
@@ -87,7 +91,10 @@ if not exist S:\EFI\Boot\bootaa64.efi (
   copy /y S:\EFI\Microsoft\Boot\bootmgfw.efi S:\EFI\Boot\bootaa64.efi >> "%LOG%" 2>&1
 )
 
-echo Making the eMMC's disk driver boot-start, and keeping sdbus off the eMMC.
+rem The same settings for every target; only what is said differs.
+if /i "%W_target%"=="emmc" echo Making the eMMC's disk driver boot-start, and keeping sdbus off the eMMC.
+if /i "%W_target%"=="sd" echo Making the SD card's disk drivers boot-start, and keeping sdbus off the card.
+if /i "%W_target%"=="nvme" echo Keeping sdbus off the SD slot, and turning hibernation and Fast Startup off.
 reg load HKLM\WOASYS W:\Windows\System32\config\SYSTEM >> "%LOG%" 2>&1 || goto :faillog
 set CS=1
 for /f "tokens=3" %%v in ('reg query HKLM\WOASYS\Select /v Current ^| find "Current"') do set /a CS=%%v
@@ -159,7 +166,8 @@ if exist "%STAGE%\rk3576-tools\offline-install.cmd" (
 
 export const INSTALL = String.raw`@echo off
 rem ---------------------------------------------------------------------------
-rem woa-stage.cmd - install Windows onto the eMMC this WinPE was staged on.
+rem woa-stage.cmd - install Windows onto the disk this WinPE was staged on
+rem (the board's eMMC, an SD card or an NVMe drive: W_target).
 rem Written by Maskrom Studio; adapted from woa-rk3576's
 rem tools/woa-deploy/deploy-windows.cmd (see the comments there for why each
 rem step is needed). Run from X:\woa-stage\ by the launcher, with
@@ -177,6 +185,10 @@ set INI=X:\woa-stage\woa-stage.ini
 echo Maskrom Studio staged install, %DATE% %TIME% > "%LOG%"
 
 for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%INI%") do set "W_%%a=%%b"
+rem What the target is called on the screen.
+set "TGT=this board's eMMC"
+if /i "%W_target%"=="sd" set "TGT=the SD card"
+if /i "%W_target%"=="nvme" set "TGT=the NVMe drive"
 for %%k in (target disk_guid disk_bytes fw_offset fw_size boot_offset data_offset windows_offset_kb image index build) do (
   if not defined W_%%k (
     echo woa-stage.ini has no %%k. Stopping.
@@ -189,9 +201,10 @@ set WIM=%STAGE%\%W_image%
 echo.
 echo ======================================================================
 echo  Maskrom Studio: installing %W_edition%
-echo  ^(build %W_build%, index %W_index%^) onto this board's eMMC.
-echo  The firmware partition is kept. Close this window or press Ctrl+C
-echo  within 15 seconds to stop; nothing has been changed yet.
+echo  ^(build %W_build%, index %W_index%^) onto %TGT%.
+if not "%W_fw_offset%"=="none" echo  The firmware partition is kept.
+echo  Close this window or press Ctrl+C within 15 seconds to stop;
+echo  nothing has been changed yet.
 echo ======================================================================
 ping -n 16 127.0.0.1 >nul
 type "%INI%" >> "%LOG%"
@@ -278,7 +291,7 @@ if exist X:\Windows\System32\certutil.exe if defined W_image_sha256 (
   echo Checking the image's SHA-256. This reads the whole image once.
   certutil -hashfile "%WIM%" SHA256 > X:\woa-stage\hash.txt 2>&1
   find /i "%W_image_sha256%" X:\woa-stage\hash.txt >nul || (
-    echo The image on the eMMC does not have the SHA-256 the imager wrote:
+    echo The image on %TGT% does not have the SHA-256 the imager wrote:
     type X:\woa-stage\hash.txt
     goto :faillog
   )
@@ -381,6 +394,14 @@ if defined W_linux_offset if not "%W_linux_offset%"=="none" (
   echo Armbian is on the eMMC too. To start it, choose "Armbian (U-Boot^)" in
   echo the firmware's boot manager; the boot after that is Windows again.
 )
+if "%W_armbian_sd%"=="1" (
+  echo.
+  echo Armbian is on the SD card Maskrom Studio wrote. Once Windows has
+  echo started, put the card in the SD slot and leave it there. To start
+  echo Armbian, choose "Armbian (U-Boot^)" in the firmware's boot manager;
+  echo the boot after that is Windows again. If Windows offers to format the
+  echo card, say no: Windows cannot read Armbian's file system.
+)
 ping -n 16 127.0.0.1 >nul
 wpeutil reboot
 goto :end
@@ -420,9 +441,14 @@ type "%LOG%"
 if exist W:\Windows copy /y "%LOG%" W:\Windows\Logs\woa-stage.log >nul 2>&1
 :fail
 echo.
-echo The staging partitions are still on the eMMC: restarting the board runs
-echo this install again. To stop for good, write the firmware with "whole
-echo image" from Maskrom Studio or flash.gahingwoo.com.
+echo The staging partitions are still on %TGT%: restarting the board runs
+echo this install again.
+if "%W_fw_offset%"=="none" (
+  echo To stop for good, take the drive out or write it again from Maskrom Studio.
+) else (
+  echo To stop for good, write the firmware with "whole image" from Maskrom
+  echo Studio or flash.gahingwoo.com.
+)
 :end
 endlocal
 `;

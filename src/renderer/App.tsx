@@ -40,6 +40,9 @@ type Method = 'stage' | 'host';
 const WIN_HOST = api.platform === 'win32';
 
 const GB = (n: number) => `${(n / 1e9).toFixed(1)} GB`;
+/** The smallest drive Windows is staged on (stage-layout.ts MIN_DISK_BYTES), and the smallest card listed for Armbian. */
+const DISK_MIN = 30e9;
+const SD_MIN = 4e9;
 const LOADER = 'rk3576_spl_loader.bin';
 
 interface Stage { id: string; label: string; percent: number | null; note?: string }
@@ -147,8 +150,10 @@ export function App() {
   const [armbianId, setArmbianId] = useState<string | null>(null);
   const [restoreTo, setRestoreTo] = useState<'emmc' | 'drive'>('emmc');
   const [armbian, setArmbian] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
-  // Armbian next to Windows on the eMMC (armbian-hybrid.ts): off until asked for, no image preselected.
+  // Armbian next to Windows (boards.ts hybrid): off until asked for, no image preselected.
   const [withArmbian, setWithArmbian] = useState(false);
+  // ROCK 4D: the SD card Armbian goes onto, beside the NVMe drive Windows goes onto.
+  const [sdDrive, setSdDrive] = useState<string | null>(null);
   const [hybridId, setHybridId] = useState<string | null>(null);
   const [hybridFound, setHybridFound] = useState<ArmbianChoice | { error: string } | 'looking' | null>(null);
   const [armbianGb, setArmbianGb] = useState('24');
@@ -262,10 +267,15 @@ export function App() {
   // board's usual eMMC size, or the chosen drive's; the plan on the real size is checked again when writing.
   const staged = method === 'stage';
   const gbToBytes = (v: string) => (/^\d+(\.\d+)?$/.test(v.trim()) ? Math.round(Number(v) * 1024) * MiB : NaN);
-  // Armbian next to Windows: the eMMC, staged over MaskROM, on a board whose firmware has "Armbian (U-Boot)".
-  const hybridPossible = !!board?.armbianOnce && !!board && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && staged && dest === 'emmc' && !onBoard;
+  // Armbian next to Windows, started by the firmware's "Armbian (U-Boot)" (boards.ts hybrid): on the TaishanPi 3M
+  // both on the eMMC, staged over MaskROM; on the ROCK 4D Windows on the NVMe drive and Armbian on an SD card.
+  const hybridKind = board?.hybrid ?? null;
+  const hybridPossible = !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard
+    && (hybridKind === 'one-emmc' ? staged && dest === 'emmc' : dest === 'nvme');
   const hybridOn = hybridPossible && withArmbian;
-  const layoutChoice: LayoutChoice | undefined = !staged || layoutMode === 'whole' || hybridOn ? undefined : {
+  const hybridEmmc = hybridOn && hybridKind === 'one-emmc';
+  const hybridSd = hybridOn && hybridKind === 'nvme-and-sd';
+  const layoutChoice: LayoutChoice | undefined = !staged || layoutMode === 'whole' || hybridEmmc ? undefined : {
     windowsBytes: gbToBytes(winGb), rest, dataLabel, linuxReserveBytes: linuxGb.trim() === '' ? 0 : gbToBytes(linuxGb),
   };
   const layoutDisk = dest === 'emmc' ? (board?.emmc?.bytes ?? null) : (drives?.find((x) => x.device === disk)?.size ?? null);
@@ -285,7 +295,7 @@ export function App() {
   const rkTools = rkToolsOn && toolsThere;
   const skipOn = skip && mode !== 'simple';
   const setup: SetupOptions = { skipSetup: skipOn ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}),
-    ...(anyTrim(trim) ? { trim } : {}), ...(rkTools ? { rkTools: true } : {}) };
+    ...(anyTrim(trim) ? { trim } : {}), ...(rkTools ? { rkTools: true } : {}), ...(hybridSd ? { armbianOnSd: true } : {}) };
   const accountErr = skipOn ? accountProblem(account) : null;
   const passwordMismatch = skipOn && account.password !== password2;
   const keyErr = ssh ? sshKeyProblem(sshKey) : null;
@@ -293,7 +303,7 @@ export function App() {
   const armbianBytes = gbToBytes(armbianGb);
   const armbianMin = hybridChoice ? minArmbianBytes(hybridChoice.imageBytes ?? 0, hybridChoice.desktop) : MIN_ARMBIAN_BYTES;
   const armbianMax = layoutFree ? Math.floor((layoutFree - (ESP_MIB + MSR_MIB + 2) * MiB - MIN_WINDOWS_CHOSEN) / GiB) * GiB : null;
-  const hybridErr = !hybridOn ? null : Number.isNaN(armbianBytes) ? t('layout.number')
+  const hybridErr = !hybridEmmc ? null : Number.isNaN(armbianBytes) ? t('layout.number')
     : armbianBytes < armbianMin ? t('hybrid.size.small', { min: `${(armbianMin / GiB).toFixed(0)} GB` })
       : armbianMax !== null && armbianBytes > armbianMax ? t('hybrid.size.large', { max: `${(armbianMax / GiB).toFixed(0)} GB` }) : null;
   const hybridReady = !hybridOn || (!!hybridChoice && !hybridErr);
@@ -306,8 +316,10 @@ export function App() {
     return () => { live = false; };
   }, [hybridOn, boardId, hybridId]);
 
+  const refreshDisks = () => refreshDrives(board?.hybrid === 'nvme-and-sd' && withArmbian ? SD_MIN : DISK_MIN);
   const refreshDrives = (min = 600e6) => { setDrives(null); api.listDrives(min).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
   const onPc = task === 'windows' && dest !== 'emmc';
+  const diskChoices = (drives ?? []).filter((x) => x.size >= DISK_MIN);
   // Written to an SD card or USB drive of this computer, not to the board: Armbian on a card, the SD card firmware.
   const driveTask = (task === 'armbian' && restoreTo === 'drive') || task === 'uefi-sd';
   const sdRelease = releases?.firmware && boardId ? releases.firmware.sdcard?.[boardId] : undefined;
@@ -406,7 +418,7 @@ export function App() {
         if (m.stage === 'write' || m.stage === 'check' || m.stage === 'reset') setStage('board', { percent: 100, note: t('run.connected') });
         if (m.stage === 'check') setStage('write', { percent: 100, note: t('run.written') });
         const target = m.stage === 'write' ? 'write' : m.stage === 'check' || m.stage === 'reset' ? 'check' : 'board';
-        setStage(target, { note: t(`stage.${m.stage as RegionStage}`) });
+        setStage(target, { note: t(m.stage === 'probe' && board && !board.emmc ? 'stage.probe.spinor' : `stage.${m.stage as RegionStage}`) });
       } else if (m.type === 'progress') {
         setStage('write', { percent: Math.min(100, Math.floor((m.done * 100) / Math.max(1, m.total))), note: t('run.of', { done: formatBytes(m.done), total: formatBytes(m.total) }) });
       } else if (m.type === 'backup') {
@@ -466,6 +478,7 @@ export function App() {
       finish(resultOf(r, t('result.stick'), [t('next.stick.1'), t('next.stick.2')]));
       return;
     }
+    if (task === 'windows' && hybridSd) { await startHybridSd(board); return; }
     if (task === 'windows' && (dest !== 'emmc' || method === 'host')) {
       const req = { target: dest, boardId: board.id, windowsToken: windows!.token, index: index!, setup, drivers: drivers?.token ?? null };
       if (method === 'host') {
@@ -532,7 +545,7 @@ export function App() {
         { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
         { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
         ...(ssh || drivers || trim.chrome || rkTools || packageThere ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
-        ...(hybridOn ? [{ id: 'armbian', label: t('run.restore.armbian'), percent: null }] : []),
+        ...(hybridEmmc ? [{ id: 'armbian', label: t('run.restore.armbian'), percent: null }] : []),
         { id: 'board', label: t('run.board'), percent: null },
         { id: 'write', label: t('run.write'), percent: 0 },
         { id: 'check', label: t('run.check'), percent: null },
@@ -544,11 +557,11 @@ export function App() {
         winpe: { url: s.winpe.url, size: s.winpe.size },
         image: { url: s.image.url, size: s.image.size, extents: windows!.extents, name: windows!.imageName, imageSize: windows!.imageSize,
           sha256: hash.sha256, index: ed.index, edition: ed.name, build: ed.build ?? 0 },
-        ...(hybridOn && s.armbian ? { armbian: { url: s.armbian.url, size: s.armbian.size, partitionBytes: armbianBytes, label: hybridChoice?.file ?? s.armbian.name } } : {}),
+        ...(hybridEmmc && s.armbian ? { armbian: { url: s.armbian.url, size: s.armbian.size, partitionBytes: armbianBytes, label: hybridChoice?.file ?? s.armbian.name } } : {}),
       }), [
         { id: 'winpe', get: () => api.prepareWinpe() },
         { id: 'image', get: () => api.serveWindows(windows!.token) },
-        ...(hybridOn ? [{ id: 'armbian', get: () => api.prepareArmbian(board.id, hybridId!) }] : []),
+        ...(hybridEmmc ? [{ id: 'armbian', get: () => api.prepareArmbian(board.id, hybridId!) }] : []),
       ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, ...(packageThere ? { boardId: board.id } : {}) });
       return;
     }
@@ -560,6 +573,58 @@ export function App() {
     ] });
     await startMaskrom((s) => ({ kind: 'firmware', boardId: board.id, targetId: task, image: { url: s.fw.url, size: s.fw.size }, spotCheck: true, resetAfter: true }),
       [{ id: 'fw', get: () => api.prepareFirmware(board.id) }], null);
+  };
+
+  /**
+   * Read-only over MaskROM: does the board's SPL start Armbian once from the SD card (armbian-once.ts)?
+   * The run's 'board' stage shows it; the promise ends with the worker's result.
+   */
+  const checkArmbianOnce = async (b: WoaBoard): Promise<RegionResult> => {
+    const loader = await api.getLoader(LOADER);
+    if ('error' in loader) return { ok: false, written: 0, reason: t('result.loader'), detail: loader.error };
+    const w = new Worker(api.testWorker ?? 'woa-worker.js', { type: 'module' });
+    worker.current = w;
+    const at = (p: string) => new URL(p, document.baseURI).href;
+    return new Promise<RegionResult>((resolve) => {
+      const done = (r: RegionResult) => { w.terminate(); worker.current = null; resolve(r); };
+      w.onmessage = (e: MessageEvent<WoaWorkerEvent>) => {
+        const m = e.data;
+        if (m.type === 'log') addLog(m.line);
+        else if (m.type === 'stage' && m.stage !== 'write' && m.stage !== 'confirm') setStage('board', { note: t(m.stage === 'probe' ? 'stage.probe.spinor' : `stage.${m.stage as RegionStage}`) });
+        else if (m.type === 'result') done(m.result);
+      };
+      w.onerror = (e) => done({ ok: false, written: 0, reason: t('result.workerStopped'), detail: e.message });
+      w.postMessage({ type: 'woa-start', job: { kind: 'armbian-once-check', boardId: b.id, resetAfter: true },
+        moduleUrl: at('wasm/rkdeveloptool.js'), wasmUrl: at('wasm/rkdeveloptool.wasm'), loaderUrl: loader.url } satisfies WoaWorkerRequest);
+    });
+  };
+
+  /**
+   * ROCK 4D, Armbian next to Windows: check the board's firmware over MaskROM (nothing is written when it
+   * cannot start Armbian), then Windows onto the NVMe drive as without Armbian, then Armbian's own image
+   * onto the SD card (downloaded and checked as for "Armbian onto an SD card").
+   */
+  const startHybridSd = async (b: WoaBoard) => {
+    const req = { target: dest, boardId: b.id, windowsToken: windows!.token, index: index!, setup, drivers: drivers?.token ?? null };
+    setRun({ title: t('run.hybridSd'), log: [], confirm: null, result: null, stages: [
+      { id: 'board', label: t('run.hybridSd.check', { board: b.name }), percent: null },
+      { id: 'write', label: method === 'host' ? t('run.host.disk') : t('run.stagingDisk.stage'), percent: method === 'host' ? null : 0 },
+      { id: 'sd', label: t('run.hybridSd.sd'), percent: 0 },
+    ] });
+    const c = await checkArmbianOnce(b);
+    if (!c.ok) { finish(resultOf(c, '')); return; }
+    setStage('board', { percent: 100, note: t('run.hybridSd.checked') });
+    if (method === 'host') {
+      const off = api.onProgress((p) => { if (p.note) addLog(p.note); setStage('write', { note: p.note ?? t(`progress.${p.stage}`, { done: formatBytes(p.bytes), total: formatBytes(p.total) }) }); });
+      const r = await api.hostBuild({ ...req, device: disk! }).finally(off);
+      if (!r.ok) { finish({ ok: false, title: errorText(r.reason), ...(r.detail ? { detail: r.detail } : {}) }); return; }
+    } else {
+      const r = await withProgress('write', () => api.writeBoard({ kind: 'stage-disk', ...req, target: dest as 'sd' | 'nvme', device: disk! }));
+      if (!r.ok) { finish(resultOf(r, '')); return; }
+    }
+    setStage('write', { percent: 100, note: t('run.written') });
+    const a = await withProgress('sd', () => api.writeDrive({ kind: 'armbian', board: b.id, id: hybridId!, device: sdDrive! }));
+    finish(resultOf(a, t('result.hybridSd'), [t('next.disk.nvme'), t('next.hybridSd.windows'), t('next.hybridSd.card'), t('next.hybridSd.armbian'), t('next.hybridSd.keep'), t('next.stage.4')]));
   };
 
   // While a write runs, closing the window asks first (main.ts), in the page's language.
@@ -614,7 +679,7 @@ export function App() {
                 if (!b.windowsTargets.includes(dest)) setDest(b.windowsTargets[0]);
                 if ((task === 'uefi' || task === 'uefi-keep') && !firmwareTargets(b).some((x) => x.id === task)) setTask(null);
                 if (task === 'uefi-sd' && !releases?.firmware?.sdcard?.[b.id]) setTask(null);
-                if ((task === 'armbian' || task === 'factory') && !ARMBIAN_RESTORE[b.id]) setTask(null);
+                if ((task === 'armbian' || task === 'factory') && (!ARMBIAN_RESTORE[b.id] || !b.emmc)) setTask(null);
                 setFactory(null);
                 setUpgrade(null);
                 if (task === 'upgrade' && b.firmwareStorage !== 'emmc') setTask(null);
@@ -665,7 +730,8 @@ export function App() {
               description={t(`sd.boot.${board.sdBoot}.uefi`, { board: board.name })} />
           )}
         </FormGroup>
-        {ARMBIAN_RESTORE[board.id] && (
+        {/* Armbian alone and the factory restore write the eMMC; a board without one gets Armbian only next to Windows. */}
+        {ARMBIAN_RESTORE[board.id] && board.emmc && (
           <FormGroup role="radiogroup" fieldId="task-other" label={t('task.group.other')} isStack>
             <Radio id="task-armbian" name="task" label={t('task.armbian')} isChecked={task === 'armbian'} isDisabled={onBoard}
               onChange={() => setTask('armbian')} description={onBoard ? t('task.restore.here') : t('task.armbian.short')} />
@@ -681,7 +747,7 @@ export function App() {
             {board.windowsTargets.map((x) => (x === 'emmc'
               ? <Radio key={x} id="dest-emmc" name="dest" label={t('dest.emmc')} isChecked={dest === 'emmc'} onChange={() => setDest('emmc')} description={t('dest.emmc.desc')} />
               : <Radio key={x} id={`dest-${x}`} name="dest" label={t(`dest.${x}`)} isChecked={dest === x} isDisabled={onBoard}
-                onChange={() => { setDest(x); setDisk(null); refreshDrives(30e9); }}
+                onChange={() => { setDest(x); setDisk(null); refreshDisks(); }}
                 description={x === 'sd' ? t(`dest.sd.desc.${board.sdBoot}`, { board: board.name }) : t('dest.nvme.desc', { board: board.name })} />))}
           </FormGroup>
           {/* Built on this PC needs a Windows PC (DISM); elsewhere the board installs, and that is said once, not offered greyed out. */}
@@ -960,7 +1026,7 @@ export function App() {
     const rows: Array<[string, string]> = [];
     if (dest === 'emmc') rows.push([t('layout.part.firmware'), t('layout.size.kept', { size: '64 MiB' })]);
     rows.push([t('layout.part.esp'), '260 MiB'], [t('layout.part.msr'), '16 MiB']);
-    if (hybridOn) {
+    if (hybridEmmc) {
       const win = layoutFree && !Number.isNaN(armbianBytes) ? layoutFree - (ESP_MIB + MSR_MIB) * MiB - armbianBytes : null;
       rows.push([t('layout.part.windows'), win !== null && win > 0 ? GBs(win) : t('layout.size.rest')]);
       rows.push([t('layout.part.armbian'), Number.isNaN(armbianBytes) ? '?' : GBs(armbianBytes)]);
@@ -986,8 +1052,16 @@ export function App() {
   const hybridOffers = offerList;
   const hybridGroup = hybridPossible && (
     <FormSection title={t('hybrid.title')} titleElement="h3">
-      <Checkbox id="hybrid-on" label={t('hybrid.on')} description={t('hybrid.on.desc')} isChecked={withArmbian}
-        onChange={(_e, v) => { setWithArmbian(v); if (v) setHybridId(null); }} />
+      <Checkbox id="hybrid-on" label={t(hybridKind === 'nvme-and-sd' ? 'hybrid.on.sd' : 'hybrid.on')}
+        description={t(hybridKind === 'nvme-and-sd' ? 'hybrid.on.sd.desc' : 'hybrid.on.desc')} isChecked={withArmbian}
+        onChange={(_e, v) => { setWithArmbian(v); if (v) { setHybridId(null); setSdDrive(null); if (dest !== 'emmc') refreshDrives(SD_MIN); } }} />
+      {/* The ROCK 4D: what the firmware must have, said before anything is chosen; the app checks it over MaskROM. */}
+      {hybridKind === 'nvme-and-sd' && (
+        <Alert isInline variant="warning" id="hybrid-firmware" title={t('hybrid.sd.fw.title')}>
+          <Content component="p">{t('hybrid.sd.fw.text', { board: board?.name ?? '' })}</Content>
+          <Content component="p">{t('hybrid.sd.flow', { board: board?.name ?? '' })}</Content>
+        </Alert>
+      )}
       {hybridOn && (
         <>
           <FormGroup role="radiogroup" fieldId="hybrid-image" label={t('hybrid.image')} isRequired isStack>
@@ -996,14 +1070,14 @@ export function App() {
             {hybridOffers.map((o) => (
               <Radio key={o.id} id={`hybrid-${o.id}`} name="hybrid-image" isChecked={hybridId === o.id} onChange={() => setHybridId(o.id)}
                 label={`${offerWords(o)}, ${distroWords(o.distro)}`}
-                description={t('hybrid.image.desc', { kernel: o.kernel, branch: o.branch, size: formatBytes(o.size) })} />
+                description={t('hybrid.image.desc', { kernel: o.kernel, branch: o.branch, size: formatBytes(o.size) }) + (o.nightly ? ` ${t('hybrid.image.nightly')}` : '')} />
             ))}
             <FormHelperText><HelperText><HelperTextItem variant={hybridId ? 'default' : 'warning'}>{hybridId ? t('hybrid.image.help') : t('why.hybrid.pick')}</HelperTextItem></HelperText></FormHelperText>
           </FormGroup>
           {hybridFound === 'looking' && <Content component="p">{t('restore.looking')}</Content>}
           {hybridFound && typeof hybridFound === 'object' && 'error' in hybridFound && <Alert isInline variant="danger" title={errorText(hybridFound.error)} />}
           {hybridChoice && <Content component="p" className="muted">{t('hybrid.found', { file: hybridChoice.file, image: hybridChoice.imageBytes === null ? '?' : formatBytes(hybridChoice.imageBytes) })}</Content>}
-          <FormGroup label={t('hybrid.size')} fieldId="hybrid-size" isRequired>
+          {hybridEmmc && <FormGroup label={t('hybrid.size')} fieldId="hybrid-size" isRequired>
             {armbianMax !== null && armbianMax > armbianMin && (
               <Slider id="hybrid-slider" value={Number.isNaN(armbianBytes) ? armbianMin / GiB : armbianBytes / GiB} min={Math.floor(armbianMin / GiB)} max={armbianMax / GiB} step={1}
                 showBoundaries onChange={(_e, v) => setArmbianGb(String(Math.round(v)))} aria-label={t('hybrid.size')} />
@@ -1011,9 +1085,10 @@ export function App() {
             <TextInput id="hybrid-size" value={armbianGb} onChange={(_e, v) => setArmbianGb(v)} type="text" inputMode="decimal" validated={hybridErr ? 'error' : 'default'} />
             <FormHelperText><HelperText><HelperTextItem variant={hybridErr ? 'error' : 'default'}>{hybridErr
               ?? t('hybrid.size.help', { min: `${(armbianMin / GiB).toFixed(0)} GB`, max: armbianMax === null ? '?' : `${(armbianMax / GiB).toFixed(0)} GB` })}</HelperTextItem></HelperText></FormHelperText>
-          </FormGroup>
+          </FormGroup>}
+          {hybridSd && <Content component="p" id="hybrid-sd-size">{t('hybrid.sd.size', { need: hybridChoice?.minBytes ? formatBytes(hybridChoice.minBytes) : '?' })}</Content>}
           <FormGroup role="radiogroup" fieldId="hybrid-default" label={t('hybrid.default')} isStack>
-            <Radio id="hybrid-default-windows" name="hybrid-default" label="Windows" isChecked onChange={() => undefined} description={t('hybrid.default.windows')} />
+            <Radio id="hybrid-default-windows" name="hybrid-default" label="Windows" isChecked onChange={() => undefined} description={t(hybridSd ? 'hybrid.default.windows.sd' : 'hybrid.default.windows')} />
             <Radio id="hybrid-default-armbian" name="hybrid-default" label="Armbian" isChecked={false} isDisabled onChange={() => undefined} description={t('hybrid.default.armbian')} />
           </FormGroup>
           <Alert isInline variant="info" title={t('hybrid.first.title')}>{t('hybrid.first.text')}</Alert>
@@ -1023,13 +1098,13 @@ export function App() {
   );
   const layoutGroup = staged && (
     <FormSection title={t('layout.label')} titleElement="h3">
-      {!hybridOn && <FormGroup role="radiogroup" fieldId="layout" label={t('layout.size')} isStack>
+      {!hybridEmmc && <FormGroup role="radiogroup" fieldId="layout" label={t('layout.size')} isStack>
         <Radio id="layout-whole" name="layout" label={t('layout.whole')} isChecked={layoutMode === 'whole'} onChange={() => setLayoutMode('whole')} description={t('layout.whole.desc')} />
         <Radio id="layout-custom" name="layout" label={t('layout.custom')} isChecked={layoutMode === 'custom'} isDisabled={!customPossible}
           onChange={() => { setLayoutMode('custom'); if (!winGb && layoutMaxWin) setWinGb(String(Math.max(32, Math.floor(layoutMaxWin / GiB / 2)))); }}
           description={customPossible ? t('layout.custom.desc', { min: GBs(MIN_WINDOWS_CHOSEN) }) : t('layout.custom.tooSmall', { min: GBs(MIN_WINDOWS_CHOSEN) })} />
       </FormGroup>}
-      {layoutMode === 'custom' && !hybridOn && (
+      {layoutMode === 'custom' && !hybridEmmc && (
         <>
           <FormGroup label={t('layout.windowsSize')} fieldId="layout-win" isRequired>
             <TextInput id="layout-win" value={winGb} onChange={(_e, v) => setWinGb(v)} type="text" inputMode="decimal" validated={layoutErr ? 'error' : 'default'} />
@@ -1148,7 +1223,8 @@ export function App() {
     </StepPage>
   );
 
-  const maskromCard = board && !onBoard && task !== 'stick' && !driveTask && !onPc && (
+  // The ROCK 4D's Armbian next to Windows reads the board's firmware over MaskROM first, though Windows goes to a drive.
+  const maskromCard = board && !onBoard && task !== 'stick' && !driveTask && (!onPc || hybridSd) && (
     <Card>
       <CardTitle>{t('maskrom.title')}</CardTitle>
       <CardBody>
@@ -1186,12 +1262,17 @@ export function App() {
         ...(hybridOn ? [[t('review.armbian'), hybridChoice ? t('review.armbian.value', { what: `${offerWords(hybridChoice)}, ${distroWords(hybridChoice.distro)}`, version: hybridChoice.version, kernel: hybridChoice.kernel }) : t('review.notChosen')] as [string, string]] : []),
         ...(staged ? [[t('layout.label'), layoutDisk ? layoutRows().map(([k, v]) => `${k}: ${v}`).join('; ') : t('layout.preview.later')] as [string, string]] : []),
         [t('review.erased'), dest === 'emmc' ? t('review.erased.windows') : disk ? t('review.erased.disk', { drive: drives?.find((x) => x.device === disk)?.description ?? disk }) : t('review.disk.choose')],
+        ...(hybridSd ? [
+          [t('review.erased.sd.label'), sdDrive ? t('review.erased.disk', { drive: drives?.find((x) => x.device === sdDrive)?.description ?? sdDrive }) : t('review.sd.choose')],
+          [t('review.hybrid.check'), t('review.hybrid.check.value', { board: board.name })],
+        ] as Array<[string, string]> : []),
         ...(method === 'stage' ? [
-          [t('review.written'), t('review.written.windows', { size: windows ? formatBytes(windows.imageSize + 560e6) : '' }) + (onBoard || dest !== 'emmc' ? '' : t('review.written.maskrom'))],
-          [t('review.checked'), onBoard || dest !== 'emmc' ? t('review.checked.here') : t('review.checked.maskrom')],
-          [t('review.then'), t('review.then.windows') + (hybridOn ? ` ${t('review.then.armbian')}` : '')],
+          [t('review.written'), t(dest === 'emmc' ? 'review.written.windows' : `review.written.windows.${dest}`, { size: windows ? formatBytes(windows.imageSize + 560e6) : '' }) + (onBoard || dest !== 'emmc' ? '' : t('review.written.maskrom'))],
+          [t('review.checked'), dest !== 'emmc' ? t('review.checked.disk') : onBoard ? t('review.checked.here') : t('review.checked.maskrom')],
+          [t('review.then'), t(dest === 'emmc' ? 'review.then.windows' : 'review.then.windows.disk') + (hybridSd ? ` ${t('review.then.armbian.sd')}` : hybridOn ? ` ${t('review.then.armbian')}` : '')],
         ] as Array<[string, string]> : [
           [t('review.checked'), dest === 'emmc' ? t('review.checked.host.emmc') : t('review.checked.host.disk')],
+          ...(hybridSd ? [[t('review.then'), t('review.then.armbian.sd')] as [string, string]] : []),
         ] as Array<[string, string]>),
       ] as Array<[string, string]>));
       if (!edition) why = t('why.windows');
@@ -1200,7 +1281,8 @@ export function App() {
       if (!releases?.winpe) why = t('why.winpe');
       if (onBoard && here?.emmcRefusal) why = msg(here.emmcRefusal);
       if (dest !== 'emmc' && !disk) why = t('review.disk.choose');
-      goLabel = onBoard || dest !== 'emmc' || method === 'host' ? t('go.erase') : t('go.connect');
+      else if (hybridSd && (!sdDrive || sdDrive === disk)) why = t('review.sd.choose');
+      goLabel = hybridSd ? t('go.connect') : onBoard || dest !== 'emmc' || method === 'host' ? t('go.erase') : t('go.connect');
     } else if (task === 'upgrade') {
       reviewRows = reviewRows.concat([
         [t('review.firmware'), upgradeReady ? `${upgrade.version ?? t('upgrade.noVersion')} (${upgrade.origin})` : t('review.notChosen')],
@@ -1261,11 +1343,12 @@ export function App() {
 
   const erases = task !== 'upgrade';
   const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
-    : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
+    : hybridSd ? t('ask.hybridSd.title') : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
     : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
   const askText = !board || !task ? '' : driveTask ? t('ask.drive.text', { drive: drives?.find((x) => x.device === stick)?.description ?? stick ?? '' })
     : restoreTask ? t('ask.restore.text')
     : task === 'stick' ? t('ask.stick.text')
+    : hybridSd ? t('ask.hybridSd.text', { board: board.name, drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '', card: drives?.find((x) => x.device === sdDrive)?.description ?? sdDrive ?? '' })
     : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
       : task === 'windows' && method === 'host' ? t('ask.host.text')
     : onBoard ? `${here?.emmc && (task === 'windows' || board.firmwareStorage === 'emmc') ? `${here.emmc.model}, ${here.emmc.device}, ${GB(here.emmc.bytes)}. ` : ''}${task === 'windows' ? t('ask.here.windows') : ''}${t('ask.here.password')}`
@@ -1277,12 +1360,29 @@ export function App() {
       {onPc && (
         <FormGroup role="radiogroup" fieldId="disk" label={t(`review.drive.${dest}`)} isStack>
           {drives === null ? <Content component="p">{t('review.usb.looking')}</Content>
-            : drives.length === 0 ? <Content component="p">{t('review.drive.none')}</Content>
-              : drives.map((x) => (
-                <Radio key={x.device} id={`disk-${x.device}`} name="disk" isChecked={disk === x.device} onChange={() => setDisk(x.device)}
-                  label={`${x.description} (${formatBytes(x.size)})`} description={x.device} />
+            : diskChoices.length === 0 ? <Content component="p">{t('review.drive.none')}</Content>
+              : diskChoices.map((x) => (
+                <Radio key={x.device} id={`disk-${x.device}`} name="disk" isChecked={disk === x.device} isDisabled={hybridSd && sdDrive === x.device}
+                  onChange={() => setDisk(x.device)} label={`${x.description} (${formatBytes(x.size)})`} description={x.device} />
               ))}
-          <Button variant="link" isInline onClick={() => refreshDrives(30e9)}>{t('refresh')}</Button>
+          <Button variant="link" isInline onClick={refreshDisks}>{t('refresh')}</Button>
+        </FormGroup>
+      )}
+      {/* ROCK 4D: the second drive, the SD card Armbian goes onto. */}
+      {hybridSd && (
+        <FormGroup role="radiogroup" fieldId="sd-drive" label={t('review.drive.armbianSd')} isStack>
+          {drives === null ? <Content component="p">{t('review.usb.looking')}</Content>
+            : drives.length === 0 ? <Content component="p">{t('review.usb.none')}</Content>
+              : drives.map((x) => {
+                const small = !!hybridChoice?.minBytes && x.size < hybridChoice.minBytes;
+                const taken = x.device === disk;
+                return (
+                  <Radio key={x.device} id={`sd-${x.device}`} name="sd-drive" isChecked={sdDrive === x.device && !small && !taken} isDisabled={small || taken}
+                    onChange={() => setSdDrive(x.device)} label={`${x.description} (${formatBytes(x.size)})`}
+                    description={taken ? t('drive.forWindows', { device: x.device }) : small ? t('drive.tooSmall', { device: x.device, need: formatBytes(hybridChoice!.minBytes!) }) : x.device} />
+                );
+              })}
+          <Button variant="link" isInline onClick={refreshDisks}>{t('refresh')}</Button>
         </FormGroup>
       )}
       {(task === 'stick' || driveTask) && (
@@ -1353,7 +1453,7 @@ export function App() {
     : task === 'factory' ? !!factory && !factory.refuse
     : task === 'upgrade' ? upgradeReady : false;
   const [understood2, setUnderstood2] = useState(false);
-  useEffect(() => { setUnderstood2(false); setUnderstood(false); }, [task, boardId, dest, disk, stick, method, restoreTo]);
+  useEffect(() => { setUnderstood2(false); setUnderstood(false); }, [task, boardId, dest, disk, stick, method, restoreTo, sdDrive, withArmbian]);
   const term = (word: string, help: string) => (
     <>
       {word}{' '}

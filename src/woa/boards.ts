@@ -20,6 +20,9 @@ export type WindowsTarget = 'emmc' | 'sd' | 'nvme';
  */
 export type SdBoot = 'bootrom-emmc-first' | 'spl-on-emmc' | 'spi-firmware';
 
+/** Where Windows and Armbian go when both are installed (WoaBoard.hybrid). */
+export type HybridLayout = 'one-emmc' | 'nvme-and-sd';
+
 export interface WoaBoard {
   id: BoardId;
   name: string;
@@ -44,11 +47,18 @@ export interface WoaBoard {
   /** Windows has started on this board (with the released firmware). */
   windowsBooted: boolean;
   /**
-   * The firmware has the one-shot boot option "Armbian (U-Boot)" (edk2-rk3576
-   * RK_ARMBIAN_ONCE_ENABLE, docs/ARMBIAN-CHAINLOAD.md), and the eMMC has room
-   * for Windows and Armbian: Armbian can be installed next to Windows.
+   * Armbian next to Windows, started by the firmware's one-shot boot option
+   * "Armbian (U-Boot)" (edk2-rk3576 RK_ARMBIAN_ONCE_ENABLE,
+   * docs/ARMBIAN-CHAINLOAD.md), or null when the board cannot have both:
+   * - one-emmc: both on the eMMC; Armbian's U-Boot goes into the firmware's
+   *   slot at eMMC sector 0x10000 (TaishanPi 3M).
+   * - nvme-and-sd: Windows on the NVMe drive, Armbian on the SD card (its
+   *   U-Boot at sector 0x4000 of the card, the request at sector 0x3FFF of
+   *   the card). The firmware's SPL must carry the one-shot
+   *   (PcdArmbianOnceRequestOnSd, the SPL with CONFIG_SPL_ROCKCHIP_ARMBIAN_ONCE_SD_REQUEST),
+   *   which the app checks over MaskROM before writing (armbian-once.ts).
    */
-  armbianOnce: boolean;
+  hybrid: HybridLayout | null;
   /** How to get into MaskROM: a button, or two pads to short (with F4 in the firmware once it runs). */
   maskromEntry: 'button' | 'pads';
   /** Where the board maker publishes the factory images (update.img); none for boards without a factory restore. */
@@ -84,7 +94,7 @@ export const WOA_BOARDS: WoaBoard[] = [
     windowsTargets: ['emmc', 'sd'],
     sdBoot: 'spl-on-emmc',
     windowsBooted: true,
-    armbianOnce: true,
+    hybrid: 'one-emmc',
     maskromEntry: 'pads',
     factoryPage: {
       en: 'https://wiki.lckfb.com/en/tspi-3-rk3576/img-download/finished-image.html',
@@ -102,7 +112,7 @@ export const WOA_BOARDS: WoaBoard[] = [
     sdBoot: 'bootrom-emmc-first',
     windowsBooted: true,
     // Its SPL is not built with ArmbianOnce yet, and its 31 GB eMMC has no room for both.
-    armbianOnce: false,
+    hybrid: null,
     maskromEntry: 'button',
     factoryPage: { en: 'https://docs.armsom.org/armsom-cm5-io', zh: 'https://docs.armsom.org/zh/armsom-cm5-io' },
     compatible: ['armsom,cm5-io'],
@@ -119,8 +129,10 @@ export const WOA_BOARDS: WoaBoard[] = [
     sdBoot: 'spi-firmware',
     // Its ACPI tables are not in a release yet.
     windowsBooted: false,
-    // The SPL is on the SPI NOR flash: no one-shot U-Boot (docs/ARMBIAN-CHAINLOAD.md).
-    armbianOnce: false,
+    // The SPL and the firmware are on the SPI NOR flash and there is no eMMC: the one-shot request and
+    // Armbian's U-Boot are on the SD card (docs/ARMBIAN-CHAINLOAD.md "SPI NOR boards"). Only firmware built
+    // with the U-Boot v2026.10 SPL (edk2-rk3576 c81c13f, branch rock4d-parity) has it; the app checks.
+    hybrid: 'nvme-and-sd',
     maskromEntry: 'button',
     compatible: ['radxa,rock-4d'],
     smbios: ['ROCK 4D'],

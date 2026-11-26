@@ -64,6 +64,8 @@ jobs:
         run: xvfb-run -a node scripts/electron-woa-e2e.mjs
       - name: ROCK 4D firmware to the SPI NOR, keeping the UEFI settings, inside Electron against a pretend ROCK 4D
         run: xvfb-run -a node scripts/electron-rock4d-e2e.mjs
+      - name: ROCK 4D Armbian next to Windows (NVMe and SD card), the firmware checked first, inside Electron
+        run: xvfb-run -a node scripts/electron-rock4d-hybrid-e2e.mjs
       - name: A board that goes away, Try again and Report a problem inside Electron
         run: xvfb-run -a node scripts/electron-retry-e2e.mjs
       - name: The RK3576 driver package in the Windows setup step inside Electron

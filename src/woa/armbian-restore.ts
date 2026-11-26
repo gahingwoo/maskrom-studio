@@ -14,6 +14,10 @@
 // DF00FAF1C577104B50BF1D0093D6889F9F0E78D5, docs.armbian.com "Verify image"),
 // whose public key packet is pinned here.
 // (all-images.json, the older index, stopped being updated in 2025-12.)
+// Some boards' images are only nightly builds (armbian/ci releases), behind
+// dl.armbian.com/nightly/<board>/...: on 2026-11-26 the ROCK 4D's vendor
+// images (26.11.0-trunk.140; its edge images are the 26.8.2 release). They
+// are signed with the same key, so they are offered too, marked nightly.
 // Seen 2026-11-24 for both boards, Armbian 26.11.0-trunk.137: Debian trixie
 // minimal (vendor, edge), Ubuntu resolute minimal, GNOME and KDE Plasma
 // (vendor, edge); Armbian promotes trixie vendor minimal and resolute vendor GNOME.
@@ -33,6 +37,8 @@ export interface ArmbianBoard {
 export const ARMBIAN_RESTORE: Partial<Record<BoardId, ArmbianBoard>> = {
   tspi3m: { slug: 'lckfb-taishanpi-3m', page: 'https://www.armbian.com/boards/lckfb-taishanpi-3m' },
   cm5io: { slug: 'armsom-cm5-io', page: 'https://www.armbian.com/boards/armsom-cm5-io' },
+  // Images with mainline U-Boot (v2026.04, FIT at sector 16384) for vendor and edge, checked 2026-11-26.
+  rock4d: { slug: 'radxa-rock-4d', page: 'https://www.armbian.com/boards/radxa-rock-4d' },
 };
 
 export const ARMBIAN_INDEX = 'https://github.armbian.com/armbian-images.json';
@@ -55,6 +61,8 @@ export interface ArmbianOffer {
   date: string;
   /** Armbian marks the images it recommends for the board. */
   promoted: boolean;
+  /** A nightly build (dl.armbian.com/nightly/), not a release. */
+  nightly: boolean;
 }
 
 const NAME_PART = /^[a-z0-9][a-z0-9-]*$/;
@@ -80,15 +88,17 @@ export function parseArmbianIndex(json: unknown, slug: string): ArmbianOffer[] {
     const redirect = str(a.redi_url);
     const id = redirect.slice(redirect.lastIndexOf('/') + 1);
     const want = `${distro[0].toUpperCase()}${distro.slice(1)}_${branch}_${variant}`;
-    if (redirect !== `https://dl.armbian.com/${slug}/${want}` || id !== want) continue;
+    const nightly = redirect === `https://dl.armbian.com/nightly/${slug}/${want}`;
+    if ((redirect !== `https://dl.armbian.com/${slug}/${want}` && !nightly) || id !== want) continue;
     const size = Number(str(a.file_size));
     if (!Number.isFinite(size) || size <= 0) continue;
     const offer: ArmbianOffer = {
       id, distro, branch, variant, desktop: !NO_DESKTOP.has(variant), version: str(a.armbian_version), kernel: str(a.kernel_version),
-      size, date: str(a.file_date).slice(0, 10), promoted: str(a.promoted) === 'true',
+      size, date: str(a.file_date).slice(0, 10), promoted: str(a.promoted) === 'true', nightly,
     };
+    // A release wins over a nightly build of the same image; else the newer one.
     const had = best.get(id);
-    if (!had || offer.date > had.date) best.set(id, offer);
+    if (!had || (had.nightly && !nightly) || (had.nightly === nightly && offer.date > had.date)) best.set(id, offer);
   }
   // Without a desktop first, then the desktops; Armbian's recommended one of each first.
   return [...best.values()].sort((x, y) => Number(x.desktop) - Number(y.desktop) || x.variant.localeCompare(y.variant)
@@ -153,9 +163,9 @@ export function minimumDiskBytes(imageBytes: number, desktop: boolean): number {
 /** The redirect's name in an offer: Distro_branch_variant, no path. */
 export const OFFER_ID = /^[A-Z][a-z0-9]*_[a-z0-9-]+_[a-z0-9-]+$/;
 
-export function armbianRedirect(board: ArmbianBoard, id: string): string {
+export function armbianRedirect(board: ArmbianBoard, id: string, nightly = false): string {
   if (!OFFER_ID.test(id)) throw new Error(`Not an Armbian image name: ${id}`);
-  return `https://dl.armbian.com/${board.slug}/${id}`;
+  return `https://dl.armbian.com/${nightly ? 'nightly/' : ''}${board.slug}/${id}`;
 }
 
 /**
