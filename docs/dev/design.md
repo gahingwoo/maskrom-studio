@@ -296,6 +296,19 @@ trim.ts); the app list is ours (nothing from tiny11builder, which has no
 licence). Never touched: Windows Update itself, activation, drivers,
 WebView2 and Edge Update (WebView2 needs it).
 
+No list may name a framework package (VCLibs, UI.Xaml, .NET Native,
+Windows App Runtime and the like, `FRAMEWORK_PREFIXES`) or an app that
+stays (`KEEP_APPS`). test/trim.test.ts checks the lists against
+test/fixtures/appx-22621-iot-arm64.json, the provisioned packages and their
+dependencies recorded from an IoT Enterprise 22621.2428 ARM64 install.wim.
+
+Notepad, on every install whether trimmed or not (`notepadFixCmd`): that
+image's Notepad app is x64 only and needs Microsoft.UI.Xaml.2.7 for x64,
+which the image does not have (only arm64 and arm), so opening a .txt fails
+with 0x80073CF3. When an image has exactly that, the Notepad app is
+unprovisioned and .txt files open in the classic notepad.exe; the Store
+installs the arm64 Notepad app when wanted.
+
 - Chrome is downloaded from Google at write time (no published checksum:
   the PC checks it is an Arm64 MSI, the board checks the signature). The
   write stops when Chrome is chosen and its installer is missing.

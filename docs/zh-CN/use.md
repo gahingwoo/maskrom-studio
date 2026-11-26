@@ -66,7 +66,7 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows �
 
 ## Windows 第一次进桌面：自检
 
-第一次登录一分半钟后，Windows 检查：设备管理器没有警告（EC20 模块的 MI_04 没有驱动是正常的）、GPU 用 WDDM 2.0 且频率不低于 594 MHz（驱动报告频率时）、有声音输出、网络能解析域名、向系统盘写入 64 MiB 再读回核对。弹窗显示结果，可以打开预先填好的 GitHub 问题报告（不含用户名、计算机名和序列号）；只有你自己提交才会发送。报告也保存在桌面的 `RK3576-selftest.txt`。
+第一次登录一分半钟后，Windows 检查：设备管理器没有警告（EC20 模块的 MI_04 没有驱动是正常的）、GPU 用 WDDM 2.0 且频率不低于 594 MHz（驱动报告频率时）、有声音输出、网络能解析域名、向系统盘写入 64 MiB 再读回核对。弹窗显示完整报告，可以打开预先填好的 GitHub 问题报告（不含用户名、计算机名和序列号）；只有你自己提交才会发送。报告也保存在桌面的 `RK3576-selftest.txt`。
 
 ## 精简 Windows
 
@@ -105,6 +105,22 @@ Windows 也可以装到电脑读卡器里的 SD 卡，或 USB 硬盘盒里的 NV
 ## 每次写入前的备份
 
 在会替换 eMMC 开头部分的写入之前，应用把分区表和固件的 UEFI 设置（如果有）保存到数据文件夹下的 `nvdata-backups/<开发板>-before-write-<时间>/`，附带记录 SHA-256 的 `backup.txt`。确认页和结果页会显示这个文件夹。存不下来就不写入。应用里暂时还不能把备份写回去。
+
+## 已知问题
+
+**打开 .txt 文件时提示 "Package failed updates, dependency or conflict validation."** 出现在此修复之前、用 22621 ARM64 介质安装的开发板上：映像里的记事本应用只有 x64 版，它需要的 x64 框架（Microsoft.UI.Xaml.2.7）不在映像里，所以重新注册这个应用没有用。可以从应用商店安装最新的记事本（arm64）：
+
+```powershell
+Start-Process 'ms-windows-store://pdp/?ProductId=9MSMLRH6LZF3'
+```
+
+或者不联网，删掉这个坏掉的应用，让 .txt 用经典的 notepad.exe 打开（以管理员身份运行 PowerShell）：
+
+```powershell
+Get-AppxPackage -AllUsers Microsoft.WindowsNotepad | Remove-AppxPackage -AllUsers; Get-AppxProvisionedPackage -Online | Where-Object DisplayName -eq Microsoft.WindowsNotepad | Remove-AppxProvisionedPackage -Online
+```
+
+新安装的系统会自动做第二种处理。
 
 ## 出错时
 

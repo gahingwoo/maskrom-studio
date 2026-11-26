@@ -141,7 +141,7 @@ A minute and a half after the first sign-in Windows checks: Device Manager
 without warnings (the EC20 modem's MI_04 having no driver is expected), the
 GPU on WDDM 2.0 at 594 MHz or more where the driver reports its clock, an
 audio output, network with name resolution, and 64 MiB written to the
-system disk and read back. A message box lists the result and can open a
+system disk and read back. A message box shows the whole report and can open a
 prefilled GitHub issue (no user name, computer name or serial numbers);
 nothing is sent unless you submit it. The report is also saved as
 `RK3576-selftest.txt` on the desktop.
@@ -241,6 +241,27 @@ partition table and, when present, the firmware's UEFI settings to
 `backup.txt` of SHA-256 sums. The confirmation and result name the folder.
 If the copy cannot be saved, nothing is written. Putting a copy back is not
 in the app yet.
+
+## Known issues
+
+**Opening a .txt file says "Package failed updates, dependency or conflict
+validation."** Boards installed before this fix, from the 22621 ARM64 media:
+the image's Notepad app is x64 only and the x64 framework it needs
+(Microsoft.UI.Xaml.2.7) is not in the image, so re-registering the app does
+not help. Either install the current Notepad (arm64) from the Store:
+
+```powershell
+Start-Process 'ms-windows-store://pdp/?ProductId=9MSMLRH6LZF3'
+```
+
+or, offline, remove the broken app so .txt files open in the classic
+notepad.exe (PowerShell as administrator):
+
+```powershell
+Get-AppxPackage -AllUsers Microsoft.WindowsNotepad | Remove-AppxPackage -AllUsers; Get-AppxProvisionedPackage -Online | Where-Object DisplayName -eq Microsoft.WindowsNotepad | Remove-AppxProvisionedPackage -Online
+```
+
+New installs do the second one by themselves.
 
 ## When something fails
 

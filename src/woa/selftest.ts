@@ -15,7 +15,8 @@
 // Then a message box: all fine, or the problems with a button that opens a
 // prefilled GitHub issue in the browser. Nothing is sent by itself; the
 // issue text has no user name, computer name, serial numbers or addresses.
-// The report is also saved on the desktop. No NPU test (decided 2026-11-25).
+// The whole report is in the message box (a .txt needs a working Notepad
+// app to open) and is also saved on the desktop. No NPU test (decided 2026-11-25).
 
 export const SELFTEST_FILE = 'woa-selftest.ps1';
 export const ISSUES_URL = 'https://github.com/gahingwoo/maskrom-studio/issues/new';
@@ -106,11 +107,14 @@ $lines += if ($problems.Count) { @('Problems:') + ($problems | ForEach-Object { 
 if ($notes.Count) { $lines += @('', 'Notes:') + ($notes | ForEach-Object { "- $_" }) }
 $report = $lines -join "\`r\`n"
 try { Set-Content -Path (Join-Path ([Environment]::GetFolderPath('Desktop')) 'RK3576-selftest.txt') -Value $report -Encoding UTF8 } catch {}
+# The whole report is in the message box: opening the .txt needs a working
+# Notepad app, which some images do not have (trim.ts, notepadFixCmd).
+$where = T "The report is also on the desktop (RK3576-selftest.txt; notepad.exe opens it)." "报告也保存在桌面上（RK3576-selftest.txt；可用 notepad.exe 打开）。"
 Add-Type -AssemblyName System.Windows.Forms
 if ($problems.Count -eq 0) {
-  [System.Windows.Forms.MessageBox]::Show((T "All checks passed: devices, GPU, audio, network and storage.\`r\`n\`r\`nThe report is on the desktop (RK3576-selftest.txt)." "全部检查通过：设备、GPU、声音、网络和存储。\`r\`n\`r\`n报告在桌面上（RK3576-selftest.txt）。"), (T 'RK3576 self-test' 'RK3576 自检'), 'OK', 'Information') | Out-Null
+  [System.Windows.Forms.MessageBox]::Show((T "All checks passed: devices, GPU, audio, network and storage." "全部检查通过：设备、GPU、声音、网络和存储。") + "\`r\`n\`r\`n" + $report + "\`r\`n\`r\`n" + $where, (T 'RK3576 self-test' 'RK3576 自检'), 'OK', 'Information') | Out-Null
 } else {
-  $text = (T "The self-test found problems:" "自检发现问题：") + "\`r\`n\`r\`n" + (($problems | ForEach-Object { "- $_" }) -join "\`r\`n") + "\`r\`n\`r\`n" + (T "Open a prefilled problem report on GitHub? Nothing is sent until you submit it there." "要在 GitHub 上打开预先填好的问题报告吗？在那里提交之前不会发送任何内容。")
+  $text = (T "The self-test found problems:" "自检发现问题：") + "\`r\`n\`r\`n" + $report + "\`r\`n\`r\`n" + $where + "\`r\`n\`r\`n" + (T "Open a prefilled problem report on GitHub? Nothing is sent until you submit it there." "要在 GitHub 上打开预先填好的问题报告吗？在那里提交之前不会发送任何内容。")
   $r = [System.Windows.Forms.MessageBox]::Show($text, (T 'RK3576 self-test' 'RK3576 自检'), 'YesNo', 'Warning')
   if ($r -eq 'Yes') {
     $body = $report

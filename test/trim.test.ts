@@ -3,9 +3,12 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIGURE } from '../src/woa/stage-scripts';
 import { setupComplete } from '../src/woa/setup-files';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
-  anyTrim, CHROME_MSI, chromeAssociations, EDGE_APP_ID, NO_TRIM, RECOMMENDED_TRIM, STORE_APPS, TRIM_APPS, TRIM_KEYS, trimCmd, WEBVIEW2_APP_ID,
+  anyTrim, CHROME_MSI, COPILOT_APPS, EDGE_APPS, FRAMEWORK_PREFIXES, KEEP_APPS, notepadFixCmd, chromeAssociations, EDGE_APP_ID, NO_TRIM, RECOMMENDED_TRIM, STORE_APPS, TRIM_APPS, TRIM_KEYS, trimCmd, WEBVIEW2_APP_ID,
 } from '../src/woa/trim';
+
 
 /** Parentheses outside quotes balance on every line set, as cmd needs them to. */
 function balanced(script: string): boolean {
@@ -125,5 +128,66 @@ describe('the first start and the install scripts', () => {
     expect(at('call "%STAGE%\\woa-trim.cmd"')).toBeGreaterThan(at('reg unload HKLM\\WOAOFF'));
     expect(CONFIGURE).toContain('cmd /c ""%STAGE%\\rk3576-tools\\offline-install.cmd" W:\\"');
     expect(CONFIGURE).not.toMatch(/offline-install\.cmd" W:\\"? \/hook/);
+  });
+});
+
+// What DISM really holds: test/fixtures/appx-22621-iot-arm64.json, recorded from
+// a Windows 11 IoT Enterprise 22621.2428 ARM64 install.wim (see its comment).
+interface Pkg { name: string; version: string; arch: string; framework: boolean; dependencies: string[] }
+const inv = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'appx-22621-iot-arm64.json'), 'utf8')) as { provisioned: string[]; packages: Pkg[] };
+/** woa-trim.cmd's match: !PKG:<name>_=! changes the full name, case-insensitively, wherever <name>_ is in it. */
+const removedBy = (names: string[], full: string) => names.some((n) => full.toLowerCase().includes(`${n.toLowerCase()}_`));
+const everyList = [...TRIM_APPS, ...COPILOT_APPS, ...STORE_APPS, ...EDGE_APPS];
+
+describe('app removal never takes a framework or what a kept app needs', () => {
+  const frameworks = inv.packages.filter((p) => p.framework).map((p) => p.name);
+  it('the static framework list knows every framework the image has', () => {
+    expect(frameworks.length).toBeGreaterThan(0);
+    for (const f of frameworks) expect(FRAMEWORK_PREFIXES.some((x) => f.startsWith(x))).toBe(true);
+  });
+  it('no list names a framework, by name or by what the match would hit', () => {
+    for (const n of everyList) {
+      expect(FRAMEWORK_PREFIXES.some((x) => n.toLowerCase().startsWith(x.toLowerCase()))).toBe(false);
+      for (const f of frameworks) expect(removedBy([n], `${f}_1.0.0.0_arm64__8wekyb3d8bbwe`)).toBe(false);
+    }
+  });
+  it('no list names a kept app (the Store only through its own option)', () => {
+    for (const k of KEEP_APPS) {
+      for (const n of [...TRIM_APPS, ...COPILOT_APPS, ...EDGE_APPS]) expect(removedBy([n], `${k}_1.0.0.0_neutral_~_8wekyb3d8bbwe`)).toBe(false);
+    }
+  });
+  it('of the provisioned packages, removes only listed apps, and none that a remaining package depends on', () => {
+    const all = { ...RECOMMENDED_TRIM, removeStore: true, removeEdge: true };
+    const names = [...(all.apps ? TRIM_APPS : []), ...COPILOT_APPS, ...STORE_APPS, ...EDGE_APPS];
+    const removed = inv.provisioned.filter((full) => removedBy(names, full)).map((full) => full.split('_')[0]);
+    expect(removed).toContain('Microsoft.BingNews');
+    expect(removed).not.toContain('Microsoft.VCLibs.140.00');
+    expect(removed).not.toContain('Microsoft.WindowsNotepad');
+    const kept = inv.packages.filter((p) => !removed.includes(p.name));
+    for (const p of kept) for (const d of p.dependencies) expect(removed).not.toContain(d);
+  });
+});
+
+describe('Notepad on images whose Notepad app is x64 only', () => {
+  const has = (name: string, arch: string) => inv.packages.some((p) => p.name === name && p.arch === arch);
+  it('the recorded image has exactly that problem: its only unmet dependency', () => {
+    const unmet = inv.packages.filter((p) => !p.framework).flatMap((p) => p.dependencies
+      .filter((d) => !has(d, p.arch) && !has(d, 'neutral')).map((d) => `${p.name} ${p.arch} -> ${d}`));
+    expect(unmet).toEqual(['Microsoft.WindowsNotepad x64 -> Microsoft.UI.Xaml.2.7']);
+  });
+  const cmd = notepadFixCmd();
+  it('unprovisions the app only when it is x64 only, the x64 framework is missing and notepad.exe is there', () => {
+    expect(cmd).toContain('Microsoft.WindowsNotepad_*_x64__8wekyb3d8bbwe');
+    expect(cmd).toContain('Microsoft.WindowsNotepad_*_arm64__8wekyb3d8bbwe');
+    expect(cmd).toContain('Microsoft.UI.Xaml.2.7_*_x64__8wekyb3d8bbwe');
+    expect(cmd).toContain('if defined NP_X64 if not defined NP_ARM64 if not defined XAML27_X64 if exist W:\\Windows\\System32\\notepad.exe (');
+    expect(cmd).toContain('if /i "!NPKG:~0,25!"=="Microsoft.WindowsNotepad_" dism /English /Image:W:\\ /Remove-ProvisionedAppxPackage /PackageName:!NPKG!');
+    expect('Microsoft.WindowsNotepad_'.length).toBe(25);
+    expect(balanced(cmd)).toBe(true);
+    expect(cmd).not.toMatch(/\|/);
+  });
+  it('runs on every install, trimmed or not', () => {
+    expect(CONFIGURE).toContain(cmd);
+    expect(trimCmd(NO_TRIM)).not.toContain('WindowsNotepad');
   });
 });
