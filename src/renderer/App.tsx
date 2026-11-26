@@ -33,8 +33,10 @@ import { MaskromLive } from './maskrom-live';
 import { MIN_ARMBIAN_BYTES, minArmbianBytes } from '../woa/armbian-hybrid';
 import { BOARD_EXTRA_KINDS } from '../woa/driver-package';
 import { FEATURE_KEYS, hasFeature, type FeatureKey } from '../woa/firmware-features';
+import { settingOptions, type SettingOption, type SettingsRequest } from '../woa/uefi-settings';
+import { FlashSettingsPicker, flashLines, SettingsEditor, useSettingWords, type SettingsRead } from './uefi-settings-view';
 
-type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory';
+type Task = 'windows' | 'uefi' | 'uefi-keep' | 'upgrade' | 'uefi-sd' | 'stick' | 'armbian' | 'factory' | 'settings';
 type Via = 'maskrom' | 'here';
 type Dest = 'emmc' | 'sd' | 'nvme';
 type Method = 'stage' | 'host';
@@ -55,15 +57,17 @@ interface Run {
   result: { ok: boolean; title: string; text?: string; detail?: string; next?: string[]; help?: 'noBoard' | 'gone'; reason?: string } | null;
   /** Where the partition table and UEFI settings were kept before the write (pre-write-backup.ts). */
   backup?: string;
+  /** The settings job: what it read, waiting for the page to say what to write (uefi-settings-view.tsx). */
+  settings?: { read: SettingsRead; options: SettingOption[] | null; why: string | null; release: { tag: string | null; firmwareVersion: string | null } } | null;
 }
 interface StageSummary { kind: 'stage'; capacity: number; windowsBytes: number; totalBytes: number; removed: Array<{ name: string; bytes: number }>;
   layout?: { windowsBytes: number; data: { fs: string; label: string; bytes: number } | null; unallocatedBytes: number }; chosen?: boolean;
   armbian?: { bytes: number; label: string } | null }
 interface WholeSummary { kind: 'whole'; label: string; capacity: number | null; bytes: number; clearsBackupGpt: boolean }
 interface FactorySummary { kind: 'factory'; capacity: number | null; chip: string; model: string; version: string; partitions: Array<{ name: string; lba: number; bytes: number }>; skipped: string[]; bytes: number }
-interface UpgradeSummary { kind: 'upgrade'; manufacturer: string | null; capacity: number | null; installed: string | null; next: string | null; settings: 'kept' | 'reset' | 'none'; backup: string | null; nvdataLba: number; nvdataSectors: number; lba: number; bytes: number }
+interface UpgradeSummary { kind: 'upgrade'; manufacturer: string | null; capacity: number | null; installed: string | null; next: string | null; settings: 'kept' | 'reset' | 'none'; backup: string | null; nvdataLba: number; nvdataSectors: number; lba: number; bytes: number; applied?: string[] }
 interface FirmwareSummary { kind: 'firmware'; board: string; target: string; lba: number; bytes: number; capacity: number | null; dropped: Array<{ name: string; bytes: number }>; erases: string;
-  spi?: { next: string | null; installed: string | null; settings: 'kept' | 'none' | 'reset' } }
+  spi?: { next: string | null; installed: string | null; settings: 'kept' | 'none' | 'reset' }; applied?: string[] }
 
 // The time zone starts as the PC's; the language is preselected once the image is known (defaultLanguage).
 const EMPTY_ACCOUNT: Account = { user: '', password: '', computerName: '', locale: '', keyboard: '', timeZone: windowsZoneFor(api.timeZone) ?? '', autoLogonAlways: false };
@@ -163,6 +167,10 @@ export function App() {
   const [upgrade, setUpgrade] = useState<UpgradeImage | 'loading' | null>(null);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [keepSettings, setKeepSettings] = useState(true);
+  // UEFI settings: the release's list for the board (FEATURES.json), and the values to set with a firmware write.
+  const [settingsList, setSettingsList] = useState<{ options: SettingOption[] | null; why: string | null; tag: string | null; firmwareVersion: string | null } | null>(null);
+  const [flashEdits, setFlashEdits] = useState<Record<string, number>>({});
+  const [upgradeFrom, setUpgradeFrom] = useState<'release' | 'file'>('release');
   const [run, setRun] = useState<Run | null>(null);
   const [settings, setSettings] = useState(false);
   const [about, setAbout] = useState(false);
@@ -224,7 +232,26 @@ export function App() {
   const simpleArmbianIds = [...simpleArmbian.desktops.map((o) => o.id), ...(simpleArmbian.cli ? [simpleArmbian.cli.id] : [])];
   const onBoard = via === 'here' && !!here?.boardId && here.boardId === boardId;
   const edition = windows?.editions.find((e) => e.index === index) ?? null;
+  // UEFI settings set with a firmware write over MaskROM (settings-board.ts withFlashSettings, upgrade-plan.ts).
+  const settingWords = useSettingWords();
+  const flashKeep = task === 'upgrade' ? keepSettings : task === 'uefi-keep';
+  const flashPossible = !!boardId && !onBoard && !!settingsList?.options?.length
+    && (task === 'uefi' || task === 'uefi-keep' || (task === 'upgrade' && upgradeFrom === 'release'));
+  const flashOn = flashPossible && Object.keys(flashEdits).length > 0;
+  const flashSettings = flashOn ? { settings: { options: settingsList!.options!, edits: flashEdits } } : {};
   const fwRelease = releases?.firmware && boardId ? releases.firmware.boards[boardId] : undefined;
+  // The release's settings list for the board (FEATURES.json "settings"), for the settings editor and the firmware writes.
+  useEffect(() => {
+    setFlashEdits({});
+    if (!boardId) { setSettingsList(null); return; }
+    let live = true;
+    api.settingsSchema(boardId).then((sc) => {
+      if (!live) return;
+      const o = settingOptions(sc.section);
+      setSettingsList({ options: typeof o === 'string' ? null : o, why: typeof o === 'string' ? o : null, tag: sc.tag, firmwareVersion: sc.firmwareVersion });
+    }).catch(() => { if (live) setSettingsList(null); });
+    return () => { live = false; };
+  }, [boardId, releases]);
   // What the chosen release's image for the board supports (firmware-features.ts): true, false, or null when
   // neither the release (FEATURES.json) nor the built-in table knows.
   const fwHas = (k: FeatureKey): boolean | null => (board ? hasFeature(releases?.firmware?.features, board.id, k) : null);
@@ -434,7 +461,7 @@ export function App() {
     if ('error' in loader) { finish({ ok: false, title: t('result.loader'), detail: loader.error }); return; }
     const settingsNow = await api.getSettings();
     const job = jobFor(served, extraFiles);
-    if (job.kind === 'firmware' || job.kind === 'whole' || job.kind === 'factory' || job.kind === 'upgrade') job.resetAfter = settingsNow.resetAfterMaskrom;
+    if (job.kind === 'firmware' || job.kind === 'whole' || job.kind === 'factory' || job.kind === 'upgrade' || job.kind === 'settings') job.resetAfter = settingsNow.resetAfterMaskrom;
     const w = new Worker(api.testWorker ?? 'woa-worker.js', { type: 'module' });
     worker.current = w;
     const at = (p: string) => new URL(p, document.baseURI).href;
@@ -458,13 +485,20 @@ export function App() {
           if ('path' in r) { const path = r.path; update((x) => ({ ...x, backup: path })); addLog(t(board?.spi ? 'backup.where.spinor' : 'backup.where', { path })); }
           w.postMessage({ type: 'woa-backup-saved', path: 'path' in r ? r.path : null, ...('error' in r ? { error: r.error } : {}) } satisfies WoaWorkerRequest);
         });
+      } else if (m.type === 'settings-read') {
+        setStage('board', { percent: 100, note: t('run.settings.read') });
+        setStage('edit', { note: t('run.settings.waiting') });
+        const l = settingsList;
+        update((r) => ({ ...r, settings: { read: m.read, options: l?.options ?? null, why: l?.why ?? null, release: { tag: l?.tag ?? null, firmwareVersion: l?.firmwareVersion ?? null } } }));
       } else if (m.type === 'planned') {
         update((r) => ({ ...r, confirm: m.summary as Run['confirm'] }));
       } else if (m.type === 'result') {
         w.terminate();
         worker.current = null;
+        const wroteSettings = m.result.ok && (m.result.summary as { written?: boolean } | null)?.written === true;
         const done = resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
           : job.kind === 'upgrade' ? t('result.upgrade')
+          : job.kind === 'settings' ? t(wroteSettings ? 'result.settings' : 'result.settings.none')
           : job.kind === 'whole' ? t('result.restore.armbian') : job.kind === 'factory' ? t('result.restore.factory') : t('result.firmware'),
           job.kind === 'stage' ? STAGE_NEXT : job.kind === 'vhd' ? [t('next.hostEmmc')] : undefined);
         finish(done);
@@ -527,6 +561,17 @@ export function App() {
       finish(resultOf(r, t('result.stagedDisk'), [t(`next.disk.${dest}`), t('next.disk.boot'), ...STAGE_NEXT.slice(1)]));
       return;
     }
+    if (task === 'settings') {
+      const list = settingsList;
+      setRun({ title: t('run.settings'), log: [], confirm: null, result: null, settings: null, stages: [
+        { id: 'board', label: t('run.settings.board'), percent: null },
+        { id: 'edit', label: t('run.settings.edit'), percent: null },
+        { id: 'write', label: t('run.writeTo', { storage: storageWord(board, task) }), percent: 0 },
+        { id: 'check', label: t('run.check.full'), percent: null },
+      ] });
+      await startMaskrom(() => ({ kind: 'settings', boardId: board.id, options: list?.options ?? [], firmwareVersion: list?.firmwareVersion ?? null, resetAfter: true }), [], null);
+      return;
+    }
     if (task === 'upgrade') {
       const up = upgrade as UpgradeImage;
       setRun({ title: t('run.upgrade'), log: [], confirm: null, result: null, stages: [
@@ -535,7 +580,7 @@ export function App() {
         { id: 'write', label: t('run.writeTo', { storage: t('storage.emmc') }), percent: 0 },
         { id: 'check', label: t('run.check.full'), percent: null },
       ] });
-      await startMaskrom(() => ({ kind: 'upgrade', boardId: board.id, image: { url: up.served.url, size: up.served.size }, keepSettings, resetAfter: true }), [], null);
+      await startMaskrom(() => ({ kind: 'upgrade', boardId: board.id, image: { url: up.served.url, size: up.served.size }, keepSettings, resetAfter: true, ...flashSettings }), [], null);
       return;
     }
     if (restoreTask) {
@@ -598,7 +643,7 @@ export function App() {
       { id: 'write', label: t('run.writeTo', { storage: storageWord(board, task) }), percent: 0 },
       { id: 'check', label: t('run.check'), percent: null },
     ] });
-    await startMaskrom((s) => ({ kind: 'firmware', boardId: board.id, targetId: task, image: { url: s.fw.url, size: s.fw.size }, spotCheck: true, resetAfter: true }),
+    await startMaskrom((s) => ({ kind: 'firmware', boardId: board.id, targetId: task, image: { url: s.fw.url, size: s.fw.size }, spotCheck: true, resetAfter: true, ...flashSettings }),
       [{ id: 'fw', get: () => api.prepareFirmware(board.id) }], null);
   };
 
@@ -763,6 +808,10 @@ export function App() {
             </HelperTextItem></HelperText></FormHelperText>
           )}
         </FormGroup>
+        <FormGroup role="radiogroup" fieldId="task-settings" label={t('task.group.settings')} isStack>
+          <Radio id="task-settings" name="task" label={t('task.settings')} isChecked={task === 'settings'} isDisabled={onBoard}
+            onChange={() => setTask('settings')} description={onBoard ? t('task.settings.here') : t('task.settings.short')} />
+        </FormGroup>
         {/* Armbian alone and the factory restore write the eMMC; a board without one gets Armbian only next to Windows. */}
         {ARMBIAN_RESTORE[board.id] && board.emmc && (
           <FormGroup role="radiogroup" fieldId="task-other" label={t('task.group.other')} isStack>
@@ -817,9 +866,15 @@ export function App() {
     </StepPage>
   );
 
+  const flashPicker = flashPossible && (
+    <ExpandableSection id="flash-settings-toggle" toggleText={t('uefi.flash.toggle', { n: Object.keys(flashEdits).length })}>
+      <FlashSettingsPicker options={settingsList!.options!} edits={flashEdits} onChange={setFlashEdits} keep={flashKeep} />
+    </ExpandableSection>
+  );
   const loadUpgrade = async (from: 'release' | 'file') => {
     if (!board) return;
     setUpgradeError(null);
+    setUpgradeFrom(from);
     setUpgrade('loading');
     const r = await api.prepareUpgrade(board.id, from);
     if (!r) { setUpgrade(null); return; }
@@ -858,6 +913,8 @@ export function App() {
             </Flex>
             <Switch id="keep-settings" label={t('upgrade.keep')} isChecked={keepSettings} onChange={(_e, v) => setKeepSettings(v)} />
             <Content component="p" className="muted">{keepSettings ? t('upgrade.keep.desc') : t('upgrade.reset.desc')}</Content>
+            {flashPicker}
+            {upgradeReady && upgradeFrom === 'file' && !!settingsList?.options?.length && <Content component="p" className="muted">{t('uefi.flash.fileOnly')}</Content>}
           </Stack>
         </CardBody>
       </Card>
@@ -1328,10 +1385,19 @@ export function App() {
         [t('review.firmware'), upgradeReady ? `${upgrade.version ?? t('upgrade.noVersion')} (${upgrade.origin})` : t('review.notChosen')],
         [t('review.written'), t('review.upgrade.written')],
         [t('review.upgrade.kept'), keepSettings ? t('review.upgrade.kept.keep') : t('review.upgrade.kept.reset')],
+        ...(flashOn ? [[t('review.uefiSettings'), flashLines(settingsList!.options!, flashEdits, settingWords).join('; ')] as [string, string]] : []),
         [t('review.checked'), t('review.upgrade.checked')],
         [t('review.then'), t('review.upgrade.then')],
-      ]);
+      ] as Array<[string, string]>);
       if (!upgradeReady) why = t('why.upgrade');
+      goLabel = t('go.connect');
+    } else if (task === 'settings') {
+      reviewRows = reviewRows.concat([
+        [t('review.settings.read'), t(board.spi ? 'review.settings.read.spinor' : 'review.settings.read.emmc')],
+        [t('review.settings.list'), settingsList?.options ? t('review.settings.list.value', { tag: settingsList.tag ?? '?', n: settingsList.options.length }) : msg(settingsList?.why ?? t('review.unavailable'))],
+        [t('review.written'), t('review.settings.written')],
+        [t('review.checked'), t('review.settings.checked')],
+      ]);
       goLabel = t('go.connect');
     } else if (driveTask) {
       const drive = stick ? drives?.find((x) => x.device === stick)?.description ?? stick : null;
@@ -1372,9 +1438,10 @@ export function App() {
         [t('review.firmware'), fwRelease ? `edk2-rk3576 ${releases!.firmware!.tier.label}, ${fwRelease.file}${tierWord(releases!.firmware!.tier)}` : t('review.unavailable')],
         [t('review.written'), tg.slice ? t('review.fw.slice', { a: tg.slice[0], b: tg.slice[1], lba: tg.lba }) : t('review.fw.whole', { lba: tg.lba })],
         [t('review.erased'), fwText(board, tg, 'erases')],
+        ...(flashOn ? [[t('review.uefiSettings'), flashLines(settingsList!.options!, flashEdits, settingWords).join('; ')] as [string, string]] : []),
         [t('review.checked'), onBoard ? t('review.checked.fw.here') : board.spi ? t('review.checked.fw.spi') : t('review.checked.fw.maskrom')],
         [t('review.then'), fwText(board, tg, 'done')],
-      ]);
+      ] as Array<[string, string]>);
       if (fwRelease) reviewRows.splice(2, 0, ...fwFeatureRow());
       if (!fwRelease) why = t('why.firmware');
       if (onBoard && board.firmwareStorage === 'emmc' && here?.emmcRefusal) why = msg(here.emmcRefusal);
@@ -1383,7 +1450,7 @@ export function App() {
     }
   }
 
-  const erases = task !== 'upgrade';
+  const erases = task !== 'upgrade' && task !== 'settings';
   const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
     : hybridSd ? t('ask.hybridSd.title') : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
     : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
@@ -1442,6 +1509,7 @@ export function App() {
           <Button variant="link" isInline onClick={() => refreshDrives()}>{t('refresh')}</Button>
         </FormGroup>
       )}
+      {(task === 'uefi' || task === 'uefi-keep') && flashPicker}
       {maskromCard}
       {/* The one confirmation before starting (UX audit D5): what is erased, a box to tick, then the button below.
           A write over MaskROM still shows what the board itself reports before anything is written. */}
@@ -1685,6 +1753,7 @@ export function App() {
       [t('confirm.upgrade.versions'), t('confirm.upgrade.versions.value', { installed: c.installed ?? t('upgrade.noVersion'), next: c.next ?? t('upgrade.noVersion') })],
       [t('confirm.write'), t('confirm.upgrade.write', { lba: c.lba, size: formatBytes(c.bytes) })],
       [t('review.upgrade.kept'), c.settings === 'kept' ? t('confirm.upgrade.kept', { path: c.backup ?? '' }) : c.settings === 'none' ? t('confirm.upgrade.none') : t('review.upgrade.kept.reset')],
+      ...(c.applied?.length ? [[t('review.uefiSettings'), c.applied.join(', ')] as [string, string]] : []),
     ]} />
   ) : c.kind === 'whole' ? (
     <Review rows={[
@@ -1723,6 +1792,7 @@ export function App() {
         [t('confirm.spi.settings'), t(`confirm.spi.settings.${c.spi.settings}`)] as [string, string],
       ] : []),
       ...(c.dropped.length ? [[t('confirm.dropped'), c.dropped.map((p) => `${p.name} (${GB(p.bytes)})`).join(', ')] as [string, string]] : []),
+      ...(c.applied?.length ? [[t('review.uefiSettings'), c.applied.join(', ')] as [string, string]] : []),
     ]} />
   ));
 
@@ -1741,7 +1811,21 @@ export function App() {
         <PageSection isFilled aria-label={run.title}>
           <Stack hasGutter className="step">
             <Title headingLevel="h2">{run.result ? (run.result.ok ? t('run.done') : t('run.stopped')) : run.title}</Title>
-            {!run.result && !run.confirm && <Content component="p" className="step-lead">{t('run.keep')}</Content>}
+            {!run.result && !run.confirm && !run.settings && <Content component="p" className="step-lead">{t('run.keep')}</Content>}
+            {run.settings && !run.result && (
+              <SettingsEditor options={run.settings.options} why={run.settings.why} read={run.settings.read} release={run.settings.release}
+                pickBackup={() => api.pickSettingsBackup()}
+                onApply={(req: SettingsRequest) => {
+                  worker.current?.postMessage({ type: 'settings-apply', request: req } satisfies WoaWorkerRequest);
+                  setStage('edit', { percent: 100, note: t('run.settings.applying') });
+                  update((r) => ({ ...r, settings: null }));
+                }}
+                onClose={() => {
+                  worker.current?.postMessage({ type: 'settings-apply', request: { kind: 'close' } } satisfies WoaWorkerRequest);
+                  setStage('edit', { percent: 100, note: t('run.settings.closed') });
+                  update((r) => ({ ...r, settings: null }));
+                }} />
+            )}
             {/* The one thing the run waits for comes first, above the progress. */}
             {run.confirm && (
               <Card>

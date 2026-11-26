@@ -29,6 +29,9 @@ import { spiStorageProblem } from './spi-image';
 import { checkArmbianOnce } from './armbian-once';
 import { STORAGES } from '../maskrom/boards';
 import type { Probe } from './maskrom-regions';
+import { readBoardArea, tryPlan, withFlashSettings, type BoardArea, type FlashSettings } from './settings-board';
+import { sameFirmware, type SettingOption, type SettingsRequest } from './uefi-settings';
+import { bytesSource } from './pieces';
 
 export interface FileRef { url: string; size: number }
 
@@ -40,7 +43,7 @@ export type WoaJob =
       setup: SetupOptions; extras: Array<{ path: string; data: Uint8Array }>;
       /** Armbian next to Windows: Armbian's disk image (decompressed) and the size of its partition. */
       armbian?: FileRef & { partitionBytes: number; label: string } }
-  | { kind: 'firmware'; boardId: string; targetId: string; image: FileRef; spotCheck: boolean; resetAfter: boolean }
+  | { kind: 'firmware'; boardId: string; targetId: string; image: FileRef; spotCheck: boolean; resetAfter: boolean; settings?: FlashSettings }
   /** A finished Windows built on a Windows PC into a VHD (host-build.ts), for the eMMC. */
   | { kind: 'vhd'; boardId: string; vhd: FileRef; spotCheck: boolean; resetAfter: boolean }
   /** A whole-disk image (Armbian) from sector 0: replaces everything on the eMMC. */
@@ -48,7 +51,13 @@ export type WoaJob =
   /** A factory update.img: its partition table, loader and partitions. */
   | { kind: 'factory'; boardId: string; image: FileRef; resetAfter: boolean }
   /** A new edk2-rk3576 eMMC image from sector 64, keeping the partition table, Windows and (if asked) the saved UEFI settings. */
-  | { kind: 'upgrade'; boardId: string; image: FileRef; keepSettings: boolean; resetAfter: boolean }
+  | { kind: 'upgrade'; boardId: string; image: FileRef; keepSettings: boolean; resetAfter: boolean; settings?: FlashSettings }
+  /**
+   * The board's UEFI settings: read them (posted as settings-read), wait for the
+   * page's settings-apply, then write the changed area, read it back and compare.
+   * `options` is the release's settings list, made for `firmwareVersion`.
+   */
+  | { kind: 'settings'; boardId: string; options: SettingOption[]; firmwareVersion: string | null; resetAfter: boolean }
   /** Read only: does the SPL on the board's SPI NOR flash start Armbian once from the SD card (armbian-once.ts)? */
   | { kind: 'armbian-once-check'; boardId: string; resetAfter: boolean };
 
@@ -56,7 +65,9 @@ export type WoaWorkerRequest =
   | { type: 'woa-start'; moduleUrl: string; wasmUrl: string; loaderUrl: string; job: WoaJob; reconnectTimeout?: number }
   | { type: 'woa-confirm'; ok: boolean }
   /** The page saved the settings backup (or could not). */
-  | { type: 'woa-backup-saved'; path: string | null; error?: string };
+  | { type: 'woa-backup-saved'; path: string | null; error?: string }
+  /** What to do with the settings read (settings job); close: write nothing. */
+  | { type: 'settings-apply'; request: SettingsRequest | { kind: 'close' } };
 
 export type WoaWorkerEvent =
   | { type: 'log'; line: string }
@@ -67,12 +78,15 @@ export type WoaWorkerEvent =
   | { type: 'backup'; boardId: string; data: Uint8Array }
   /** Before a write that replaces the eMMC's start: the partition table and UEFI settings, to keep on the computer (answered with woa-backup-saved). */
   | { type: 'pre-backup'; boardId: string; files: Array<{ name: string; data: Uint8Array }>; notes: string[] }
+  /** The settings job read the board: its settings area, where it is and which firmware runs. */
+  | { type: 'settings-read'; read: BoardArea & { sameFirmware: boolean } }
   | { type: 'result'; result: RegionResult };
 
 const post = (m: WoaWorkerEvent) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
 
 let answer: ((ok: boolean) => void) | null = null;
 let saved: ((r: { path: string | null; error?: string }) => void) | null = null;
+let settingsAnswer: ((r: SettingsRequest | { kind: 'close' }) => void) | null = null;
 
 const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
@@ -80,6 +94,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
   const m = ev.data;
   if (m.type === 'woa-confirm') { answer?.(m.ok); answer = null; return; }
   if (m.type === 'woa-backup-saved') { saved?.({ path: m.path, ...(m.error ? { error: m.error } : {}) }); saved = null; return; }
+  if (m.type === 'settings-apply') { settingsAnswer?.(m.request); settingsAnswer = null; return; }
   if (m.type !== 'woa-start') return;
   try {
     const imported = await import(/* @vite-ignore */ m.moduleUrl);
@@ -207,7 +222,7 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
         loader, readHead: true, spotCheck: false, resetAfter: job.resetAfter, checkHeadBytes: TRUSTED_READ_BYTES,
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
         plan: (p) => planUpgrade({
-          boardId: job.boardId, image, probe: p, keepSettings: keep, log: hooks.log,
+          boardId: job.boardId, image, probe: p, keepSettings: keep, log: hooks.log, ...(job.settings ? { settings: job.settings } : {}),
           saveBackup: (data) => new Promise((resolve) => { saved = resolve; post({ type: 'backup', boardId: job.boardId, data }); }),
         }),
         confirm,
@@ -229,6 +244,60 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
         },
         confirm: async () => true,
       }, hooks);
+    } else if (job.kind === 'settings') {
+      // 1. Read: nothing is written and the board is not reset, so the page can show the settings
+      //    and the same loader session takes the write.
+      const storage = board.spi ? { storage: { code: STORAGES.spinor.code, label: STORAGES.spinor.label } } : {};
+      const wait = m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {};
+      let first: BoardArea | null = null;
+      const readArea = async (p: Probe): Promise<BoardArea | string> => {
+        if (board.spi) { const where = spiStorageProblem(board, p.capacity); if (where) return where; }
+        if (!p.read) return 'The board cannot be read over MaskROM.';
+        return readBoardArea(board, p.read);
+      };
+      const read = await writeRegions(runner, {
+        loader, readHead: false, spotCheck: false, resetAfter: false, ...storage, ...wait,
+        plan: async (p) => {
+          const a = await readArea(p);
+          if (typeof a === 'string') return { stop: `${a} Nothing was written.` };
+          first = a;
+          hooks.log(`UEFI settings read from sector ${a.lba} (${a.area.length} bytes)${a.stamp ? `, firmware ${a.stamp}` : ''}${a.problem ? `: ${a.problem}` : ''}.`);
+          return { regions: [], summary: { kind: 'settings-read' } };
+        },
+        confirm: async () => true,
+      }, hooks);
+      const got = first as BoardArea | null;
+      if (!read.ok || !got) { result = read; } else {
+        const shown: BoardArea = got;
+        const same = sameFirmware(shown.stamp, job.firmwareVersion);
+        post({ type: 'settings-read', read: { ...shown, sameFirmware: same } });
+        const request = await new Promise<SettingsRequest | { kind: 'close' }>((resolve) => { settingsAnswer = resolve; });
+        if (request.kind === 'close') {
+          if (job.resetAfter) await runner.run(['rd']);
+          result = { ok: true, capacity: read.capacity, written: 0, checks: null, summary: { kind: 'settings', variables: [], written: false } };
+        } else {
+          // 2. Write: the area again, unchanged since it was shown, the copy on the computer, the new
+          //    area, then all of it read back and compared (it lies in the part where reads are trusted).
+          result = await writeRegions(runner, {
+            loader, readHead: false, spotCheck: false, resetAfter: job.resetAfter, ...storage, ...wait,
+            checkHeadBytes: board.spi ? board.spi.bytes : TRUSTED_READ_BYTES,
+            plan: keepFirst(async (p) => {
+              const now = await readArea(p);
+              if (typeof now === 'string') return { stop: `${now} Nothing was written.` };
+              if (now.lba !== shown.lba || now.area.length !== shown.area.length || now.area.some((x, i) => x !== shown.area[i])) {
+                return { stop: 'The UEFI settings on the board changed since they were read. Read them again. Nothing was written.' };
+              }
+              const plan = tryPlan(now.area, request, job.options, same);
+              if ('stop' in plan) return plan;
+              const summary = { kind: 'settings', variables: plan.variables, reclaimed: plan.reclaimed, lba: now.lba, written: !!plan.bytes, restore: request.kind === 'restore' };
+              if (!plan.bytes) { hooks.log('The settings on the board already have these values; nothing to write.'); return { regions: [], summary }; }
+              hooks.log(`Writing ${plan.bytes.length} bytes at sector ${now.lba}${plan.variables.length ? `: ${plan.variables.join(', ')}` : ''}${plan.reclaimed ? ' (the store was compacted to make room)' : ''}.`);
+              return { regions: [{ lba: now.lba, source: bytesSource(plan.bytes), label: 'The UEFI settings' }], summary };
+            }),
+            confirm: async () => true,
+          }, hooks);
+        }
+      }
     } else if (job.kind === 'factory') {
       const file = xhrSource(job.image.url, job.image.size);
       const pkg = readUpdateImage(file);
@@ -259,7 +328,10 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
         plan: keepFirst(async (p) => {
           const r = await firmwareRegions(board, target, image, p);
-          return 'stop' in r ? r : { regions: r.regions, summary: { kind: 'firmware', ...r.summary } };
+          if ('stop' in r) return r;
+          if (!job.settings) return { regions: r.regions, summary: { kind: 'firmware', ...r.summary } };
+          const s = await withFlashSettings(board, target, image, r.regions, p.read, job.settings, hooks.log);
+          return 'stop' in s ? s : { regions: s.regions, summary: { kind: 'firmware', ...r.summary, applied: s.variables } };
         }),
         confirm,
       }, hooks);

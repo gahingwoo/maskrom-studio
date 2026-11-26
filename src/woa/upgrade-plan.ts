@@ -23,6 +23,7 @@ import { patchedSource, sliceSource, type ByteSource } from './pieces';
 import { FIRST_LBA, IMAGE_BYTES, isEmptySlot, isVariableStore, readFirmware, SECTOR, type FirmwareInfo } from './edk2-image';
 import type { Probe } from './maskrom-regions';
 import type { Region } from './stage-layout';
+import { tryPlan, type FlashSettings } from './settings-board';
 
 export interface UpgradeSummary {
   kind: 'upgrade';
@@ -33,6 +34,8 @@ export interface UpgradeSummary {
   /** kept: the board's settings go back; reset: the image's empty slot is written; none: the board had none saved. */
   settings: 'kept' | 'reset' | 'none';
   backup: string | null;
+  /** Settings variables written with the new firmware (FlashSettings), none when not asked for. */
+  applied?: string[];
   nvdataLba: number;
   nvdataSectors: number;
   lba: number;
@@ -47,6 +50,8 @@ export interface UpgradeInput {
   log: (line: string) => void;
   /** Save the settings copy on the computer; resolves with its path. */
   saveBackup: (data: Uint8Array) => Promise<{ path: string | null; error?: string }>;
+  /** Settings to set in what is written: the board's kept settings, or the new image's empty slot. */
+  settings?: FlashSettings;
 }
 
 const sameSlot = (a: FirmwareInfo, b: FirmwareInfo) => a.nvdata.lba === b.nvdata.lba && a.nvdata.sectors === b.nvdata.sectors;
@@ -104,11 +109,23 @@ export async function planUpgrade(u: UpgradeInput): Promise<{ regions: Region[];
       source = patchedSource(source, [{ offset: (next.nvdata.lba - FIRST_LBA) * SECTOR, data: nv }]);
     }
   }
+  let applied: string[] | undefined;
+  if (u.settings) {
+    // What the slot will hold: the board's settings when they are kept, else the image's erased slot.
+    const at = (next.nvdata.lba - FIRST_LBA) * SECTOR;
+    const p = tryPlan(source.read(at, next.nvdata.sectors * SECTOR), { kind: 'edit', edits: u.settings.edits }, u.settings.options, true);
+    if ('stop' in p) return p;
+    applied = p.variables;
+    if (p.bytes) {
+      source = patchedSource(source, [{ offset: at, data: p.bytes }]);
+      u.log(`UEFI settings set with the new firmware: ${p.variables.join(', ')}${p.reclaimed ? ' (the store was compacted to make room)' : ''}.`);
+    }
+  }
   return {
     regions: [{ lba: FIRST_LBA, source, label: 'The firmware' }],
     summary: {
       kind: 'upgrade', manufacturer: probe.manufacturer ?? null, capacity: probe.capacity, installed: installed.version, next: next.version,
-      settings, backup, nvdataLba: next.nvdata.lba, nvdataSectors: next.nvdata.sectors, lba: FIRST_LBA, bytes: source.size,
+      settings, backup, ...(applied ? { applied } : {}), nvdataLba: next.nvdata.lba, nvdataSectors: next.nvdata.sectors, lba: FIRST_LBA, bytes: source.size,
     },
   };
 }

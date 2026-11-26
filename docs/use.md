@@ -269,6 +269,28 @@ What each firmware choice writes (from `src/woa/boards.ts`):
 Simple mode always writes the Stable release; Advanced mode follows the
 tier in Settings.
 
+## UEFI settings
+
+Advanced mode, **View and change the UEFI settings**. The app reads the
+board's saved firmware settings over MaskROM and lists each option of the
+firmware's menu, grouped by its page, with the value on the board, the
+default and a control for a new value. Change what you want, press
+**Review changes**, check the list, then **Write to the board**. The board
+uses the new values from its next start.
+
+- **Reset all to defaults** deletes the saved settings the list covers; the
+  firmware uses its defaults. Boot entries stay.
+- **Write back a saved copy** writes an `nvdata-*.bin` (or a whole
+  `spi-nor-before.bin`) from an earlier backup.
+- Before any write the settings area is read again, a copy goes into the
+  backup folder, and the write is read back and compared.
+- The list comes from the firmware release (FEATURES.json). Releases 0.4.1
+  and older have none, so nothing can be changed there. An option whose
+  stored size differs from the list is shown read-only.
+
+Firmware writes and upgrades can set values in the same job: open **Set
+UEFI settings with this firmware** on the upgrade step or the review page.
+
 ## Back to Linux, or the factory system
 
 Both replace everything on the eMMC, Windows and the firmware included.

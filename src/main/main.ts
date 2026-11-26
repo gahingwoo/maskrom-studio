@@ -36,6 +36,7 @@ import { FEATURE_KEYS } from '../woa/firmware-features';
 import { firmwareRelease, FIRMWARE_REPO, loadFirmwareFeatures, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
 import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
+import type { SettingsSchema } from '../shared/ipc';
 import { fileSource, planDiskStage, type BoardJob } from '../helper/board-write';
 import { hostBuildFiles } from '../woa/host-build';
 import { MIN_DISK_BYTES, targetRefusal } from '../woa/stage-layout';
@@ -399,6 +400,31 @@ ipcMain.handle('backup:save-before-write', (_e, board: BoardId, files: Array<{ n
     const text = (Array.isArray(notes) ? notes : []).map((l) => String(l).replace(/[\r\n]/g, ' ')).join('\n');
     writeFileSync(join(dir, 'backup.txt'), `${text}\n`);
     return { path: shownPath(dir) };
+  } catch (err) {
+    return { error: String((err as Error).message ?? err) };
+  }
+});
+
+// --- UEFI settings ----------------------------------------------------------
+
+ipcMain.handle('settings:schema', (_e, board: BoardId): SettingsSchema => {
+  const f = firmware?.features.boards[board];
+  return { tag: firmware?.tag ?? null, firmwareVersion: f?.firmwareVersion ?? null, ...(f?.settings !== undefined ? { section: f.settings } : {}) };
+});
+
+/** A settings copy to write back: a 192 KiB area (nvdata-*.bin), or a whole 16 MiB SPI NOR copy, whose area is taken. */
+ipcMain.handle('settings:pick-backup', async () => {
+  try {
+    const r = await dialog.showOpenDialog(win!, {
+      title: 'Choose a copy of the UEFI settings', defaultPath: nvdataDir(), properties: ['openFile'],
+      filters: [{ name: 'UEFI settings copy', extensions: ['bin'] }, { name: 'All files', extensions: ['*'] }],
+    });
+    if (r.canceled || r.filePaths.length === 0) return null;
+    const path = r.filePaths[0];
+    const size = statSync(path).size;
+    if (size !== 0x30000 && size !== 16 << 20) return { error: 'This file is not a copy of the UEFI settings (it is neither 196608 bytes nor a whole 16 MiB SPI NOR copy).' };
+    const all = new Uint8Array(readFileSync(path));
+    return { name: path.split(/[\\/]/).pop()!, data: size === 0x30000 ? all : all.slice(0xfc0000, 0xff0000) };
   } catch (err) {
     return { error: String((err as Error).message ?? err) };
   }

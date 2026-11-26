@@ -441,6 +441,36 @@ The rkdeveloptool built here takes `rl` lengths in sectors (rktool-webusb's
 main.cpp); the desktop build takes bytes. The ROCK 4D (SPI NOR, no Windows
 table to protect) has no upgrade entry.
 
+## UEFI settings offline
+
+`src/woa/uefi-vars.ts` reads and writes the 192 KiB settings area as EDK2
+does (store, FTW working block, FTW spare block, 64 KiB each; eMMC: the
+FIT's `nvdata`, sector 43648; ROCK 4D: SPI NOR 0xFC0000). The store is
+authenticated (gEfiAuthenticatedVariableGuid, 60-byte headers, 4-byte
+record alignment), as RkFvbDxe formats it. A change appends a new record,
+then marks the old one deleted (0x3F to 0x3C); a delete clears the
+VAR_DELETED bits (0x3D). When the record does not fit, the store is
+compacted as Reclaim() does. The FTW blocks are left as they are.
+
+Nothing is written, and the job stops, when: the FV header, its checksum,
+the store header or any record does not check out; there are bytes after
+the last record; the FTW working header is not the one FaultTolerantWriteDxe
+makes, or it records an unfinished write (the next boot would copy the
+spare over the store); the variable is a Secure Boot one (PK, KEK, db, dbx
+and the rest), authenticated, a hardware error record, or not in the
+release's settings list (`src/woa/uefi-settings.ts`); its attributes or size
+on the board differ from the list; the value is not one the option takes;
+the store is full even after compacting; the result does not read back as
+intended. A variable that is not on the board is created only when the
+list describes all of its bytes and the board runs the firmware the list
+was made for (its build stamp equals FEATURES.json `firmwareVersion`).
+
+CI writes the test stores to a folder and reads them with
+`scripts/varstore/check.py` (from VariableFormat.h) and
+`scripts/varstore/edk2-check.c` (built against EDK2's headers). The two
+real stores in `test/fixtures` were cleaned with
+`scripts/varstore/sanitize.py`.
+
 ## Putting the board back: Armbian or a factory image
 
 Both replace everything on the eMMC, over MaskROM only.

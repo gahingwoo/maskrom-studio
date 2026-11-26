@@ -14,6 +14,9 @@ over on the first start.
 - ROCK 4D: the 16 MiB copy of the SPI NOR flash taken before a write over
   MaskROM could not be saved (the backup limit was 1 MiB), so every such
   write stopped before writing.
+- UEFI settings over MaskROM (Advanced mode): read the board's firmware
+  settings, change them, reset them to defaults or write back a saved copy;
+  or set them with a firmware write. Not tried on a board yet.
 - About Maskrom Studio.
 - Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode): Armbian's
   root partition at the end of the eMMC, its U-Boot in the firmware slot,

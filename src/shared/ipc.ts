@@ -19,6 +19,9 @@ export type JobProgress = {
 
 export type JobResult = { ok: true; sha256: string } | { ok: false; reason: string; detail?: string };
 
+/** A release's settings section for one board, as FEATURES.json has it; section undefined when it has none. */
+export interface SettingsSchema { tag: string | null; firmwareVersion: string | null; section?: unknown }
+
 /** The latest edk2-rk3576 and woa-rk3576 releases, as far as they could be read. */
 export interface Releases {
   firmware: { tag: string; url: string | null; boards: Partial<Record<BoardId, { file: string; size: number }>>; sdcard: Partial<Record<BoardId, { file: string; size: number }>>;
@@ -206,6 +209,10 @@ export interface ImagerApi {
   /** Save the whole log, scrubbed, to a file the user picks. */
   saveLog(f: { board?: string | null; mode?: string; task?: string | null; step?: string | null; error?: string | null; detail?: string | null; log?: string[] }): Promise<{ path: string } | { error: string } | null>;
   saveBeforeWrite(board: BoardId, files: Array<{ name: string; data: Uint8Array }>, notes: string[]): Promise<{ path: string } | { error: string }>;
+  /** The release's settings section for a board (FEATURES.json, uefi-settings.ts reads it), with the firmware version it was made for. */
+  settingsSchema(board: BoardId): Promise<SettingsSchema>;
+  /** Choose a copy of a board's UEFI settings saved before (nvdata-*.bin, or a whole SPI NOR copy) to write back. */
+  pickSettingsBackup(): Promise<{ name: string; data: Uint8Array } | { error: string } | null>;
   /** Serve the chosen Windows file to the Maskrom worker. */
   serveWindows(token: string): Promise<Served | { error: string }>;
   /** Choose a folder of extra driver packages (wddm-mali-g52, gt9271, ...). Errors are translation keys or messages. */
