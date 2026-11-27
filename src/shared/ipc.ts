@@ -162,7 +162,9 @@ export interface HostBuildRequest {
 export type HostBuildResult = { ok: true; vhd?: Served } | { ok: false; reason: string; detail?: string };
 
 export type BoardJobRequest =
-  | { kind: 'stage-disk'; target: 'sd' | 'nvme'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
+  | { kind: 'stage-disk'; target: 'sd' | 'nvme'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null;
+      /** Armbian at the end of the same NVMe drive (boards.ts oneDisk): the offer looked up last, and its partition's size. */
+      armbian?: { id: string; partitionBytes: number } }
   | { kind: 'stage'; boardId: BoardId; device: string; windowsToken: string; index: number; setup: SetupOptions; drivers: string | null }
   | { kind: 'firmware'; boardId: BoardId; device: string; targetId: string }
   | { kind: 'spinor'; boardId: BoardId; device: string; targetId?: string };

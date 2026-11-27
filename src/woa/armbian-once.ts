@@ -56,9 +56,10 @@ export type ArmbianOnceCheck = { ok: true; offset: number } | { ok: false; reaso
 /**
  * Read the SPL from the board's firmware storage (SPI NOR sectors 64 to the
  * FIT, or eMMC sectors 64 to 2111) and look for the tag. A sentence for the
- * page when it is not there.
+ * page when it is not there, naming where Armbian would start from.
  */
-export async function checkArmbianOnce(b: WoaBoard, read: (lba: number, sectors: number) => Promise<Uint8Array | null>): Promise<ArmbianOnceCheck> {
+export async function checkArmbianOnce(b: WoaBoard, read: (lba: number, sectors: number) => Promise<Uint8Array | null>,
+  from: 'the SD card' | 'the NVMe drive' = 'the SD card'): Promise<ArmbianOnceCheck> {
   const at = splSectors(b);
   if (!at) return { ok: false, reason: `The ${b.name} has no firmware storage this check can read.` };
   const where = b.spi ? 'SPI NOR flash' : 'eMMC';
@@ -69,7 +70,7 @@ export async function checkArmbianOnce(b: WoaBoard, read: (lba: number, sectors:
     const need = b.spi
       ? 'Armbian next to Windows needs edk2-rk3576 firmware built with the new U-Boot SPL (U-Boot v2026.10 with the one-shot request on the SD card). Nothing was written.'
       : 'Armbian next to Windows needs edk2-rk3576 0.5.0 or later on the eMMC (its U-Boot v2026.10 SPL has the one-shot). Write the UEFI firmware to the board first, then run this install again. Nothing was written.';
-    return { ok: false, reason: `The firmware on this ${b.name} cannot start Armbian from the SD card: its SPL (${where}, sectors ${at.lba} to ${at.lba + at.sectors - 1}) has no "${ARMBIAN_ONCE_SPL_TAG}" in it, so the firmware has no "Armbian (U-Boot)" boot entry. ${need}` };
+    return { ok: false, reason: `The firmware on this ${b.name} cannot start Armbian from ${from}: its SPL (${where}, sectors ${at.lba} to ${at.lba + at.sectors - 1}) has no "${ARMBIAN_ONCE_SPL_TAG}" in it, so the firmware has no "Armbian (U-Boot)" boot entry. ${need}` };
   }
   return { ok: true, offset: at.lba * SECTOR + off };
 }

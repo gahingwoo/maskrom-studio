@@ -103,9 +103,12 @@ describe('the scripts', () => {
     const said = lines.filter((l) => /^\s*(if [^e]*)?echo\b.*eMMC/i.test(l) || /^\s*if .*echo\b.*eMMC/.test(l));
     const unguarded = said.filter((l) => !/"%W_target%"=="emmc"/.test(l)
       // Inside blocks that run only on the eMMC: the firmware partition found, Armbian next to Windows on the eMMC, the VHD for the eMMC.
-      && !/Firmware partition found at sector 64|Armbian is on the eMMC too|virtual disk the size of the eMMC/.test(l));
+      && !/Firmware partition found at sector 64|virtual disk the size of the eMMC/.test(l));
     expect(unguarded).toEqual([]);
     expect(INSTALL).toContain('onto %TGT%.');
+    // Armbian beside Windows: on the eMMC (TaishanPi 3M) or the NVMe drive (CM5-IO), said as such.
+    expect(INSTALL).toMatch(/set "AWHERE=the eMMC"\nif \/i "%W_target%"=="nvme" set "AWHERE=the NVMe drive"\n/);
+    expect(INSTALL).toContain('echo Armbian is on %AWHERE% too.');
     expect(INSTALL).toMatch(/set "TGT=this board's eMMC"\nif \/i "%W_target%"=="sd" set "TGT=the SD card"\nif \/i "%W_target%"=="nvme" set "TGT=the NVMe drive"\n/);
     // TGT is set before anything can jump to :fail, which names it.
     expect(INSTALL.indexOf('set "TGT=')).toBeLessThan(INSTALL.indexOf('goto :fail'));

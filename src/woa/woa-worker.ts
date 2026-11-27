@@ -14,7 +14,7 @@ import { woaBoard, firmwareTargets } from './boards';
 import { firmwareRegions } from './firmware-plan';
 import { writeRegions, type RegionResult, type RegionStage } from './maskrom-regions';
 import { planStage, StageError } from './stage-layout';
-import { HybridError, readArmbianImage } from './armbian-hybrid';
+import { HybridError, readArmbianImage, SLOT_LBA, slotProblem } from './armbian-hybrid';
 import { planHostImage } from './host-image';
 import { readVhd } from './vhd';
 import { extentSource, type Extent } from './udf';
@@ -49,8 +49,13 @@ export type WoaJob =
   | { kind: 'factory'; boardId: string; image: FileRef; resetAfter: boolean }
   /** A new edk2-rk3576 eMMC image from sector 64, keeping the partition table, Windows and (if asked) the saved UEFI settings. */
   | { kind: 'upgrade'; boardId: string; image: FileRef; keepSettings: boolean; resetAfter: boolean }
-  /** Read only: does the SPL on the board's SPI NOR flash or eMMC start Armbian once from the SD card (armbian-once.ts)? */
-  | { kind: 'armbian-once-check'; boardId: string; resetAfter: boolean };
+  /**
+   * Read only: does the SPL on the board's SPI NOR flash or eMMC start Armbian once (armbian-once.ts)?
+   * With `slot` (Armbian's disk image, decompressed), on an eMMC board, its U-Boot FIT then goes into the
+   * firmware's slot at eMMC sector 0x10000 once the eMMC's partition table leaves the slot free
+   * (Windows and Armbian on one NVMe drive, boards.ts oneDisk). Nothing else is written.
+   */
+  | { kind: 'armbian-once-check'; boardId: string; resetAfter: boolean; slot?: FileRef };
 
 export type WoaWorkerRequest =
   | { type: 'woa-start'; moduleUrl: string; wasmUrl: string; loaderUrl: string; job: WoaJob; reconnectTimeout?: number }
@@ -213,9 +218,11 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
         confirm,
       }, hooks);
     } else if (job.kind === 'armbian-once-check') {
-      // Nothing is written: the plan reads the SPL and has no regions, and there is nothing to confirm.
+      // Nothing is written but the slot, when asked for: the plan reads the SPL, and the page asked before the job.
+      // The slot (32 MiB on) is past what the loader's reads are trusted for, so it is not read back.
+      const slot = job.slot;
       result = await writeRegions(runner, {
-        loader, readHead: false, spotCheck: false, resetAfter: job.resetAfter,
+        loader, readHead: !!slot, spotCheck: false, resetAfter: job.resetAfter,
         ...(board.spi ? { storage: { code: STORAGES.spinor.code, label: STORAGES.spinor.label } } : {}),
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
         plan: async (p) => {
@@ -223,10 +230,23 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
           if (where) return { stop: where };
           const storage = board.spi ? 'SPI NOR' : 'eMMC';
           if (!p.read) return { stop: `The ${board.spi ? 'SPI NOR flash' : 'eMMC'} cannot be read over MaskROM. Nothing was written.` };
-          const r = await checkArmbianOnce(board, p.read);
+          const r = await checkArmbianOnce(board, p.read, slot ? 'the NVMe drive' : 'the SD card');
           if (!r.ok) return { stop: r.reason };
           hooks.log(`ArmbianOnce/1 found in the SPL at ${storage} byte 0x${r.offset.toString(16)}.`);
-          return { regions: [], summary: { kind: 'armbian-once', offset: r.offset } };
+          if (!slot) return { regions: [], summary: { kind: 'armbian-once', offset: r.offset } };
+          if (board.spi || !board.emmc) return { stop: `The ${board.name} has no eMMC slot for Armbian's U-Boot. Nothing was written.` };
+          if (!p.head) return { stop: 'The partition table could not be read from the eMMC. Nothing was written.' };
+          const busy = slotProblem(p.head);
+          if (busy) return { stop: busy };
+          let fit: ByteSource;
+          try {
+            fit = readArmbianImage(xhrSource(slot.url, slot.size)).fit;
+          } catch (e) {
+            if (e instanceof HybridError) return { stop: `${e.message} Nothing was written.` };
+            throw e;
+          }
+          hooks.log(`Armbian's U-Boot FIT: ${fit.size} bytes, for the eMMC slot at sector ${SLOT_LBA}.`);
+          return { regions: [{ lba: SLOT_LBA, source: fit, label: 'Armbian U-Boot (firmware slot)' }], summary: { kind: 'armbian-once', offset: r.offset, slot: fit.size } };
         },
         confirm: async () => true,
       }, hooks);

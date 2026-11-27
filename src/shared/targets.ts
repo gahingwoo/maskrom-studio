@@ -222,3 +222,19 @@ export function isOfferedTarget(device: string, drives: DriveInfo[], opts: Class
   const { targets } = classifyDrives(drives, opts);
   return targets.some((t) => t.device === device && !t.disabled);
 }
+
+/**
+ * A drive picker's rows: every drive listed, each marked too small when it is
+ * smaller than `need` (or the list itself said so). Too small drives are shown
+ * greyed out with the sizes, never dropped: an empty picker means no drive.
+ */
+export function pickerRows(targets: Target[], need: number): Array<{ target: Target; small: boolean }> {
+  return targets.map((t) => ({ target: t, small: t.size < need || !!t.disabled }));
+}
+
+/** "3.7 GiB" and "6.0 GiB" for a drive and what it needs, as the picker's labels say sizes; one more digit when they would read the same. */
+export function sizeWords(size: number, need: number): { size: string; need: string } {
+  const at = (n: number, d: number) => `${(n / 1024 ** 3).toFixed(d)} GiB`;
+  const digits = at(size, 1) === at(need, 1) ? 2 : 1;
+  return { size: at(size, digits), need: at(need, digits) };
+}

@@ -22,7 +22,8 @@
 // its arithmetic always says "shrink" and leaves the table alone; it then
 // runs resize2fs, which grows the file system to the partition we made.
 
-import { parsePrimaryGpt, SECTOR, type GptPartition } from './gpt';
+import { parsePrimaryGpt, SECTOR, TYPE_RK_FIRMWARE, type GptPartition } from './gpt';
+import { ESP_MIB, GiB, MIN_WINDOWS_CHOSEN, MiB, MSR_MIB } from './windows-layout';
 import { parseFit } from './edk2-image';
 import { sliceSource, type ByteSource } from './pieces';
 
@@ -122,4 +123,50 @@ export function resizeLeavesTableAlone(partLastLba: number, diskSectors: number)
   let last = Math.floor((diskSectors * 99) / 100);
   last = last - (last % align) - 1;
   return last < partLastLba;
+}
+
+/**
+ * Why the firmware's slot (eMMC sectors 0x10000..0x17FFF) cannot take
+ * Armbian's U-Boot, from the eMMC's sectors 0..33, or null. The firmware
+ * refuses the slot when a partition other than "firmware" overlaps it
+ * (ArmbianOnceSlotIsFree in edk2-rk3576 ArmbianOnceLib.c); so does this.
+ * No partition table (the plain firmware image) leaves it free.
+ */
+export function slotProblem(head: Uint8Array): string | null {
+  const range = `sectors ${SLOT_LBA} to ${SLOT_LBA + SLOT_SECTORS - 1}`;
+  const overlaps = (first: number, last: number) => first < SLOT_LBA + SLOT_SECTORS && last >= SLOT_LBA;
+  let parts: GptPartition[];
+  try {
+    parts = parsePrimaryGpt(head).partitions;
+  } catch (e) {
+    if (!/no GUID partition table/.test((e as Error).message)) {
+      return `The eMMC's partition table cannot be read (${(e as Error).message}), so the firmware's slot for Armbian's U-Boot (${range}) cannot be checked. Nothing was written.`;
+    }
+    // An MBR: its four entries, as the firmware reads them; the protective entry (0xEE) of a GPT does not count.
+    for (let i = 0; i < 4; i++) {
+      const e = head.subarray(446 + i * 16, 462 + i * 16);
+      const type = e[4];
+      const first = e[8] | (e[9] << 8) | (e[10] << 16) | (e[11] << 24);
+      const count = (e[12] | (e[13] << 8) | (e[14] << 16) | (e[15] << 24)) >>> 0;
+      if (type === 0 || type === 0xee || count === 0) continue;
+      if (overlaps(first >>> 0, (first >>> 0) + count - 1)) {
+        return `Partition ${i + 1} of the eMMC (MBR, sectors ${first >>> 0} to ${(first >>> 0) + count - 1}) covers the firmware's slot for Armbian's U-Boot (${range}). Nothing was written.`;
+      }
+    }
+    return null;
+  }
+  const p = parts.find((x) => x.type !== TYPE_RK_FIRMWARE && overlaps(x.firstLba, x.lastLba));
+  return p ? `The eMMC partition "${p.name || p.index}" (sectors ${p.firstLba} to ${p.lastLba}) covers the firmware's slot for Armbian's U-Boot (${range}). Nothing was written.` : null;
+}
+
+/**
+ * The size Armbian's partition starts at on a disk with `freeBytes` after the
+ * firmware (whole GiB): half the disk, at least `minBytes`, and never so much
+ * that Windows gets less than MIN_WINDOWS_CHOSEN. Null when both do not fit.
+ */
+export function defaultArmbianBytes(freeBytes: number, minBytes: number): number | null {
+  const max = Math.floor((freeBytes - (ESP_MIB + MSR_MIB + 2) * MiB - MIN_WINDOWS_CHOSEN) / GiB) * GiB;
+  if (max < minBytes) return null;
+  const half = Math.floor(freeBytes / 2 / GiB) * GiB;
+  return Math.min(max, Math.max(Math.ceil(minBytes / GiB) * GiB, half));
 }

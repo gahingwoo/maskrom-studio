@@ -398,9 +398,11 @@ echo.
 echo Done. The board restarts into Windows in 15 seconds. The first start
 echo takes a few minutes and restarts once. The log is in
 echo C:\Windows\Logs\woa-stage.log.
+set "AWHERE=the eMMC"
+if /i "%W_target%"=="nvme" set "AWHERE=the NVMe drive"
 if defined W_linux_offset if not "%W_linux_offset%"=="none" (
   echo.
-  echo Armbian is on the eMMC too. To start it, choose "Armbian (U-Boot^)" in
+  echo Armbian is on %AWHERE% too. To start it, choose "Armbian (U-Boot^)" in
   echo the firmware's boot manager; the boot after that is Windows again.
 )
 if "%W_armbian_sd%"=="1" (

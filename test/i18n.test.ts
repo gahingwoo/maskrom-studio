@@ -55,5 +55,7 @@ describe('i18n', () => {
     expect(t('task.lead', { board: 'ArmSoM CM5-IO' })).toBe('目标开发板：ArmSoM CM5-IO。');
     expect(translateMessage('No board in MaskROM mode was found.', MESSAGE_PATTERNS, 'zh-CN')).toBe('没有找到 MaskROM 模式的开发板。');
     expect(translateMessage('Something new.', MESSAGE_PATTERNS, 'zh-CN')).toBe('Something new.');
+    expect(translateMessage('The eMMC partition "rootfs" (sectors 32768 to 61079518) covers the firmware\'s slot for Armbian\'s U-Boot (sectors 65536 to 98303). Nothing was written.', MESSAGE_PATTERNS, 'zh-CN'))
+      .toBe('eMMC 分区“rootfs”（第 32768 到 61079518 扇区）占用了固件给 Armbian U-Boot 预留的位置（第 65536 到 98303 扇区）。没有写入任何内容。');
   });
 });

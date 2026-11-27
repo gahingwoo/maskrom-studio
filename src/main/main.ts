@@ -171,6 +171,8 @@ async function tiered(repo: string, channel: Channel, fetchFn: (url: string, ini
 
 // Unpackaged builds only, for the screenshots: made-up releases, no network.
 const FAKE_RELEASES = !app.isPackaged && process.env.WOA_IMAGER_FAKE_RELEASES === '1';
+/** With the made-up releases: an Armbian disk image file used instead of downloading one (the e2e runs). */
+const TEST_ARMBIAN = !app.isPackaged ? process.env.WOA_IMAGER_TEST_ARMBIAN : undefined;
 // The made-up release lists every feature on every board, so the screenshots and e2e runs see every page.
 const FAKE_FEATURES: FirmwareRelease['features'] = { from: 'release', boards: Object.fromEntries(WOA_BOARDS.map((b) => [b.id, {
   firmwareVersion: null, features: Object.fromEntries(FEATURE_KEYS.map((k) => [k, { built: true }])) }])) };
@@ -477,6 +479,11 @@ ipcMain.handle('restore:find-armbian', async (_e, board: BoardId, id: string): P
 async function armbianFile(wc: WebContents, board: BoardId, id: string, signal: AbortSignal): Promise<{ path: string; name: string; size: number; sha256: string; minBytes: number }> {
   const a = armbianFound.get(armbianKey(board, id));
   if (!a) throw new Error('Look up the Armbian image again.');
+  // e2e runs with made-up releases: a small Armbian-like disk image in place of the download.
+  if (FAKE_RELEASES && TEST_ARMBIAN) {
+    const size = statSync(TEST_ARMBIAN).size;
+    return { path: TEST_ARMBIAN, name: a.file.replace(/\.xz$/, ''), size, sha256: '0'.repeat(64), minBytes: minimumDiskBytes(size, a.desktop) };
+  }
   const progress = (p: JobProgress) => sendProgress(wc, p);
   const xz = await fetchImage({ file: a.file, url: a.url, size: a.size, sha256: a.sha256, sample: false }, cacheDir(), progress, signal);
   const bad = await checkArmbianSignature(xz, a.asc, (bytes) => progress({ stage: 'check', bytes, total: a.size }), signal);
@@ -929,11 +936,14 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
       const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId });
+      // Armbian on the same NVMe drive: its image as for the other Armbian writes (downloaded, checked, decompressed).
+      const arm = req.armbian ? await armbianFile(wc, req.boardId, req.armbian.id, signal) : null;
       bj = { kind: 'stage-disk', target: req.target, device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
-          index: ed.index, edition: ed.name, build: ed.build ?? 0 } };
-      total = img.imageSize + pe.size;
+          index: ed.index, edition: ed.name, build: ed.build ?? 0 },
+        ...(arm && req.armbian ? { armbian: { path: arm.path, partitionBytes: req.armbian.partitionBytes } } : {}) };
+      total = img.imageSize + pe.size + (arm?.size ?? 0);
     } else if (req.kind === 'stage') {
       const img = windowsImages.get(req.windowsToken);
       if (!img) return { ok: false, reason: 'Choose the Windows image again. Nothing was written.' };

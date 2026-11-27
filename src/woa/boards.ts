@@ -69,6 +69,20 @@ export interface WoaBoard {
    *   which the app checks over MaskROM before writing (armbian-once.ts) (CM5-IO).
    */
   hybrid: HybridLayout | null;
+  /**
+   * The one disk that can hold both Windows and Armbian ("Windows + Armbian"
+   * in the main menu), or null when the board has none:
+   * - emmc: the eMMC, the 'one-emmc' layout (TaishanPi 3M).
+   * - nvme: the NVMe drive, staged on this computer like Windows alone, with
+   *   Armbian's root partition at the end of it. Armbian's U-Boot goes into
+   *   the firmware's slot at eMMC sector 0x10000 over MaskROM (the firmware's
+   *   boot entry is listed only once the slot holds a U-Boot; at each use it
+   *   copies u-boot-rockchip.bin from the Armbian partition again). 'hybrid'
+   *   stays the second choice (CM5-IO).
+   * The ROCK 4D has no eMMC, so no slot and no request outside the SD card:
+   * Armbian can only be a whole SD card there.
+   */
+  oneDisk: 'emmc' | 'nvme' | null;
   /** How to get into MaskROM: a button, or two pads to short (with F4 in the firmware once it runs). */
   maskromEntry: 'button' | 'pads';
   /** Where the board maker publishes the factory images (update.img); none for boards without a factory restore. */
@@ -105,6 +119,7 @@ export const WOA_BOARDS: WoaBoard[] = [
     sdBoot: 'spl-on-emmc',
     windowsBooted: true,
     hybrid: 'one-emmc',
+    oneDisk: 'emmc',
     maskromEntry: 'pads',
     factoryPage: {
       en: 'https://wiki.lckfb.com/en/tspi-3-rk3576/img-download/finished-image.html',
@@ -124,6 +139,9 @@ export const WOA_BOARDS: WoaBoard[] = [
     // The 31 GB eMMC has no room for both, so Armbian goes onto an SD card. edk2-rk3576 0.5.0 builds its SPL
     // (U-Boot v2026.10) with the one-shot, request on the eMMC; board-tested 2026-11-27 with the firmware on the eMMC.
     hybrid: 'windows-and-sd',
+    // Both on the NVMe drive: Armbian edge's U-Boot (mainline v2026.10, armbian/build
+    // patch/u-boot/v2026.10/defconfig/armsom-cm5-io-rk3576_defconfig) has PCIe and NVMe.
+    oneDisk: 'nvme',
     maskromEntry: 'button',
     factoryPage: { en: 'https://docs.armsom.org/armsom-cm5-io', zh: 'https://docs.armsom.org/zh/armsom-cm5-io' },
     compatible: ['armsom,cm5-io'],
@@ -145,6 +163,7 @@ export const WOA_BOARDS: WoaBoard[] = [
     // Armbian's U-Boot are on the SD card (docs/ARMBIAN-CHAINLOAD.md "SPI NOR boards"). Only firmware built
     // with the U-Boot v2026.10 SPL (edk2-rk3576 c81c13f, branch rock4d-parity) has it; the app checks.
     hybrid: 'nvme-and-sd',
+    oneDisk: null,
     maskromEntry: 'button',
     compatible: ['radxa,rock-4d'],
     smbios: ['ROCK 4D'],

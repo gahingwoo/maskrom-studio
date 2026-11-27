@@ -21,8 +21,8 @@ has the whole path from a new board to Windows or Linux.
 
 | Board | Firmware on | Windows on | MaskROM | Windows and Armbian |
 |---|---|---|---|---|
-| LCKFB TaishanPi 3M | eMMC | eMMC, SD card | short the MSK pads, or F4 in the firmware | both on the eMMC (Advanced mode) |
-| ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe | button | Windows on the eMMC or NVMe, Armbian on an SD card (Advanced mode) |
+| LCKFB TaishanPi 3M | eMMC | eMMC, SD card | short the MSK pads, or F4 in the firmware | both on the eMMC |
+| ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe | button | both on one NVMe drive; or Windows on the eMMC or NVMe, Armbian on an SD card (Advanced mode) |
 | Radxa ROCK 4D | SPI NOR | NVMe, SD card | button | Windows on NVMe, Armbian on an SD card (Advanced mode) |
 
 <!-- /generated -->
@@ -45,6 +45,7 @@ only in CI, against a pretend board. Board checks still to do:
 | Windows built on a Windows PC with DISM | CI only |
 | Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode) | off by default |
 | ROCK 4D: Windows on NVMe and Armbian on an SD card (Advanced mode) | CI only |
+| CM5-IO: Windows and Armbian on one NVMe drive ("Windows + Armbian", experimental) | CI only |
 | Windows trimming, recommended set | CI only |
 | Browser switch cleanup (an older tools bundle's `--disable-direct-composition` taken out) | CI only |
 | Self-test on Windows' first desktop | CI only |

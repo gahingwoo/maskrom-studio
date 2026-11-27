@@ -54,17 +54,41 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows �
 
 默认 Windows 占满整个磁盘。高级模式下可以给 Windows 设定大小（至少 32 GB），其余建成数据分区（NTFS 或 exFAT），或在末尾留一部分给 Linux。写入前会显示布局。CM5-IO 的 eMMC（约 31 GB）只放得下 Windows。
 
+## Windows + Armbian
+
+实验性功能。简单模式下在 **安装 Windows** 旁边选 **Windows + Armbian**；高级模式下是 Windows 设置一步里的一个勾选框。开发板有地方时，两个系统共用一块盘：
+
+| 开发板 | 共用一块盘 | 否则 |
+|---|---|---|
+| 泰山派 3M | eMMC | |
+| CM5-IO | 一块 NVMe 硬盘（装在 USB 硬盘盒里接到电脑） | Windows 装到 eMMC 或 NVMe，Armbian 写到 SD 卡（高级模式） |
+| ROCK 4D | 不行：没有 eMMC | Windows 装到 NVMe，Armbian 写到 SD 卡（高级模式） |
+
+默认启动 Windows。要启动 Armbian：重启，倒计时期间按 Esc 或 F2，打开 Boot Manager（启动管理器），选 **"Armbian (U-Boot)"**；下一次启动又回到 Windows。
+
 ## 同一块 eMMC 上装 Windows 和 Armbian
 
-泰山派 3M，高级模式，通过 MaskROM 把 Windows 装到 eMMC。在 Windows 设置一步勾选 **同时在 eMMC 上安装 Armbian**，选一个 Armbian 映像（不会预先选好），设定 Armbian 的空间（默认 24 GB；其余给 Windows，至少 32 GB）。
+泰山派 3M，通过 MaskROM 把 Windows 装到 eMMC。简单模式下选 **Windows + Armbian**；高级模式下在 Windows 设置一步勾选 **同时在 eMMC 上安装 Armbian**。选一个 Armbian 映像（不会预先选好），设定 Armbian 的空间（默认 24 GB；其余给 Windows，至少 32 GB）。
 
 - 映像用 Armbian 的 SHA-256 和签名校验。只写入它的根分区，放在 eMMC 末尾；它的 U-Boot 放进固件在 32 MiB 处的槽位。UEFI 固件和设置保留。
 - 默认启动 Windows。要启动 Armbian，在固件的启动管理器里选 **"Armbian (U-Boot)"**；这次运行 Armbian 自己的 U-Boot、内核和设备树，下一次启动又回到 Windows。
 - Armbian 第一次启动时和普通映像一样询问 root 密码、用户和时区。不要同时在开发板上插一张写有同一个 Armbian 映像的 SD 卡：两者的文件系统 UUID 相同。
 - 不要在这块 eMMC 的 Armbian 里运行 `armbian-install` 或更新引导程序：会覆盖 UEFI 固件。
-- CM5-IO 不支持（eMMC 太小）：CM5-IO 上 Armbian 写到 SD 卡，见下文。
+- CM5-IO 的 eMMC 放不下（太小）：CM5-IO 上两个系统装到一块 NVMe 硬盘，或者 Armbian 写到 SD 卡，见下文。
+
+## CM5-IO：Windows 和 Armbian 装到同一块 NVMe 硬盘
+
+把 NVMe 硬盘装进 USB 硬盘盒接到电脑。简单模式下选 **Windows + Armbian**，再选 Windows 文件、硬盘、Armbian 映像和 Armbian 的空间（默认半块硬盘；Windows 至少留 32 GB）。高级模式下 Windows 选装到 NVMe 硬盘，勾选框后选 **和 Windows 装在同一块 NVMe 硬盘上，放在 Windows 后面**。
+
+- 点开始后先下载并校验 Armbian 映像，再通过 MaskROM 读取开发板 eMMC 上的 SPL（需要 edk2-rk3576 0.5.0 或更新的固件），把 Armbian 的 U-Boot 写到 eMMC 上固件为它预留的一块空闲区域。开发板上的其他内容都不写。然后在 NVMe 硬盘上写入 Windows 的暂存安装，Armbian 的根分区放在硬盘末尾。
+- 只提供 Armbian 的 edge 映像：它们的 U-Boot（主线）能从 NVMe 启动 Armbian。vendor 映像用的是厂商的 U-Boot。
+- 把硬盘装到开发板上，SD 卡槽保持空着，开机：WinPE 安装 Windows，并保留 Armbian 分区。
+- 每次选 **"Armbian (U-Boot)"**，固件都会从 Armbian 分区把 Armbian 的 U-Boot 重新复制到那块区域，所以 Armbian 里更新过的 U-Boot 也会用上。
+- 在 Armbian 里不要运行 `armbian-install`，也不要用 `armbian-config` 的引导程序更新：它们可能覆盖 eMMC 上的固件。
 
 ## ROCK 4D：Windows 装到 NVMe，Armbian 写到 SD 卡
+
+ROCK 4D 没有 eMMC，所以两个系统不能共用一块盘。
 
 高级模式，把 Windows 装到 NVMe 硬盘（装在硬盘盒里接到电脑）。在 Windows 设置一步勾选 **同时把 Armbian 写到一张 SD 卡上**，选一个 Armbian 映像（厂商或 edge 内核）。最后一页选 NVMe 硬盘和 SD 卡；Armbian 占用整张卡。
 
@@ -75,7 +99,7 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows �
 
 ## CM5-IO：Windows 装到 eMMC 或 NVMe，Armbian 写到 SD 卡
 
-实验性功能，高级模式。Windows 选装到 eMMC（通过 MaskROM）或 NVMe 硬盘。在 Windows 设置一步勾选 **同时把 Armbian 写到一张 SD 卡上**，选一个 Armbian 映像。最后一页选 SD 卡（Windows 装到 NVMe 时也选 NVMe 硬盘）；Armbian 占用整张卡。选 eMMC 时，一次任务里先检查开发板，再把 Windows 暂存到 eMMC，最后写卡。
+实验性功能，高级模式。Windows 选装到 eMMC（通过 MaskROM）或 NVMe 硬盘。在 Windows 设置一步勾选 **同时把 Armbian 写到一张 SD 卡上**（选 NVMe 硬盘时保持 **写到 SD 卡**），选一个 Armbian 映像。最后一页选 SD 卡（Windows 装到 NVMe 时也选 NVMe 硬盘）；Armbian 占用整张卡。选 eMMC 时，一次任务里先检查开发板，再把 Windows 暂存到 eMMC，最后写卡。
 
 - **eMMC 上需要 edk2-rk3576 0.5.0 或更新的固件。** 安装 Windows 会保留开发板上现有的固件。点开始后先通过 MaskROM 读取 eMMC 上的 SPL，没有 Armbian 单次启动就停下，什么都不写。这时请先写入 UEFI 固件。
 - 启动方式：平时启动 Windows。重启，倒计时期间按 Esc 或 F2，打开 Boot Manager（启动管理器），选 **"Armbian (U-Boot)"**：固件在 eMMC 上写一个一次性的请求并重启，SPL 擦掉请求，从卡上加载 Armbian 的 U-Boot。下一次启动又回到 Windows。只有卡插着时才列出这一项。

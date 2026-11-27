@@ -53,6 +53,11 @@ was seen. Procedure: [hardware-test](hardware-test.md).
   over MaskROM, the loader kept running into the staged install, the card
   written after it. CI: both SPLs and the NVMe variant in
   scripts/electron-cm5io-hybrid-e2e.mjs (screenshots in the CI artifact).
+- **CM5-IO, Windows + Armbian on one NVMe drive**: the slot write over
+  MaskROM, then the drive. CI: Simple mode's menu, the edge-only list, the
+  default split, the slot written on the pretend eMMC, an older SPL
+  refused, the Advanced choice and a 4 GB card listed greyed out, in
+  scripts/electron-cm5io-onedisk-e2e.mjs.
 - **WinPE texts per target**: the screen names eMMC, SD card or NVMe drive;
   only string checks in CI (test/host-build.test.ts), no cmd.exe run.
 - **Self-test**: the message box, the report file, the issue link.

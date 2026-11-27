@@ -238,6 +238,34 @@ describe('staged install layout', () => {
     execFileSync('rm', ['-rf', dir]);
   }, 60000);
 
+  it('puts Armbian at the end of the CM5-IO\'s NVMe drive, with no slot on that drive', () => {
+    if (!tools) return;
+    const dir = mkdtempSync(join(tmpdir(), 'stage-nvme-armbian-'));
+    const winpe = fileSource(fakeWinpe(dir));
+    const GiB = 1024 ** 3;
+    const diskBytes = 256e9;
+    const parts = readArmbianImage(bytesSource(fakeArmbian()));
+    const cm5io = { board: woaBoard('cm5io')!, target: 'nvme' as const, diskBytes, head: new Uint8Array(34 * 512), image, rand, appVersion: 't' };
+    const plan = planStage({ ...cm5io, winpe, armbian: { parts, partitionBytes: 100 * GiB } });
+    const t = parsePrimaryGpt(plan.regions[plan.regions.length - 1].source.read(0, 34 * 512));
+    expect(t.partitions.map((p) => p.name)).toEqual(['WOA-STAGE-BOOT', 'WOA-STAGE-DATA', 'Armbian']);
+    const a = t.partitions.find((p) => p.name === 'Armbian')!;
+    expect(a.attributes).toBe(4n);
+    expect((a.lastLba - a.firstLba + 1) * 512).toBe(100 * GiB);
+    expect(resizeLeavesTableAlone(a.lastLba, Math.floor(diskBytes / 512))).toBe(true);
+    expect(plan.ini).toMatch(/\r\ntarget=nvme\r\nfw_offset=none\r\nfw_size=none\r\nwindows_offset_kb=1024\r\n/);
+    expect(plan.ini).toContain(`\r\nlinux_offset=${a.firstLba * 512}\r\n`);
+    expect(plan.ini).not.toMatch(/armbian_sd/);
+    expect(plan.regions.find((r) => r.label === 'Armbian root file system')!.lba).toBe(a.firstLba);
+    // Armbian's U-Boot goes into the eMMC slot over MaskROM; sector 0x10000 of the NVMe drive is Windows' to keep.
+    expect(plan.regions.some((r) => r.label.startsWith('Armbian U-Boot') || r.lba === SLOT_LBA)).toBe(false);
+    // The ROCK 4D has no slot, and an SD card target never takes Armbian beside Windows.
+    expect(() => planStage({ ...cm5io, board: woaBoard('rock4d')!, winpe, armbian: { parts, partitionBytes: 100 * GiB } }))
+      .toThrow(/^Armbian next to Windows cannot go onto an NVMe drive on the Radxa ROCK 4D\. Nothing was written\.$/);
+    expect(() => planStage({ ...cm5io, target: 'sd', diskBytes: 64e9, winpe, armbian: { parts, partitionBytes: 8 * GiB } })).toThrow(/cannot go onto an SD card/);
+    execFileSync('rm', ['-rf', dir]);
+  }, 60000);
+
   it('refuses a target the board does not have', () => {
     const tiny = { head, winpe: bytesSource(new Uint8Array(1)), image, rand, appVersion: 't' };
     expect(() => planStage({ board: woaBoard('rock4d')!, diskBytes: 62008590336, ...tiny })).toThrow(/eMMC on the Radxa ROCK 4D\. The Radxa ROCK 4D has no eMMC/);

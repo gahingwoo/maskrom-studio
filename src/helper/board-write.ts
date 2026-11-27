@@ -19,6 +19,7 @@ import { boardHere } from '../main/board-here';
 import { firmwareTargets, woaBoard } from '../woa/boards';
 import { firmwareRegions } from '../woa/firmware-plan';
 import { MIN_DISK_BYTES, planStage, StageError, type Region } from '../woa/stage-layout';
+import { HybridError, readArmbianImage } from '../woa/armbian-hybrid';
 import { isOfferedTarget, type DriveInfo } from '../shared/targets';
 import { withDiskFacts } from '../main/linux-disks';
 import { extentSource, type Extent } from '../woa/udf';
@@ -38,7 +39,9 @@ export type BoardJob =
   | { kind: 'stage-disk'; target: 'sd' | 'nvme'; device: string; boardId: string; winpe: string; appVersion: string;
       image: { path: string; extents: Extent[] | null; name: 'install.wim' | 'install.esd'; size: number;
         sha256: string | null; index: number; edition: string; build: number };
-      setup: SetupOptions; extras: Array<{ path: string; base64: string }> };
+      setup: SetupOptions; extras: Array<{ path: string; base64: string }>;
+      /** Armbian at the end of the same NVMe drive (boards.ts oneDisk): its disk image, decompressed, and its partition's size. */
+      armbian?: { path: string; partitionBytes: number } };
 
 const CHUNK = 4 << 20;
 
@@ -78,19 +81,23 @@ export function planDiskStage(job: Extract<BoardJob, { kind: 'stage-disk' }>, di
   if (!board) return { stop: 'Unknown board.' };
   const winpe = fileSource(job.winpe);
   const file = fileSource(job.image.path);
-  const close = () => { winpe.close(); file.close(); };
+  const armbianFile = job.armbian ? fileSource(job.armbian.path) : null;
+  const close = () => { winpe.close(); file.close(); armbianFile?.close(); };
   try {
     const source = job.image.extents ? extentSource(file, { path: job.image.name, size: job.image.size, extents: job.image.extents }) : file;
+    const armbian = armbianFile && job.armbian ? { parts: readArmbianImage(armbianFile), partitionBytes: job.armbian.partitionBytes } : undefined;
     const regions = planStage({
       board, target: job.target, diskBytes, head: new Uint8Array(34 * 512), winpe,
       image: { source, name: job.image.name, sha256: job.image.sha256, index: job.image.index, edition: job.image.edition, build: job.image.build },
       rand: (n) => new Uint8Array(randomBytes(n)), appVersion: job.appVersion,
       setup: job.setup, extras: job.extras.map((e) => ({ path: e.path, data: new Uint8Array(Buffer.from(e.base64, 'base64')) })),
+      ...(armbian ? { armbian } : {}),
     }).regions;
     return { regions, close };
   } catch (e) {
     close();
     if (e instanceof StageError) return { stop: e.message };
+    if (e instanceof HybridError) return { stop: `${e.message} Nothing was written.` };
     throw e;
   }
 }

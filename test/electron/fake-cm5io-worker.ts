@@ -11,6 +11,17 @@ spl.set(new TextEncoder().encode(once ? 'U-Boot SPL 2026.10-edk2-rk3576\0Armbian
 board.storages.get(1)!.write(64 * 512, spl);
 Object.defineProperty(navigator, 'usb', { value: board.usb(), configurable: true });
 
+// Before each result, a log line on what the firmware's slot (eMMC sector 0x10000) holds, so the e2e run can see it.
+const post = self.postMessage.bind(self) as (m: unknown) => void;
+(self as unknown as { postMessage: (m: unknown) => void }).postMessage = (m: unknown) => {
+  if ((m as { type?: string })?.type === 'result') {
+    const head = board.storages.get(1)!.read(0x10000 * 512, 4);
+    const fit = head[0] === 0xd0 && head[1] === 0x0d && head[2] === 0xfe && head[3] === 0xed;
+    post({ type: 'log', line: `fake board: the eMMC slot ${fit ? 'holds a U-Boot FIT' : 'is empty'}; resets: ${board.resets}` });
+  }
+  post(m);
+};
+
 self.addEventListener('message', (e: MessageEvent) => {
   if (e.data?.type !== 'dump') return;
   (self as unknown as Worker).postMessage({ type: 'dump', resets: board.resets, splKept: board.storages.get(1)!.read(64 * 512, spl.length).every((b, i) => b === spl[i]) });

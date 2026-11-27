@@ -38,6 +38,36 @@ not the app): `docs/dev/img/hybrid/1-install-mode.png` to `6-confirm.png`.
   image onto the SD card. Board-tested by hand 2026-11-27 (0.5.0 SPL,
   request on the eMMC, one-shot SD boot, back to Windows); the app's job
   has not run on a board.
+- **CM5-IO: Windows and Armbian on one NVMe drive** (`oneDisk: 'nvme'` in
+  `src/woa/boards.ts`, `startHybridOneNvme` in `App.tsx`), Simple mode's
+  "Windows + Armbian" and an Advanced choice beside the SD card (which
+  stays the Advanced default). (1) Armbian's image downloaded and checked.
+  (2) Over MaskROM: the `ArmbianOnce/1` check, eMMC sectors 0..33 read and
+  the slot refused if a partition other than `firmware` overlaps it
+  (`slotProblem`, as `ArmbianOnceSlotIsFree`), then Armbian's FIT written
+  to eMMC sector 0x10000 (the `armbian-once-check` job with `slot`). Not
+  read back: past the 32 MiB the loader's reads are trusted for. (3) The
+  NVMe drive staged on the PC (`stage-disk` with `armbian`): Windows from
+  1 MiB, Armbian's root partition at the end, `linux_offset` in the ini;
+  no slot region on the NVMe drive. Edge images only.
+  Why the slot is written by the app: the firmware lists "Armbian (U-Boot)"
+  only for a U-Boot FIT at sector 0x4000 of the SD card, the eMMC, a USB or
+  NVMe disk, or in the slot; it does not search file systems at probe
+  time. On the NVMe drive sector 0x4000 is inside Windows' ESP. At each
+  use `ArmbianOnce.efi` (0.5.0) finds no FIT at sector 0x4000 anywhere,
+  copies the newest `/usr/lib/linux-u-boot-*/u-boot-rockchip.bin` from the
+  Armbian partition (Ext4Dxe is in every build) into the slot, and asks
+  for target 2; with no source it boots the slot as it is.
+  Armbian edge's U-Boot for the board (armbian/build
+  `patch/u-boot/v2026.10/defconfig/armsom-cm5-io-rk3576_defconfig`) has
+  `CONFIG_PCI`, `CONFIG_PCIE_DW_ROCKCHIP`, `CONFIG_PHY_ROCKCHIP_NANENG_COMBOPHY`
+  and `CONFIG_NVME_PCI`, and its DT enables `pcie0` and `combphy0_ps`; the
+  NVMe bootdev hunter runs `pci_init()` during `bootflow scan`. Mainline
+  U-Boot's RK3576 PCIe/NVMe was tested on the ROCK 4D and Sige5 (their
+  board commits). The vendor images keep Radxa's U-Boot, untried here.
+- **Drive pickers:** a drive smaller than the write needs stays listed,
+  greyed out with both sizes (`pickerRows`, `sizeWords` in
+  `src/shared/targets.ts`); "plug one in" only for an empty list.
 - **Default system:** Windows only, until the firmware has a default-system
   option; the page shows Armbian as default greyed out with the reason.
 - **No presets:** Armbian's first login asks for passwords, user and time
@@ -127,9 +157,18 @@ TaishanPi 3M eMMC, 62008590336 bytes (121110528 sectors):
   when it differs.
 - Armbian must never install its bootloader on this eMMC (`armbian-install`,
   `FORCE_UBOOT_UPDATE=yes`): it would overwrite the firmware.
-- CM5-IO eMMC (31 GB) has no room for both: Armbian goes onto an SD card.
-  Per board: `hybrid` in `src/woa/boards.ts` (`one-emmc`, `nvme-and-sd`,
-  `windows-and-sd` or none).
+- CM5-IO eMMC (31 GB) has no room for both: both go onto an NVMe drive
+  (the eMMC keeps the firmware and the slot), or Armbian onto an SD card.
+  Per board: `oneDisk` (`emmc`, `nvme` or none) and `hybrid` (`one-emmc`,
+  `nvme-and-sd`, `windows-and-sd` or none) in `src/woa/boards.ts`.
+
+CM5-IO NVMe drive, one disk:
+
+    0..33          GPT
+    2048..         ESP 260 MiB, MSR 16 MiB, Windows NTFS (staging at its end during the install)
+    ..             Armbian rootfs, type B921B045, legacy BIOS bootable attribute
+    end-33..end-1  backup GPT
+    eMMC 0x10000..0x17FFF  Armbian's FIT (slot), written over MaskROM
 
 ## Decided, not built
 
@@ -246,6 +285,18 @@ CM5-IO (the job; the boot path itself passed by hand on 2026-11-27):
 - WinPE installing to the eMMC with the card out; then the card in,
   "Armbian (U-Boot)" listed, Armbian started, the next boot Windows.
 - The same with Windows on the NVMe drive.
+
+CM5-IO, both on the NVMe drive (nothing of it has run on a board):
+
+- The slot write over MaskROM on a 0.5.0 eMMC; "Armbian (U-Boot)" listed
+  with no SD card in; `ArmbianOnce.efi` copying `u-boot-rockchip.bin` from
+  the NVMe partition (Ext4Dxe) and asking for target 2; the SPL loading
+  the slot.
+- Armbian edge's U-Boot bringing up PCIe, finding the NVMe drive in
+  `bootflow scan -lb` and booting `boot.scr` from the Armbian partition
+  (not Windows' ESP); Armbian's kernel mounting the root by UUID.
+- WinPE keeping the Armbian partition on the NVMe drive; the resize on
+  `nvme0n1pN`.
 
 - The eMMC slot path end to end; U-Boot picking the bootable Armbian
   partition with Windows on the same disk.

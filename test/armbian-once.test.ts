@@ -18,6 +18,9 @@ describe('Armbian once on an SPI NOR board', () => {
     expect(Object.fromEntries(WOA_BOARDS.map((b) => [b.id, b.hybrid]))).toEqual({ tspi3m: 'one-emmc', cm5io: 'windows-and-sd', rock4d: 'nvme-and-sd' });
     expect(WOA_BOARDS.filter((b) => hybridOnSd(b.hybrid)).map((b) => b.id)).toEqual(['cm5io', 'rock4d']);
     expect(hybridOnSd(null)).toBe(false);
+    // One disk for both: the TaishanPi 3M's eMMC, the CM5-IO's NVMe drive; the ROCK 4D has no eMMC slot.
+    expect(Object.fromEntries(WOA_BOARDS.map((b) => [b.id, b.oneDisk]))).toEqual({ tspi3m: 'emmc', cm5io: 'nvme', rock4d: null });
+    expect(WOA_BOARDS.every((b) => b.oneDisk !== 'nvme' || (b.windowsTargets.includes('nvme') && b.firmwareStorage === 'emmc' && !!b.emmc))).toBe(true);
   });
   it('the CM5-IO keeps its firmware on the eMMC and installs Windows to the eMMC or NVMe beside the card', () => {
     expect(cm5io.firmwareStorage).toBe('emmc');

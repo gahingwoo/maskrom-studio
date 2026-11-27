@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyDrives, isOfferedTarget, type DriveInfo } from '../src/shared/targets';
+import { classifyDrives, isOfferedTarget, pickerRows, sizeWords, type DriveInfo } from '../src/shared/targets';
 
 const GiB = 1024 ** 3;
 
@@ -78,5 +78,24 @@ describe('classifyDrives', () => {
     expect(isOfferedTarget('/dev/sda', drives)).toBe(false);
     expect(isOfferedTarget('/dev/sdb', drives)).toBe(true);
     expect(isOfferedTarget('/dev/sdz', drives)).toBe(false);
+  });
+});
+
+describe('drive pickers', () => {
+  // Seen on a CM5-IO 2026-11-28: a 4 GB card was left out of the Armbian SD list, which then said no card was there.
+  it('keep a drive that is too small, marked, so an empty picker means no drive at all', () => {
+    const { targets } = classifyDrives([drive({ device: '/dev/sdy', size: 3965190144, isCard: true, isUSB: false }), drive({ device: '/dev/sdz', size: 64e9 })], { minSize: 4e9 });
+    expect(targets.map((t) => t.device)).toEqual(['/dev/sdy', '/dev/sdz']);
+    const rows = pickerRows(targets, 6.5e9);
+    expect(rows.map((r) => [r.target.device, r.small])).toEqual([['/dev/sdy', true], ['/dev/sdz', false]]);
+    // Marked by the list's own floor too, and by what this write needs above it.
+    expect(pickerRows(targets, 1e9).map((r) => r.small)).toEqual([true, false]);
+    expect(pickerRows(targets, 100e9).map((r) => r.small)).toEqual([true, true]);
+    expect(pickerRows([], 1e9)).toEqual([]);
+  });
+
+  it('says the sizes so that they differ', () => {
+    expect(sizeWords(3965190144, 6.5e9)).toEqual({ size: '3.7 GiB', need: '6.1 GiB' });
+    expect(sizeWords(3965190144, 4e9)).toEqual({ size: '3.69 GiB', need: '3.73 GiB' });
   });
 });

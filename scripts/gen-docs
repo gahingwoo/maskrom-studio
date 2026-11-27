@@ -163,6 +163,8 @@ ZH = {
     "button": "按键", "pads": "短接 MSK 焊盘，或在固件里按 F4",
     "one-emmc": "都装在 eMMC 上（高级模式）", "nvme-and-sd": "Windows 在 NVMe，Armbian 在 SD 卡（高级模式）",
     "windows-and-sd": "Windows 在 eMMC 或 NVMe，Armbian 在 SD 卡（高级模式）",
+    "emmc+one-emmc": "都装在 eMMC 上",
+    "nvme+windows-and-sd": "都装在一块 NVMe 硬盘上；或 Windows 在 eMMC 或 NVMe，Armbian 在 SD 卡（高级模式）",
     "no": "不支持",
     "whole": "整个映像，从扇区 {first} 开始", "range": "扇区 {first} 到 {last}",
     "UEFI firmware": "UEFI 固件", "UEFI firmware, whole image": "UEFI 固件，整个映像",
@@ -174,6 +176,8 @@ EN = {
     "one-emmc": "both on the eMMC (Advanced mode)",
     "nvme-and-sd": "Windows on NVMe, Armbian on an SD card (Advanced mode)",
     "windows-and-sd": "Windows on the eMMC or NVMe, Armbian on an SD card (Advanced mode)",
+    "emmc+one-emmc": "both on the eMMC",
+    "nvme+windows-and-sd": "both on one NVMe drive; or Windows on the eMMC or NVMe, Armbian on an SD card (Advanced mode)",
     "whole": "the whole image, from sector {first}", "range": "sectors {first} to {last}",
 }
 
@@ -193,6 +197,13 @@ def name(b, lang):
     return {"LCKFB TaishanPi 3M": "立创泰山派 3M"}.get(b["name"], b["name"]) if lang == "zh" else b["name"]
 
 
+def hybrid_words(b):
+    """The Windows and Armbian column: the one disk both share (oneDisk), then the other layout (hybrid)."""
+    if not b.get("hybrid"):
+        return "no"
+    return f'{b["oneDisk"]}+{b["hybrid"]}' if b.get("oneDisk") else b["hybrid"]
+
+
 def sec_boards(lang):
     rows = []
     for b in load():
@@ -200,7 +211,7 @@ def sec_boards(lang):
         targets = ("、" if lang == "zh" else ", ").join(
             tr(lang, {"emmc": "eMMC", "sd": "SD card", "nvme": "NVMe"}[t]) for t in b["windowsTargets"])
         rows.append([name(b, lang), tr(lang, storage), targets, tr(lang, b["maskromEntry"]),
-                     tr(lang, b["hybrid"] or "no")])
+                     tr(lang, hybrid_words(b))])
     return table(lang, ["Board", "Firmware on", "Windows on", "MaskROM", "Windows and Armbian"], rows)
 
 

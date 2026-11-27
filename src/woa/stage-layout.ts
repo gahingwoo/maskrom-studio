@@ -93,9 +93,11 @@ export interface StageInput {
   /** How the disk is shared after the install; default: Windows takes all of it. */
   layout?: LayoutChoice;
   /**
-   * Armbian next to Windows (eMMC only): its root partition goes into a
-   * partition of `partitionBytes` at the end of the disk, its U-Boot FIT
-   * into the firmware's slot. The layout is then planned on the space before it.
+   * Armbian next to Windows on the same disk (the eMMC, or the NVMe drive
+   * where boards.ts oneDisk says so): its root partition goes into a
+   * partition of `partitionBytes` at the end of the disk; on the eMMC its
+   * U-Boot FIT also goes into the firmware's slot. The layout is then planned
+   * on the space before it.
    */
   armbian?: { parts: ArmbianParts; partitionBytes: number };
 }
@@ -244,7 +246,11 @@ export function planStage(o: StageInput): StagePlan {
   let linuxSectors = 0;
   const linuxGuid = o.armbian ? randomGuid(o.rand) : '';
   if (o.armbian) {
-    if (target !== 'emmc') throw new StageError('Armbian next to Windows goes on the eMMC only. Nothing was written.');
+    // One disk for both: the eMMC (its slot gets Armbian's U-Boot here), or the NVMe drive on a board whose
+    // firmware slot is filled over MaskROM in a job of its own (boards.ts oneDisk).
+    if (target !== 'emmc' && !(target === 'nvme' && o.board.oneDisk === 'nvme')) {
+      throw new StageError(`Armbian next to Windows cannot go onto ${TARGET_WORDS[target]} on the ${o.board.name}. Nothing was written.`);
+    }
     if (choice.linuxReserveBytes > 0) throw new StageError('Space kept for Linux and an Armbian install cannot both be chosen. Nothing was written.');
     const root = o.armbian.parts.root.size;
     if (o.armbian.partitionBytes < root) {
@@ -252,7 +258,7 @@ export function planStage(o: StageInput): StagePlan {
     }
     linuxSectors = alignUp(Math.ceil(o.armbian.partitionBytes / SECTOR));
     linuxFirst = alignDown(lastUsable + 1 - linuxSectors);
-    if (!resizeLeavesTableAlone(linuxFirst + linuxSectors - 1, diskSectors)) throw new StageError('The Armbian partition would not end at the end of the eMMC.');
+    if (!resizeLeavesTableAlone(linuxFirst + linuxSectors - 1, diskSectors)) throw new StageError('The Armbian partition would not end at the end of the disk.');
   }
   const freeBytes = (linuxFirst - windowsFirst) * SECTOR;
   const layout = planLayout(freeBytes, choice);
@@ -319,8 +325,9 @@ export function planStage(o: StageInput): StagePlan {
     regions.push({ lba: bootFirst + a / SECTOR, source: sliceSource(pe, a, b - a), label: 'WinPE' });
   }
   regions.push({ lba: dataFirst, source: concatSource(data.pieces), label: 'Windows image' });
-  if (o.armbian) {
-    regions.push({ lba: linuxFirst, source: o.armbian.parts.root, label: 'Armbian root file system' });
+  if (o.armbian) regions.push({ lba: linuxFirst, source: o.armbian.parts.root, label: 'Armbian root file system' });
+  // The slot is on the eMMC: with Windows and Armbian on the NVMe drive it is written over MaskROM instead.
+  if (o.armbian && target === 'emmc') {
     if (o.armbian.parts.fit.size > SLOT_SECTORS * SECTOR) throw new StageError('Armbian\'s U-Boot is larger than the firmware\'s slot.');
     regions.push({ lba: SLOT_LBA, source: o.armbian.parts.fit, label: 'Armbian U-Boot (firmware slot)' });
   }
@@ -328,7 +335,7 @@ export function planStage(o: StageInput): StagePlan {
   regions.push({ lba: 0, source: bytesSource(gpt.primary), label: 'partition table' });
   for (const r of regions) {
     if (r.source.size % SECTOR) throw new StageError(`${r.label} is not a whole number of sectors`);
-    const inSlot = !!o.armbian && r.lba === SLOT_LBA && r.lba + r.source.size / SECTOR <= SLOT_LBA + SLOT_SECTORS;
+    const inSlot = !!o.armbian && target === 'emmc' && r.lba === SLOT_LBA && r.lba + r.source.size / SECTOR <= SLOT_LBA + SLOT_SECTORS;
     if (r.lba !== 0 && r.lba < windowsFirst && !inSlot) throw new StageError(`${r.label} would overwrite the firmware`);
   }
   return {

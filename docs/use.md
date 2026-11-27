@@ -115,12 +115,29 @@ or stays partly free at the end for Linux. The layout is shown before
 anything is written. The CM5-IO's eMMC (about 31 GB) has room for Windows
 only.
 
+## Windows + Armbian
+
+Experimental. In Simple mode choose **Windows + Armbian** next to
+**Install Windows**; Advanced mode has the same as a box on the Windows
+setup step. Both systems share one disk where the board has room:
+
+| Board | One disk | Otherwise |
+|---|---|---|
+| TaishanPi 3M | the eMMC | |
+| CM5-IO | an NVMe drive (in a USB enclosure on the PC) | Windows on the eMMC or NVMe, Armbian on an SD card (Advanced) |
+| ROCK 4D | none: no eMMC | Windows on NVMe, Armbian on an SD card (Advanced) |
+
+Windows starts by default. To start Armbian, restart, press Esc or F2
+during the countdown, open Boot Manager and choose **"Armbian (U-Boot)"**;
+the next start is Windows again.
+
 ## Windows and Armbian on one eMMC
 
-TaishanPi 3M, Advanced mode, Windows onto the eMMC over MaskROM. On the
-Windows setup step tick **Also install Armbian on the eMMC**, choose an
-Armbian image (none is preselected) and Armbian's share (24 GB by default;
-Windows gets the rest, at least 32 GB).
+TaishanPi 3M, Windows onto the eMMC over MaskROM. In Simple mode choose
+**Windows + Armbian**; in Advanced mode tick **Also install Armbian on the
+eMMC** on the Windows setup step. Choose an Armbian image (none is
+preselected) and Armbian's share (24 GB by default; Windows gets the rest,
+at least 32 GB).
 
 - The image is checked against Armbian's SHA-256 and signature. Only its
   root partition is written, at the end of the eMMC; its U-Boot goes into
@@ -133,10 +150,36 @@ Windows gets the rest, at least 32 GB).
   SD card in the board as well: both have the same file system UUID.
 - Do not run `armbian-install` or a bootloader update on this eMMC: it
   would overwrite the UEFI firmware.
-- Not on the CM5-IO (eMMC too small): there Armbian goes onto an SD card,
-  see below.
+- Not on the CM5-IO's eMMC (too small): there both go onto an NVMe drive,
+  or Armbian onto an SD card, see below.
+
+## CM5-IO: Windows and Armbian on one NVMe drive
+
+Put the NVMe drive in a USB enclosure on the PC. In Simple mode choose
+**Windows + Armbian**, the Windows file, the drive, an Armbian image and
+Armbian's share (half the drive by default; Windows keeps at least
+32 GB). In Advanced mode choose the NVMe drive for Windows, tick the box
+and choose **On the same NVMe drive, after Windows**.
+
+- Start first downloads and checks the Armbian image, then reads the SPL
+  from the board's eMMC over MaskROM (it needs edk2-rk3576 0.5.0 or
+  later) and writes Armbian's U-Boot into a spare area of the eMMC that
+  the firmware keeps for it. Nothing else on the board is written. Then
+  the NVMe drive gets Windows' staged install and Armbian's root partition
+  at its end.
+- Only Armbian's edge images are offered: their U-Boot (mainline) starts
+  Armbian from NVMe. The vendor images have the board maker's U-Boot.
+- Fit the drive in the board, keep the SD slot empty and power on: WinPE
+  installs Windows and keeps the Armbian partition.
+- Each time you choose **"Armbian (U-Boot)"** the firmware copies Armbian's
+  U-Boot from the Armbian partition into that area again, so U-Boot
+  updates inside Armbian are used.
+- In Armbian, do not run `armbian-install` or the boot loader update of
+  `armbian-config`: they can write over the firmware on the eMMC.
 
 ## ROCK 4D: Windows on NVMe, Armbian on an SD card
+
+The ROCK 4D has no eMMC, so the two cannot share one disk.
 
 Advanced mode, Windows onto the NVMe drive (in a USB enclosure on the PC).
 On the Windows setup step tick **Also write Armbian to an SD card** and
@@ -162,7 +205,8 @@ the NVMe drive and the SD card; Armbian takes the whole card.
 
 Experimental, Advanced mode. Choose the eMMC (over MaskROM) or the NVMe
 drive for Windows. On the Windows setup step tick **Also write Armbian to
-an SD card** and choose an Armbian image. On the last page choose the SD
+an SD card** (with the NVMe drive: and keep **On an SD card**) and choose
+an Armbian image. On the last page choose the SD
 card (and the NVMe drive, if Windows goes there); Armbian takes the whole
 card. With the eMMC, one job checks the board, stages Windows on the eMMC
 and then writes the card.

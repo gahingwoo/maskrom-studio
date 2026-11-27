@@ -16,8 +16,8 @@
 
 | 开发板 | 固件位置 | Windows 装到 | MaskROM | Windows 和 Armbian 同时装 |
 |---|---|---|---|---|
-| 立创泰山派 3M | eMMC | eMMC、SD 卡 | 短接 MSK 焊盘，或在固件里按 F4 | 都装在 eMMC 上（高级模式） |
-| ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe | 按键 | Windows 在 eMMC 或 NVMe，Armbian 在 SD 卡（高级模式） |
+| 立创泰山派 3M | eMMC | eMMC、SD 卡 | 短接 MSK 焊盘，或在固件里按 F4 | 都装在 eMMC 上 |
+| ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe | 按键 | 都装在一块 NVMe 硬盘上；或 Windows 在 eMMC 或 NVMe，Armbian 在 SD 卡（高级模式） |
 | Radxa ROCK 4D | SPI NOR | NVMe、SD 卡 | 按键 | Windows 在 NVMe，Armbian 在 SD 卡（高级模式） |
 
 <!-- /generated -->
@@ -36,6 +36,7 @@
 | 在 Windows 电脑上用 DISM 生成 Windows | 仅 CI |
 | 同一块 eMMC 上装 Windows 和 Armbian（泰山派 3M，高级模式） | 默认关闭 |
 | ROCK 4D：Windows 装到 NVMe，Armbian 写到 SD 卡（高级模式） | 仅 CI |
+| CM5-IO：Windows 和 Armbian 装到同一块 NVMe 硬盘（“Windows + Armbian”，实验性） | 仅 CI |
 | 精简 Windows（推荐组合） | 仅 CI |
 | 浏览器开关清理（去掉旧版工具包加上的 `--disable-direct-composition`） | 仅 CI |
 | Windows 第一次进桌面时的自检 | 仅 CI |
