@@ -162,6 +162,7 @@ ZH = {
     "eMMC": "eMMC", "SPI NOR": "SPI NOR", "SD card": "SD 卡", "NVMe": "NVMe",
     "button": "按键", "pads": "短接 MSK 焊盘，或在固件里按 F4",
     "one-emmc": "都装在 eMMC 上（高级模式）", "nvme-and-sd": "Windows 在 NVMe，Armbian 在 SD 卡（高级模式）",
+    "windows-and-sd": "Windows 在 eMMC 或 NVMe，Armbian 在 SD 卡（高级模式）",
     "no": "不支持",
     "whole": "整个映像，从扇区 {first} 开始", "range": "扇区 {first} 到 {last}",
     "UEFI firmware": "UEFI 固件", "UEFI firmware, whole image": "UEFI 固件，整个映像",
@@ -172,6 +173,7 @@ EN = {
     "pads": "short the MSK pads, or F4 in the firmware",
     "one-emmc": "both on the eMMC (Advanced mode)",
     "nvme-and-sd": "Windows on NVMe, Armbian on an SD card (Advanced mode)",
+    "windows-and-sd": "Windows on the eMMC or NVMe, Armbian on an SD card (Advanced mode)",
     "whole": "the whole image, from sector {first}", "range": "sectors {first} to {last}",
 }
 

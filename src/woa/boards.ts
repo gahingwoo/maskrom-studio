@@ -21,7 +21,12 @@ export type WindowsTarget = 'emmc' | 'sd' | 'nvme';
 export type SdBoot = 'bootrom-emmc-first' | 'spl-on-emmc' | 'spi-firmware';
 
 /** Where Windows and Armbian go when both are installed (WoaBoard.hybrid). */
-export type HybridLayout = 'one-emmc' | 'nvme-and-sd';
+export type HybridLayout = 'one-emmc' | 'nvme-and-sd' | 'windows-and-sd';
+
+/** Armbian goes onto an SD card of its own (the layouts other than 'one-emmc'). */
+export function hybridOnSd(h: HybridLayout | null): boolean {
+  return h === 'nvme-and-sd' || h === 'windows-and-sd';
+}
 
 export interface WoaBoard {
   id: BoardId;
@@ -57,6 +62,11 @@ export interface WoaBoard {
    *   the card). The firmware's SPL must carry the one-shot
    *   (PcdArmbianOnceRequestOnSd, the SPL with CONFIG_SPL_ROCKCHIP_ARMBIAN_ONCE_SD_REQUEST),
    *   which the app checks over MaskROM before writing (armbian-once.ts).
+   * - windows-and-sd: Windows on the eMMC or the NVMe drive, Armbian on the
+   *   SD card (its U-Boot at sector 0x4000 of the card). The firmware stays on
+   *   the eMMC and keeps the request there, at eMMC sector 0x3FFF (target 1,
+   *   the SD card). The SPL on the eMMC must carry the one-shot ("ArmbianOnce/1"),
+   *   which the app checks over MaskROM before writing (armbian-once.ts) (CM5-IO).
    */
   hybrid: HybridLayout | null;
   /** How to get into MaskROM: a button, or two pads to short (with F4 in the firmware once it runs). */
@@ -111,8 +121,9 @@ export const WOA_BOARDS: WoaBoard[] = [
     windowsTargets: ['emmc', 'sd', 'nvme'],
     sdBoot: 'bootrom-emmc-first',
     windowsBooted: true,
-    // Its SPL is not built with ArmbianOnce yet, and its 31 GB eMMC has no room for both.
-    hybrid: null,
+    // The 31 GB eMMC has no room for both, so Armbian goes onto an SD card. edk2-rk3576 0.5.0 builds its SPL
+    // (U-Boot v2026.10) with the one-shot, request on the eMMC; board-tested 2026-11-27 with the firmware on the eMMC.
+    hybrid: 'windows-and-sd',
     maskromEntry: 'button',
     factoryPage: { en: 'https://docs.armsom.org/armsom-cm5-io', zh: 'https://docs.armsom.org/zh/armsom-cm5-io' },
     compatible: ['armsom,cm5-io'],

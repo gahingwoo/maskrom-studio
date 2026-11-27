@@ -15,7 +15,7 @@ import { formatBytes } from '../shared/format';
 import type { ArmbianChoice, FactoryChoice, ReleaseTier, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, ExtrasWanted, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
-import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WindowsTarget, type WoaBoard } from '../woa/boards';
+import { firmwareTargets, hybridOnSd, WOA_BOARDS, woaBoard, type BoardId, type WindowsTarget, type WoaBoard } from '../woa/boards';
 import type { WebflashTarget } from '../web/webflash/boards';
 import type { WoaJob, WoaWorkerEvent, WoaWorkerRequest } from '../woa/woa-worker';
 import type { RegionResult, RegionStage } from '../woa/maskrom-regions';
@@ -257,12 +257,14 @@ export function App() {
     return lang === 'en' ? original : (t(`fw.${b.id}.${tg.id}.${field}`) || original);
   };
   const maskromSteps = (b: WoaBoard): string[] => b.webflash.maskrom.map((s, i) => (lang === 'en' ? s : t(`maskrom.${b.id}.${i + 1}`) || s));
+  // Chinese text with a space between Han characters and Latin letters or digits, as the page writes it.
+  const spaced = (z: string): string => (lang === 'en' ? z
+    : z.replace(/([\u4e00-\u9fff])([A-Za-z0-9])/g, '$1 $2').replace(/([A-Za-z0-9])([\u4e00-\u9fff])/g, '$1 $2'));
   // "the eMMC, an SD card or an NVMe drive", from the board's list (boards.ts).
   const whereText = (targets: WindowsTarget[]): string => {
     const w = targets.map((x) => t(`where.${x}`));
     if (lang === 'en') return w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} or ${w[w.length - 1]}`;
-    const z = w.length < 2 ? w.join('') : `${w.slice(0, -1).join('、')}或${w[w.length - 1]}`;
-    return z.replace(/([\u4e00-\u9fff])([A-Za-z0-9])/g, '$1 $2').replace(/([A-Za-z0-9])([\u4e00-\u9fff])/g, '$1 $2');
+    return spaced(w.length < 2 ? w.join('') : `${w.slice(0, -1).join('、')}或${w[w.length - 1]}`);
   };
   const boardDesc = (b: WoaBoard): string => t(b.windowsBooted ? 'board.desc' : 'board.desc.untried', {
     firmware: t(`board.fw.${b.firmwareStorage}`), where: whereText(b.windowsTargets), maskrom: t(`board.maskrom.${b.maskromEntry}`),
@@ -293,18 +295,23 @@ export function App() {
   const staged = method === 'stage';
   const gbToBytes = (v: string) => (/^\d+(\.\d+)?$/.test(v.trim()) ? Math.round(Number(v) * 1024) * MiB : NaN);
   // Armbian next to Windows, started by the firmware's "Armbian (U-Boot)" (boards.ts hybrid): on the TaishanPi 3M
-  // both on the eMMC, staged over MaskROM; on the ROCK 4D Windows on the NVMe drive and Armbian on an SD card.
+  // both on the eMMC, staged over MaskROM; on the ROCK 4D Windows on the NVMe drive and Armbian on an SD card;
+  // on the CM5-IO Windows on the eMMC (staged over MaskROM) or the NVMe drive, and Armbian on an SD card.
   const hybridKind = board?.hybrid ?? null;
-  // Offered only when the chosen firmware release can start it (FEATURES.json armbianOnce); on the ROCK 4D the
-  // SPL on the board is still read over MaskROM before anything is written (armbian-once.ts).
+  const sdKind = hybridOnSd(hybridKind);
+  // Offered only when the chosen firmware release can start it (FEATURES.json armbianOnce); with Armbian on an
+  // SD card the SPL on the board is still read over MaskROM before anything is written (armbian-once.ts).
   const hybridFirmware = fwHas('armbianOnce') !== false;
   // Experimental (never run end to end on a board): Advanced mode only.
   const hybridPossible = mode === 'advanced' && !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && hybridFirmware
-    && (hybridKind === 'one-emmc' ? staged && dest === 'emmc' : dest === 'nvme');
+    && (hybridKind === 'one-emmc' ? staged && dest === 'emmc'
+      : hybridKind === 'windows-and-sd' ? (staged && dest === 'emmc') || dest === 'nvme' : dest === 'nvme');
   const hybridNoFirmware = mode === 'advanced' && !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && !hybridFirmware;
   const hybridOn = hybridPossible && withArmbian;
   const hybridEmmc = hybridOn && hybridKind === 'one-emmc';
-  const hybridSd = hybridOn && hybridKind === 'nvme-and-sd';
+  const hybridSd = hybridOn && sdKind;
+  // CM5-IO: Windows staged on the eMMC over MaskROM, Armbian on the SD card, in one job.
+  const hybridSdEmmc = hybridSd && dest === 'emmc';
   const layoutChoice: LayoutChoice | undefined = !staged || layoutMode === 'whole' || hybridEmmc ? undefined : {
     windowsBytes: gbToBytes(winGb), rest, dataLabel, linuxReserveBytes: linuxGb.trim() === '' ? 0 : gbToBytes(linuxGb),
   };
@@ -348,7 +355,7 @@ export function App() {
     return () => { live = false; };
   }, [hybridOn, boardId, hybridId]);
 
-  const refreshDisks = () => refreshDrives(board?.hybrid === 'nvme-and-sd' && withArmbian ? SD_MIN : DISK_MIN);
+  const refreshDisks = () => refreshDrives(hybridOnSd(board?.hybrid ?? null) && withArmbian ? SD_MIN : DISK_MIN);
   const refreshDrives = (min = 600e6) => { setDrives(null); api.listDrives(min).then((dl) => setDrives(dl.targets.filter((x) => !x.disabled))); };
   const onPc = task === 'windows' && dest !== 'emmc';
   const diskChoices = (drives ?? []).filter((x) => x.size >= DISK_MIN);
@@ -417,7 +424,7 @@ export function App() {
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
 
   const startMaskrom = async (jobFor: (served: Record<string, Served>, extras: Array<{ path: string; data: Uint8Array }>) => WoaJob,
-    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: ExtrasWanted | null) => {
+    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: ExtrasWanted | null, onWritten?: () => Promise<void>) => {
     const served: Record<string, Served> = {};
     for (const p of prep) {
       setStage(p.id, { percent: 0, note: t('run.starting') });
@@ -468,6 +475,12 @@ export function App() {
       } else if (m.type === 'result') {
         w.terminate();
         worker.current = null;
+        if (m.result.ok && onWritten) {
+          // The run goes on (the Armbian card): the MaskROM part is done.
+          update((r) => ({ ...r, stages: r.stages.map((s) => (['board', 'write', 'check'].includes(s.id) ? { ...s, percent: 100 } : s)) }));
+          onWritten().catch((e: unknown) => finish({ ok: false, title: errorText(String((e as Error)?.message ?? e)) }));
+          return;
+        }
         const done = resultOf(m.result, job.kind === 'stage' ? t('result.staged') : job.kind === 'vhd' ? t('result.hostEmmc')
           : job.kind === 'upgrade' ? t('result.upgrade')
           : job.kind === 'whole' ? t('result.restore.armbian') : job.kind === 'factory' ? t('result.restore.factory') : t('result.firmware'),
@@ -486,6 +499,34 @@ export function App() {
   };
 
   const storageWord = (b: WoaBoard, tk: Task) => t(tk === 'windows' || b.firmwareStorage === 'emmc' ? 'storage.emmc' : 'storage.spinor');
+
+  // The staged install over MaskROM: its stages, then the job (WinPE, the image, extras, Armbian on the eMMC).
+  const windowsStages = (): Stage[] => [
+    { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
+    { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
+    ...(ssh || drivers || trim.chrome || rkTools || charsiuDesktop || packageThere ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
+    ...(hybridEmmc ? [{ id: 'armbian', label: t('run.restore.armbian'), percent: null }] : []),
+    { id: 'board', label: t('run.board'), percent: null },
+    { id: 'write', label: t('run.write'), percent: 0 },
+    { id: 'check', label: t('run.check'), percent: null },
+  ];
+  /** Stage Windows on the eMMC over MaskROM; `onWritten` runs after a good write instead of ending the run. */
+  const stageWindows = async (b: WoaBoard, onWritten?: () => Promise<void>) => {
+    const ed = edition!;
+    const hash = await withProgress('image', () => api.hashWindows(windows!.token));
+    if ('error' in hash) { finish({ ok: false, title: errorText(hash.error) }); return; }
+    await startMaskrom((s, extras) => ({
+      kind: 'stage', boardId: b.id, appVersion: api.version, spotCheck: true, resetAfter: true, setup, extras,
+      winpe: { url: s.winpe.url, size: s.winpe.size },
+      image: { url: s.image.url, size: s.image.size, extents: windows!.extents, name: windows!.imageName, imageSize: windows!.imageSize,
+        sha256: hash.sha256, index: ed.index, edition: ed.name, build: ed.build ?? 0 },
+      ...(hybridEmmc && s.armbian ? { armbian: { url: s.armbian.url, size: s.armbian.size, partitionBytes: armbianBytes, label: hybridChoice?.file ?? s.armbian.name } } : {}),
+    }), [
+      { id: 'winpe', get: () => api.prepareWinpe() },
+      { id: 'image', get: () => api.serveWindows(windows!.token) },
+      ...(hybridEmmc ? [{ id: 'armbian', get: () => api.prepareArmbian(b.id, hybridId!) }] : []),
+    ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, charsiu: charsiuDesktop, ...(packageThere ? { boardId: b.id } : {}) }, onWritten);
+  };
 
   // Every failure ends on the run page with Try again, never in a run that waits for nothing.
   const start = () => startJob().catch((e: unknown) => {
@@ -572,29 +613,8 @@ export function App() {
       return;
     }
     if (task === 'windows') {
-      const ed = edition!;
-      setRun({ title: t('run.staging'), log: [], confirm: null, result: null, stages: [
-        { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
-        { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
-        ...(ssh || drivers || trim.chrome || rkTools || charsiuDesktop || packageThere ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
-        ...(hybridEmmc ? [{ id: 'armbian', label: t('run.restore.armbian'), percent: null }] : []),
-        { id: 'board', label: t('run.board'), percent: null },
-        { id: 'write', label: t('run.write'), percent: 0 },
-        { id: 'check', label: t('run.check'), percent: null },
-      ] });
-      const hash = await withProgress('image', () => api.hashWindows(windows!.token));
-      if ('error' in hash) { finish({ ok: false, title: errorText(hash.error) }); return; }
-      await startMaskrom((s, extras) => ({
-        kind: 'stage', boardId: board.id, appVersion: api.version, spotCheck: true, resetAfter: true, setup, extras,
-        winpe: { url: s.winpe.url, size: s.winpe.size },
-        image: { url: s.image.url, size: s.image.size, extents: windows!.extents, name: windows!.imageName, imageSize: windows!.imageSize,
-          sha256: hash.sha256, index: ed.index, edition: ed.name, build: ed.build ?? 0 },
-        ...(hybridEmmc && s.armbian ? { armbian: { url: s.armbian.url, size: s.armbian.size, partitionBytes: armbianBytes, label: hybridChoice?.file ?? s.armbian.name } } : {}),
-      }), [
-        { id: 'winpe', get: () => api.prepareWinpe() },
-        { id: 'image', get: () => api.serveWindows(windows!.token) },
-        ...(hybridEmmc ? [{ id: 'armbian', get: () => api.prepareArmbian(board.id, hybridId!) }] : []),
-      ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, charsiu: charsiuDesktop, ...(packageThere ? { boardId: board.id } : {}) });
+      setRun({ title: t('run.staging'), log: [], confirm: null, result: null, stages: windowsStages() });
+      await stageWindows(board);
       return;
     }
     setRun({ title: t('run.firmware'), log: [], confirm: null, result: null, stages: [
@@ -609,9 +629,10 @@ export function App() {
 
   /**
    * Read-only over MaskROM: does the board's SPL start Armbian once from the SD card (armbian-once.ts)?
-   * The run's 'board' stage shows it; the promise ends with the worker's result.
+   * The run's stage `stageId` shows it; the promise ends with the worker's result. With `resetAfter` false
+   * the loader keeps running, so the staged install that follows needs no new MaskROM entry.
    */
-  const checkArmbianOnce = async (b: WoaBoard): Promise<RegionResult> => {
+  const checkArmbianOnce = async (b: WoaBoard, stageId = 'board', resetAfter = true): Promise<RegionResult> => {
     const loader = await api.getLoader(LOADER);
     if ('error' in loader) return { ok: false, written: 0, reason: t('result.loader'), detail: loader.error };
     const w = new Worker(api.testWorker ?? 'woa-worker.js', { type: 'module' });
@@ -622,21 +643,46 @@ export function App() {
       w.onmessage = (e: MessageEvent<WoaWorkerEvent>) => {
         const m = e.data;
         if (m.type === 'log') addLog(m.line);
-        else if (m.type === 'stage' && m.stage !== 'write' && m.stage !== 'confirm') setStage('board', { note: t(m.stage === 'probe' ? 'stage.probe.spinor' : `stage.${m.stage as RegionStage}`) });
+        else if (m.type === 'stage' && m.stage !== 'write' && m.stage !== 'confirm') setStage(stageId, { note: t(m.stage === 'probe' && b.spi ? 'stage.probe.spinor' : `stage.${m.stage as RegionStage}`) });
         else if (m.type === 'result') done(m.result);
       };
       w.onerror = (e) => done({ ok: false, written: 0, reason: t('result.workerStopped'), detail: e.message });
-      w.postMessage({ type: 'woa-start', job: { kind: 'armbian-once-check', boardId: b.id, resetAfter: true },
+      w.postMessage({ type: 'woa-start', job: { kind: 'armbian-once-check', boardId: b.id, resetAfter },
         moduleUrl: at('wasm/rkdeveloptool.js'), wasmUrl: at('wasm/rkdeveloptool.wasm'), loaderUrl: loader.url } satisfies WoaWorkerRequest);
     });
   };
 
+  /** Armbian's own image onto the SD card (downloaded and checked as for "Armbian onto an SD card"). */
+  const writeArmbianSd = (b: WoaBoard) => withProgress('sd', () => api.writeDrive({ kind: 'armbian', board: b.id, id: hybridId!, device: sdDrive! }));
+  const keepNext = (b: WoaBoard) => t(b.spi ? 'next.hybridSd.keep' : 'next.hybridSd.keep.emmc');
+
   /**
-   * ROCK 4D, Armbian next to Windows: check the board's firmware over MaskROM (nothing is written when it
+   * CM5-IO, Windows on the eMMC: check the board's firmware over MaskROM (nothing is written when it cannot
+   * start Armbian; the loader keeps running), then Windows staged on the eMMC as without Armbian, then
+   * Armbian's own image onto the SD card. The firmware on the eMMC is kept and writes the request itself.
+   */
+  const startHybridSdEmmc = async (b: WoaBoard) => {
+    setRun({ title: t('run.hybridSd.emmc'), log: [], confirm: null, result: null, stages: [
+      { id: 'fwcheck', label: t('run.hybridSd.check', { board: b.name }), percent: null },
+      ...windowsStages(),
+      { id: 'sd', label: t('run.hybridSd.sd'), percent: 0 },
+    ] });
+    const c = await checkArmbianOnce(b, 'fwcheck', false);
+    if (!c.ok) { finish(resultOf(c, '')); return; }
+    setStage('fwcheck', { percent: 100, note: t('run.hybridSd.checked') });
+    await stageWindows(b, async () => {
+      const a = await writeArmbianSd(b);
+      finish(resultOf(a, t('result.hybridSd.emmc'), [t('next.stage.1'), t('next.stage.2'), t('next.stage.3'), t('next.hybridSd.card'), t('next.hybridSd.armbian'), keepNext(b), t('next.stage.4')]));
+    });
+  };
+
+  /**
+   * Armbian next to Windows on an SD card: check the board's firmware over MaskROM (nothing is written when it
    * cannot start Armbian), then Windows onto the NVMe drive as without Armbian, then Armbian's own image
-   * onto the SD card (downloaded and checked as for "Armbian onto an SD card").
+   * onto the SD card. On the CM5-IO with Windows on the eMMC, startHybridSdEmmc.
    */
   const startHybridSd = async (b: WoaBoard) => {
+    if (dest === 'emmc') { await startHybridSdEmmc(b); return; }
     const req = { target: dest, boardId: b.id, windowsToken: windows!.token, index: index!, setup, drivers: drivers?.token ?? null };
     setRun({ title: t('run.hybridSd'), log: [], confirm: null, result: null, stages: [
       { id: 'board', label: t('run.hybridSd.check', { board: b.name }), percent: null },
@@ -655,8 +701,8 @@ export function App() {
       if (!r.ok) { finish(resultOf(r, '')); return; }
     }
     setStage('write', { percent: 100, note: t('run.written') });
-    const a = await withProgress('sd', () => api.writeDrive({ kind: 'armbian', board: b.id, id: hybridId!, device: sdDrive! }));
-    finish(resultOf(a, t('result.hybridSd'), [t('next.disk.nvme'), t('next.hybridSd.windows'), t('next.hybridSd.card'), t('next.hybridSd.armbian'), t('next.hybridSd.keep'), t('next.stage.4')]));
+    const a = await writeArmbianSd(b);
+    finish(resultOf(a, t('result.hybridSd'), [t('next.disk.nvme'), t('next.hybridSd.windows'), t('next.hybridSd.card'), t('next.hybridSd.armbian'), keepNext(b), t('next.stage.4')]));
   };
 
   // While a write runs, closing the window asks first (main.ts), in the page's language.
@@ -1096,15 +1142,21 @@ export function App() {
   const hybridOffers = offerList;
   const hybridGroup = hybridPossible && (
     <FormSection title={t('hybrid.title')} titleElement="h3">
-      <Checkbox id="hybrid-on" label={t(hybridKind === 'nvme-and-sd' ? 'hybrid.on.sd' : 'hybrid.on')}
-        description={t(hybridKind === 'nvme-and-sd' ? 'hybrid.on.sd.desc' : 'hybrid.on.desc')} isChecked={withArmbian}
-        onChange={(_e, v) => { setWithArmbian(v); if (v) { setHybridId(null); setSdDrive(null); if (dest !== 'emmc') refreshDrives(SD_MIN); } }} />
+      <Checkbox id="hybrid-on" label={t(sdKind ? 'hybrid.on.sd' : 'hybrid.on')}
+        description={hybridKind === 'windows-and-sd' ? spaced(t('hybrid.wsd.on.desc', { where: t(`where.${dest}`) })) : t(sdKind ? 'hybrid.on.sd.desc' : 'hybrid.on.desc')} isChecked={withArmbian}
+        onChange={(_e, v) => { setWithArmbian(v); if (v) { setHybridId(null); setSdDrive(null); if (sdKind) refreshDrives(SD_MIN); } }} />
       <Content component="p" id="hybrid-experimental">{t('hybrid.experimental')}</Content>
       {/* The ROCK 4D: what the firmware must have, said before anything is chosen; the app checks it over MaskROM. */}
       {hybridKind === 'nvme-and-sd' && (
         <Alert isInline variant="warning" id="hybrid-firmware" title={t('hybrid.sd.fw.title')}>
           <Content component="p">{t('hybrid.sd.fw.text', { board: board?.name ?? '' })}</Content>
           <Content component="p">{t('hybrid.sd.flow', { board: board?.name ?? '' })}</Content>
+        </Alert>
+      )}
+      {hybridKind === 'windows-and-sd' && (
+        <Alert isInline variant="warning" id="hybrid-firmware" title={t('hybrid.sd.fw.title')}>
+          <Content component="p">{t('hybrid.wsd.fw.text', { board: board?.name ?? '' })}</Content>
+          <Content component="p">{spaced(t('hybrid.wsd.flow', { board: board?.name ?? '', where: t(`where.${dest}`) }))}</Content>
         </Alert>
       )}
       {hybridOn && (
@@ -1270,7 +1322,7 @@ export function App() {
     </StepPage>
   );
 
-  // The ROCK 4D's Armbian next to Windows reads the board's firmware over MaskROM first, though Windows goes to a drive.
+  // Armbian next to Windows on an SD card reads the board's firmware over MaskROM first, though Windows may go to a drive.
   const maskromCard = board && !onBoard && task !== 'stick' && !driveTask && (!onPc || hybridSd) && (
     <Card>
       <CardTitle>{t('maskrom.title')}</CardTitle>
@@ -1394,11 +1446,12 @@ export function App() {
 
   const erases = task !== 'upgrade';
   const askTitle = !board || !task ? '' : driveTask ? t('ask.drive.title') : restoreTask ? t('ask.restore.title') : task === 'stick' ? t('ask.stick.title')
-    : hybridSd ? t('ask.hybridSd.title') : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
+    : hybridSdEmmc ? t('ask.hybridSd.emmc.title') : hybridSd ? t('ask.hybridSd.title') : onPc ? t('ask.disk.title') : task === 'windows' && method === 'host' ? t('ask.host.title')
     : onBoard ? t('ask.here.title', { storage: storageWord(board, task) }) : t('ask.connect.title');
   const askText = !board || !task ? '' : driveTask ? t('ask.drive.text', { drive: drives?.find((x) => x.device === stick)?.description ?? stick ?? '' })
     : restoreTask ? t('ask.restore.text')
     : task === 'stick' ? t('ask.stick.text')
+    : hybridSdEmmc ? t('ask.hybridSd.emmc.text', { board: board.name, card: drives?.find((x) => x.device === sdDrive)?.description ?? sdDrive ?? '' })
     : hybridSd ? t('ask.hybridSd.text', { board: board.name, drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '', card: drives?.find((x) => x.device === sdDrive)?.description ?? sdDrive ?? '' })
     : onPc ? t('ask.disk.text', { drive: drives?.find((x) => x.device === disk)?.description ?? disk ?? '' })
       : task === 'windows' && method === 'host' ? t('ask.host.text')
@@ -1419,7 +1472,7 @@ export function App() {
           <Button variant="link" isInline onClick={refreshDisks}>{t('refresh')}</Button>
         </FormGroup>
       )}
-      {/* ROCK 4D: the second drive, the SD card Armbian goes onto. */}
+      {/* ROCK 4D and CM5-IO: the SD card Armbian goes onto (beside the NVMe drive, or alone with Windows on the eMMC). */}
       {hybridSd && (
         <FormGroup role="radiogroup" fieldId="sd-drive" label={t('review.drive.armbianSd')} isStack>
           {drives === null ? <Content component="p">{t('review.usb.looking')}</Content>

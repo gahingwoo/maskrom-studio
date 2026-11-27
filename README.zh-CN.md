@@ -17,7 +17,7 @@
 | 开发板 | 固件位置 | Windows 装到 | MaskROM | Windows 和 Armbian 同时装 |
 |---|---|---|---|---|
 | 立创泰山派 3M | eMMC | eMMC、SD 卡 | 短接 MSK 焊盘，或在固件里按 F4 | 都装在 eMMC 上（高级模式） |
-| ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe | 按键 | 不支持 |
+| ArmSoM CM5-IO | eMMC | eMMC、SD 卡、NVMe | 按键 | Windows 在 eMMC 或 NVMe，Armbian 在 SD 卡（高级模式） |
 | Radxa ROCK 4D | SPI NOR | NVMe、SD 卡 | 按键 | Windows 在 NVMe，Armbian 在 SD 卡（高级模式） |
 
 <!-- /generated -->

@@ -98,7 +98,7 @@ export interface SetupOptions {
    */
   browserGpu?: boolean;
   /**
-   * Armbian goes onto an SD card in the same job (WoaBoard.hybrid 'nvme-and-sd'):
+   * Armbian goes onto an SD card in the same job (WoaBoard.hybrid 'nvme-and-sd' or 'windows-and-sd'):
    * WinPE says at the end how to start it. Nothing else changes.
    */
   armbianOnSd?: boolean;

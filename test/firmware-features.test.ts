@@ -65,6 +65,12 @@ describe('firmware features', () => {
     expect(hasFeature(r.features, 'tspi3m', 'armbianOnce')).toBe(false);
   });
 
+  it('offers Windows and Armbian on the CM5-IO only from 0.5.0 on (Armbian once in its SPL, request on the eMMC)', () => {
+    const b = parseFeatures(readFileSync(join(__dirname, 'fixtures', 'edk2-0.5.0-features.json'), 'utf8'));
+    expect(hasFeature({ from: 'release', boards: b }, 'cm5io', 'armbianOnce')).toBe(true);
+    expect(hasFeature(builtinFeatures('0.4.1'), 'cm5io', 'armbianOnce')).toBe(false);
+  });
+
   it('knows nothing about a release it has no table for', () => {
     expect(builtinFeatures('0.2.0')).toEqual({ from: null, boards: {} });
     expect(hasFeature(builtinFeatures('0.2.0'), 'rock4d', 'windows')).toBeNull();

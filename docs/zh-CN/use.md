@@ -62,16 +62,25 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows �
 - 默认启动 Windows。要启动 Armbian，在固件的启动管理器里选 **"Armbian (U-Boot)"**；这次运行 Armbian 自己的 U-Boot、内核和设备树，下一次启动又回到 Windows。
 - Armbian 第一次启动时和普通映像一样询问 root 密码、用户和时区。不要同时在开发板上插一张写有同一个 Armbian 映像的 SD 卡：两者的文件系统 UUID 相同。
 - 不要在这块 eMMC 的 Armbian 里运行 `armbian-install` 或更新引导程序：会覆盖 UEFI 固件。
-- CM5-IO 不支持（eMMC 太小，固件也还没有这个启动项）。
+- CM5-IO 不支持（eMMC 太小）：CM5-IO 上 Armbian 写到 SD 卡，见下文。
 
 ## ROCK 4D：Windows 装到 NVMe，Armbian 写到 SD 卡
 
 高级模式，把 Windows 装到 NVMe 硬盘（装在硬盘盒里接到电脑）。在 Windows 设置一步勾选 **同时把 Armbian 写到一张 SD 卡上**，选一个 Armbian 映像（厂商或 edge 内核）。最后一页选 NVMe 硬盘和 SD 卡；Armbian 占用整张卡。
 
-- **需要新固件。** 只有用新版 U-Boot SPL（U-Boot v2026.10，单次启动请求放在 SD 卡上）构建的固件，ROCK 4D 才能从卡启动 Armbian。截至 2026-11-26，edk2-rk3576 还没有带它的发布版（在 `rock4d-parity` 分支上）。点开始后先通过 MaskROM 读取开发板上的 SPL，没有就停下，什么都不写。
+- **需要新固件。** 只有用新版 U-Boot SPL（U-Boot v2026.10，单次启动请求放在 SD 卡上）构建的固件，ROCK 4D 才能从卡启动 Armbian。edk2-rk3576 0.5.0 及以后的版本带它。点开始后先通过 MaskROM 读取开发板上的 SPL，没有就停下，什么都不写。
 - 启动方式：平时从 NVMe 硬盘启动 Windows。在启动管理器（倒计时期间按 Esc 或 F2）里选 **"Armbian (U-Boot)"**：固件在卡上写一个一次性的请求并重启，SPL 擦掉请求，从卡上加载 Armbian 的 U-Boot。下一次启动又回到 Windows。只有卡插着时才列出这一项。
 - 等 Windows 装完再插卡。Windows 提示格式化这张卡时选否。
 - 在 Armbian 里不要运行 `armbian-install`，也不要用 `armbian-config` 的引导程序更新：它们可能覆盖 SPI NOR 闪存上的固件。
+
+## CM5-IO：Windows 装到 eMMC 或 NVMe，Armbian 写到 SD 卡
+
+实验性功能，高级模式。Windows 选装到 eMMC（通过 MaskROM）或 NVMe 硬盘。在 Windows 设置一步勾选 **同时把 Armbian 写到一张 SD 卡上**，选一个 Armbian 映像。最后一页选 SD 卡（Windows 装到 NVMe 时也选 NVMe 硬盘）；Armbian 占用整张卡。选 eMMC 时，一次任务里先检查开发板，再把 Windows 暂存到 eMMC，最后写卡。
+
+- **eMMC 上需要 edk2-rk3576 0.5.0 或更新的固件。** 安装 Windows 会保留开发板上现有的固件。点开始后先通过 MaskROM 读取 eMMC 上的 SPL，没有 Armbian 单次启动就停下，什么都不写。这时请先写入 UEFI 固件。
+- 启动方式：平时启动 Windows。重启，倒计时期间按 Esc 或 F2，打开 Boot Manager（启动管理器），选 **"Armbian (U-Boot)"**：固件在 eMMC 上写一个一次性的请求并重启，SPL 擦掉请求，从卡上加载 Armbian 的 U-Boot。下一次启动又回到 Windows。只有卡插着时才列出这一项。
+- 等 Windows 装完再插卡。Windows 提示格式化这张卡时选否。
+- 在 Armbian 里不要运行 `armbian-install`，也不要用 `armbian-config` 的引导程序更新：它们可能覆盖 eMMC 上的固件。
 
 ## Windows 第一次进桌面：自检
 
