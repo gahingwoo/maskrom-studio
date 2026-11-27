@@ -17,7 +17,9 @@ over on the first start.
 - Charsiu Desktop is installed on Windows by default (the app only, no
   model): charsiu-desktop 0.3.0's arm64 installer, checked against its
   SHA-256 and installed for the first user who signs in. It can be turned
-  off in Advanced mode.
+  off in Advanced mode. The installer is read from charsiu-desktop's
+  stable release once that release's SHA256SUMS.txt matches its files
+  (0.3.1 on); until then v0.3.0's installer is pinned.
 - The RK3576 Windows driver package is installed automatically: the
   woa-rk3576 release's rk3576-drivers-arm64.zip (GPU, video decoder, NPU,
   audio, storage, network and the rest), checked against the release's

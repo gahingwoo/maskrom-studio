@@ -27,7 +27,7 @@ export interface Releases {
   winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier; tools: { file: string; size: number } | null;
     /** The RK3576 Windows driver package of the release; null: the release has none, the WinPE's drivers are installed. */
     drivers?: { file: string; size: number } | null } | null;
-  /** Charsiu Desktop's Windows installer (charsiu-desktop.ts, pinned to its stable release); null: not offered. */
+  /** Charsiu Desktop's Windows installer (charsiu-desktop.ts: its stable release's, else the pin); null: not offered. */
   charsiu?: { tag: string; file: string; size: number } | null;
   problems: string[];
 }

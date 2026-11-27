@@ -4,12 +4,26 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { CHARSIU_DESKTOP, CHARSIU_FILE, CHARSIU_REPO, CHARSIU_SETUP_PATH, charsiuGenerated, charsiuRunOnce, charsiuScript } from '../src/woa/charsiu-desktop';
+import { CHARSIU_DESKTOP, CHARSIU_FILE, CHARSIU_PINNED, CHARSIU_REPO, CHARSIU_SETUP_ASSET, CHARSIU_SETUP_PATH, charsiuFromRelease, charsiuGenerated, charsiuRunOnce, charsiuScript, chooseCharsiu } from '../src/woa/charsiu-desktop';
 import { parseSums, releaseAsset, type GithubRelease } from '../src/woa/releases';
+import { pickRelease } from '../src/shared/channel';
 import { DEFAULT_SETUP, setupComplete } from '../src/woa/setup-files';
 import { CONFIGURE } from '../src/woa/stage-scripts';
 
 const fx = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'releases-0.5.0.json'), 'utf8')) as { charsiu: GithubRelease; charsiuSums: string };
+// The ci pre-release, recorded: named and checksummed the way every release from v0.3.1 on is.
+const ci = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'charsiu-desktop-ci.json'), 'utf8')) as { release: GithubRelease; sums: string };
+/** That record as the stable v0.3.1 would look: the same files under the tag's names (derived, not recorded). */
+function asStable(tag: string): GithubRelease {
+  const v = tag.slice(1);
+  const ren = (n: string) => n.replace(/_0\.3\.0_/, `_${v}_`);
+  return {
+    ...ci.release, tag_name: tag, name: `Charsiu Desktop ${v}`, prerelease: false,
+    html_url: `https://github.com/${CHARSIU_REPO}/releases/tag/${tag}`,
+    assets: ci.release.assets.map((a) => ({ ...a, name: ren(a.name), browser_download_url: `https://github.com/${CHARSIU_REPO}/releases/download/${tag}/${ren(a.name)}` })),
+  };
+}
+const stableSums = (v: string) => parseSums(ci.sums.replace(/_0\.3\.0_/g, `_${v}_`));
 
 describe('Charsiu Desktop', () => {
   it('is on by default', () => {
@@ -31,6 +45,43 @@ describe('Charsiu Desktop', () => {
   it('is pinned because the release\'s SHA256SUMS.txt is older than its files', () => {
     // If this starts passing, the release was fixed and the installer could be read from it like the others.
     expect(releaseAsset(fx.charsiu, parseSums(fx.charsiuSums), CHARSIU_DESKTOP.file)).toMatch(/disagree/);
+  });
+
+  it('reads the installer from a release named and checksummed by package.sh (recorded ci release)', () => {
+    const got = charsiuFromRelease(ci.release, parseSums(ci.sums));
+    expect(typeof got).not.toBe('string');
+    const a = ci.release.assets.find((x) => CHARSIU_SETUP_ASSET.test(x.name))!;
+    expect(got).toEqual({ tag: 'ci', file: a.name, url: a.browser_download_url, size: a.size, sha256: a.digest!.slice(7), from: 'release' });
+    expect(a.name).toBe('charsiu-desktop_0.3.0_arm64-setup.exe');
+  });
+
+  it('refuses a release whose checksums are missing or disagree', () => {
+    expect(charsiuFromRelease(ci.release, new Map())).toMatch(/SHA256SUMS\.txt does not list/);
+    const name = ci.release.assets.find((x) => CHARSIU_SETUP_ASSET.test(x.name))!.name;
+    expect(charsiuFromRelease(ci.release, new Map([[name, '0'.repeat(64)]]))).toMatch(/disagree/);
+    // v0.3.0: Charsiu.Desktop_ names and a stale SHA256SUMS.txt
+    expect(charsiuFromRelease(fx.charsiu, parseSums(fx.charsiuSums))).toMatch(/has no charsiu-desktop_/);
+  });
+
+  it('uses the pin until a stable release checks out, then the release', () => {
+    // today: the stable tier is v0.3.0, which is refused, so the pin
+    const now = [fx.charsiu, ci.release];
+    const rel = pickRelease(now, 'stable')!;
+    expect(rel.tag_name).toBe('v0.3.0');
+    const today = chooseCharsiu(charsiuFromRelease(rel, parseSums(fx.charsiuSums)));
+    expect(today.installer).toEqual(CHARSIU_PINNED);
+    expect(today.installer.url).toBe(CHARSIU_DESKTOP.url);
+    expect(today.why).toMatch(/v0\.3\.0/);
+    expect(chooseCharsiu(null).installer).toEqual(CHARSIU_PINNED);
+    expect(chooseCharsiu('GitHub answered 403').why).toBe('GitHub answered 403');
+    // once v0.3.1 is out: the stable tier picks it and its installer is used
+    const later = [fx.charsiu, ci.release, asStable('v0.3.1')];
+    const r2 = pickRelease(later, 'stable')!;
+    expect(r2.tag_name).toBe('v0.3.1');
+    const next = chooseCharsiu(charsiuFromRelease(r2, stableSums('0.3.1')));
+    expect(next.why).toBeNull();
+    expect(next.installer).toMatchObject({ tag: 'v0.3.1', file: 'charsiu-desktop_0.3.1_arm64-setup.exe', from: 'release',
+      url: `https://github.com/${CHARSIU_REPO}/releases/download/v0.3.1/charsiu-desktop_0.3.1_arm64-setup.exe` });
   });
 
   it('runs at the first sign-in, not in SetupComplete.cmd: it installs per user', () => {

@@ -1,0 +1,38 @@
+{
+  "_comment": "Recorded 2026-11-27 with gh api repos/gahingwoo/charsiu-desktop/releases/tags/ci (fields the app reads) and that release's SHA256SUMS.txt: the rolling ci pre-release, the first charsiu-desktop release named and checksummed by .github/scripts/package.sh, as every tagged release from v0.3.1 on is. Replace with the recorded stable release once it is out.",
+  "release": {
+    "tag_name": "ci",
+    "name": "CI build d1a725d 2026-11-25",
+    "draft": false,
+    "prerelease": true,
+    "html_url": "https://github.com/gahingwoo/charsiu-desktop/releases/tag/ci",
+    "target_commitish": "3e187922920f79e2172f71c22fa36006b2f2747d",
+    "assets": [
+      {
+        "name": "charsiu-desktop_0.3.0_aarch64.AppImage",
+        "size": 79239688,
+        "digest": "sha256:9dd931f3a88d739b95336d466b6557ae8806d58b6a43d4e3355cf80672c701cc",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/ci/charsiu-desktop_0.3.0_aarch64.AppImage"
+      },
+      {
+        "name": "charsiu-desktop_0.3.0_arm64-setup.exe",
+        "size": 1901883,
+        "digest": "sha256:6eb8dd2068047a428e63fe4147ac9c9bb97d01093c8408cc1d6d746ec96da5e2",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/ci/charsiu-desktop_0.3.0_arm64-setup.exe"
+      },
+      {
+        "name": "charsiu-desktop_0.3.0_arm64.deb",
+        "size": 2357886,
+        "digest": "sha256:5fdabe6bb320886018a5c643b3dc5fea0e7854d01879e706f31cf0100fcb0b4a",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/ci/charsiu-desktop_0.3.0_arm64.deb"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "size": 307,
+        "digest": "sha256:9dc86e89dafc15420f3456d8433588b0e0c10742f7ebc467891968bb5d03a1e0",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/ci/SHA256SUMS.txt"
+      }
+    ]
+  },
+  "sums": "9dd931f3a88d739b95336d466b6557ae8806d58b6a43d4e3355cf80672c701cc  charsiu-desktop_0.3.0_aarch64.AppImage\n6eb8dd2068047a428e63fe4147ac9c9bb97d01093c8408cc1d6d746ec96da5e2  charsiu-desktop_0.3.0_arm64-setup.exe\n5fdabe6bb320886018a5c643b3dc5fea0e7854d01879e706f31cf0100fcb0b4a  charsiu-desktop_0.3.0_arm64.deb\n"
+}
