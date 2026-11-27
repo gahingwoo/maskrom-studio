@@ -417,12 +417,12 @@ export const MESSAGES: Dict = {
   'restore.to.drive.desc': d('The eMMC is not touched. Whether the board starts from the card depends on what is on its eMMC (below).', '不动 eMMC。开发板能否从卡启动取决于 eMMC 上有什么（见下）。'),
   'restore.factory.emmcOnly': d('A factory update.img is written to the eMMC only: it is a MaskROM partition write.', '出厂 update.img 只能写入 eMMC：它是通过 MaskROM 按分区写入的。'),
   'sd.boot.bootrom-emmc-first.title': d('Starting the {board} from the card', '{board} 从卡启动'),
-  'sd.boot.bootrom-emmc-first.armbian': d('The {board}\'s BootROM starts the eMMC first whenever the eMMC holds a bootloader. With the UEFI firmware on the eMMC, the card starts only once the eMMC\'s bootloader is erased, or through the firmware (a one-shot "Armbian (U-Boot)" boot entry is planned in edk2-rk3576, not released yet).',
-    '{board} 的 BootROM 只要 eMMC 上有引导程序就先从 eMMC 启动。eMMC 上装着 UEFI 固件时，只有清除 eMMC 的引导程序后才会从卡启动，或者通过固件启动（edk2-rk3576 计划加入一次性的“Armbian (U-Boot)”启动项，尚未发布）。'),
+  'sd.boot.bootrom-emmc-first.armbian': d('The {board}\'s BootROM starts the eMMC first whenever the eMMC holds a bootloader. With the UEFI firmware on the eMMC, the card starts only once the eMMC\'s bootloader is erased, or through the firmware's one-shot "Armbian (U-Boot)" boot entry (edk2-rk3576 0.5.0 or later).',
+    '{board} 的 BootROM 只要 eMMC 上有引导程序就先从 eMMC 启动。eMMC 上装着 UEFI 固件时，只有清除 eMMC 的引导程序后才会从卡启动，或者通过固件里一次性的“Armbian (U-Boot)”启动项启动（edk2-rk3576 0.5.0 或更新）。'),
   'sd.boot.bootrom-emmc-first.uefi': d('The {board} starts the card only while its eMMC holds no bootloader (the BootROM tries the eMMC first).', '{board} 只有在 eMMC 上没有引导程序时才会从这张卡启动（BootROM 先试 eMMC）。'),
   'sd.boot.spl-on-emmc.title': d('The {board} does not start from an SD card by itself', '{board} 不能单独从 SD 卡启动'),
-  'sd.boot.spl-on-emmc.armbian': d('Its BootROM boots the eMMC or USB only, never the SD card. An Armbian card needs a bootloader on the eMMC: the UEFI firmware (a one-shot "Armbian (U-Boot)" boot entry is planned in edk2-rk3576, not released yet) or Armbian\'s own U-Boot written to the eMMC.',
-    '它的 BootROM 只从 eMMC 或 USB 启动，从不从 SD 卡启动。Armbian 卡需要 eMMC 上有引导程序：UEFI 固件（edk2-rk3576 计划加入一次性的“Armbian (U-Boot)”启动项，尚未发布），或写入 eMMC 的 Armbian 自带 U-Boot。'),
+  'sd.boot.spl-on-emmc.armbian': d('Its BootROM boots the eMMC or USB only, never the SD card. An Armbian card needs a bootloader on the eMMC: the UEFI firmware (its one-shot "Armbian (U-Boot)" boot entry, edk2-rk3576 0.5.0 or later) or Armbian\'s own U-Boot written to the eMMC.',
+    '它的 BootROM 只从 eMMC 或 USB 启动，从不从 SD 卡启动。Armbian 卡需要 eMMC 上有引导程序：UEFI 固件（它的一次性“Armbian (U-Boot)”启动项，edk2-rk3576 0.5.0 或更新），或写入 eMMC 的 Armbian 自带 U-Boot。'),
   'sd.boot.spl-on-emmc.uefi': d('The {board}\'s BootROM never starts an SD card: this card is used only by a bootloader on the eMMC that loads it.', '{board} 的 BootROM 从不从 SD 卡启动：只有 eMMC 上的引导程序会去加载这张卡。'),
 
 

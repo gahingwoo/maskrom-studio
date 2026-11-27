@@ -22,7 +22,7 @@
 
 <!-- /generated -->
 
-由 `scripts/gen-docs` 根据 `src/woa/boards.ts` 生成。ROCK 4D 上的 Windows 需要比 0.4.1 新的 edk2-rk3576：`ci` 预发布版。
+由 `scripts/gen-docs` 根据 `src/woa/boards.ts` 生成。ROCK 4D 上的 Windows 需要 [edk2-rk3576 0.5.0](https://github.com/gahingwoo/edk2-rk3576/releases/tag/0.5.0) 或更新。
 
 ## 现状
 
@@ -35,7 +35,7 @@
 | 把 Windows 写到电脑上的 SD 卡 | 仅 CI |
 | 在 Windows 电脑上用 DISM 生成 Windows | 仅 CI |
 | 同一块 eMMC 上装 Windows 和 Armbian（泰山派 3M，高级模式） | 默认关闭 |
-| ROCK 4D：Windows 装到 NVMe，Armbian 写到 SD 卡（高级模式） | 仅 CI，需要未发布的固件 |
+| ROCK 4D：Windows 装到 NVMe，Armbian 写到 SD 卡（高级模式） | 仅 CI |
 | 精简 Windows（推荐组合） | 仅 CI |
 | 浏览器开关清理（去掉旧版工具包加上的 `--disable-direct-composition`） | 仅 CI |
 | Windows 第一次进桌面时的自检 | 仅 CI |

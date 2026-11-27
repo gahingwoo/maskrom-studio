@@ -28,7 +28,7 @@ has the whole path from a new board to Windows or Linux.
 <!-- /generated -->
 
 Generated from `src/woa/boards.ts` by `scripts/gen-docs`. Windows on the
-ROCK 4D needs edk2-rk3576 newer than 0.4.1: the `ci` pre-release.
+ROCK 4D needs [edk2-rk3576 0.5.0](https://github.com/gahingwoo/edk2-rk3576/releases/tag/0.5.0) or later.
 
 ## Status
 
@@ -44,7 +44,7 @@ only in CI, against a pretend board. Board checks still to do:
 | Windows onto an SD card in the PC | CI only |
 | Windows built on a Windows PC with DISM | CI only |
 | Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode) | off by default |
-| ROCK 4D: Windows on NVMe and Armbian on an SD card (Advanced mode) | CI only, needs unreleased firmware |
+| ROCK 4D: Windows on NVMe and Armbian on an SD card (Advanced mode) | CI only |
 | Windows trimming, recommended set | CI only |
 | Browser switch cleanup (an older tools bundle's `--disable-direct-composition` taken out) | CI only |
 | Self-test on Windows' first desktop | CI only |
