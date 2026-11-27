@@ -60,11 +60,11 @@ that card (`PcdArmbianOnceRequestOnSd`,
 `CONFIG_SPL_ROCKCHIP_ARMBIAN_ONCE_SD_REQUEST`). No slot, no copy from NVMe,
 USB or a file system: Armbian can only be a whole Armbian SD card, so
 Windows and Armbian on one NVMe drive is not possible. What the firmware
-must provide, and whether it exists (2026-11-26):
+must provide, and whether it exists (edk2-rk3576 0.5.0):
 
 | Needed | Where | Exists |
 |---|---|---|
-| SPL with ArmbianOnce and the SD request, tag `ArmbianOnce/1` in SPI 0x8000..0x5FFFF | edk2-rk3576 c81c13f, U-Boot v2026.10 (`scripts/build-spl.sh rock4d`) | branch `rock4d-parity` only (CI build has the tag at 0x3807c); no release, never run on a board |
+| SPL with ArmbianOnce and the SD request, tag `ArmbianOnce/1` in SPI 0x8000..0x5FFFF | edk2-rk3576 c81c13f, U-Boot v2026.10 (`scripts/build-spl.sh rock4d`) | in release 0.5.0; board-tested 2026-11-27 |
 | `RK_ARMBIAN_ONCE_ENABLE` and `PcdArmbianOnceRequestOnSd` in ROCK4D.dsc | same commit | same |
 | ArmbianOnceLib SD request path | main 5e0c941 | merged, off by default |
 

@@ -173,7 +173,7 @@ firmware at ExitBootServices). Windows from SD has not run on any board.
 
 **NVMe.** stornvme is inbox; the firmware must boot NVMe and describe PCIe
 in ACPI (done and verified on the CM5-IO and, since 2026-11-26, the ROCK
-4D, whose ACPI is on edk2-rk3576 main but in no release yet). The app
+4D, whose ACPI is in edk2-rk3576 0.5.0). The app
 still shows its "not started on this board yet" notice for the ROCK 4D.
 
 ## How the installed Windows comes out
