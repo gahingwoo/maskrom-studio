@@ -37,7 +37,7 @@
 | 同一块 eMMC 上装 Windows 和 Armbian（泰山派 3M，高级模式） | 默认关闭 |
 | ROCK 4D：Windows 装到 NVMe，Armbian 写到 SD 卡（高级模式） | 仅 CI，需要未发布的固件 |
 | 精简 Windows（推荐组合） | 仅 CI |
-| Edge、Chrome 和 WebView2 使用 GPU（浏览器 GPU 开关） | 仅 CI |
+| 浏览器开关清理（去掉旧版工具包加上的 `--disable-direct-composition`） | 仅 CI |
 | Windows 第一次进桌面时的自检 | 仅 CI |
 | 每次开机自动登录 | 默认关闭 |
 | UEFI 固件：完整映像、保留分区 | 仅 CI |

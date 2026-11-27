@@ -30,9 +30,9 @@ over on the first start.
 - "Sign in automatically" for a Windows install that skips setup: signs in
   on every start, with the password kept as an LSA secret instead of plain
   text in the registry.
-- Edge, Chrome and WebView2 render on the GPU at WDDM 2.x: woa-rk3576's
-  rk3576-browser-gpu.ps1 adds --disable-direct-composition to their launch
-  paths at the first start and keeps it there after browser updates.
+- Edge, Chrome and WebView2: the first start takes out the
+  --disable-direct-composition an older RK3576 tools bundle may have added,
+  with its scheduled task. The fixed GPU driver needs no browser switch.
 - Radxa ROCK 4D: "UEFI firmware, keep the settings" for its SPI NOR flash
   (sectors 0 to 32255; the settings at 0xFC0000 stay). Every ROCK 4D write
   over MaskROM selects the SPI NOR (`cs 9`), refuses any other storage,
@@ -56,7 +56,7 @@ over on the first start.
   inventory of that image: no framework, no app that stays.
 - An "RK3576 Tools" folder (Chinese name on a Chinese Windows) on the
   Public Desktop, shortcuts only: self-test, RK3576 Monitor, drivers guide,
-  collect diagnostics, fix SSH, browser GPU switch, user guide.
+  collect diagnostics, fix SSH, user guide.
 - SSH: port 22 is opened on every firewall profile. It was Private and
   Domain only, so on a first network that came up as Public (a ROCK 4D,
   2026-11-26) SSH was blocked. Installs from before this: see Known issues

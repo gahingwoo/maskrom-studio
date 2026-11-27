@@ -5,7 +5,7 @@
 // \Program Files\OpenSSH.
 //
 // SetupComplete.cmd runs woa-desktop-tools.ps1 once as SYSTEM, after the
-// RK3576 tools' first-boot step and the browser GPU switch. It names the
+// RK3576 tools' first-boot step and the browser switch cleanup. It names the
 // folder and the shortcuts in the Windows display language (Chinese for
 // zh-*, English otherwise) and adds a shortcut only when what it points to
 // is there. An administrator can run it again to bring the folder back.
@@ -15,8 +15,7 @@
 //                              .txt on the desktop of whoever started it
 //   woa-ssh-fix.ps1            register sshd if it is missing, make it
 //                              automatic, start it, port 22 on every profile
-//   woa-browser-gpu-switch.ps1 turn woa-rk3576's browser GPU switch on or off
-// The two that change things elevate themselves (UAC); the diagnostics
+// The SSH fix elevates itself (UAC); the diagnostics
 // elevate too, for bcdedit and the driver list.
 //
 // Written for Windows PowerShell 5.1, saved with a UTF-8 BOM (5.1 reads a
@@ -25,9 +24,8 @@
 export const DESKTOP_TOOLS_FILE = 'woa-desktop-tools.ps1';
 export const DIAG_FILE = 'woa-diag.ps1';
 export const SSH_FIX_FILE = 'woa-ssh-fix.ps1';
-export const BROWSER_SWITCH_FILE = 'woa-browser-gpu-switch.ps1';
 /** Every script this file writes, in the order they are staged. */
-export const DESKTOP_SCRIPT_FILES = [DESKTOP_TOOLS_FILE, DIAG_FILE, SSH_FIX_FILE, BROWSER_SWITCH_FILE] as const;
+export const DESKTOP_SCRIPT_FILES = [DESKTOP_TOOLS_FILE, DIAG_FILE, SSH_FIX_FILE] as const;
 
 /** The firewall rule's display name, the same in SetupComplete.cmd and the fix script. */
 export const SSH_RULE = 'OpenSSH Server (sshd)';
@@ -40,7 +38,7 @@ const DOCS = 'https://github.com/gahingwoo/maskrom-studio/blob/main/docs';
 const WOA_DOCS = 'https://github.com/gahingwoo/woa-rk3576/blob/main/docs';
 
 export interface DesktopEntry {
-  id: 'selftest' | 'monitor' | 'drivers' | 'diag' | 'ssh' | 'browser-gpu' | 'docs';
+  id: 'selftest' | 'monitor' | 'drivers' | 'diag' | 'ssh' | 'docs';
   name: Record<ToolsLang, string>;
   desc: Record<ToolsLang, string>;
   /** A .lnk (target and arguments are PowerShell expressions) or a .url. */
@@ -91,13 +89,6 @@ export const DESKTOP_ENTRIES: DesktopEntry[] = [
     desc: { en: 'Register and start the OpenSSH server, open port 22 on every network', 'zh-CN': '注册并启动 OpenSSH 服务器，在所有网络上开放 22 端口' },
     target: '$Ps', args: psFile(SSH_FIX_FILE),
     when: `(Test-Path (Join-Path $Ssh 'install-sshd.ps1')) -and (Test-Path (Join-Path $Scripts '${SSH_FIX_FILE}'))`,
-  },
-  {
-    id: 'browser-gpu', kind: 'lnk',
-    name: { en: 'Browser GPU switch', 'zh-CN': '浏览器 GPU 开关' },
-    desc: { en: 'Turn GPU rendering for Edge, Chrome and WebView2 on or off', 'zh-CN': '打开或关闭 Edge、Chrome 和 WebView2 的 GPU 渲染' },
-    target: '$Ps', args: psFile(BROWSER_SWITCH_FILE),
-    when: `(Test-Path (Join-Path $Rk 'browser-gpu\\rk3576-browser-gpu.ps1')) -and (Test-Path (Join-Path $Scripts '${BROWSER_SWITCH_FILE}'))`,
   },
   {
     id: 'docs', kind: 'url',
@@ -305,45 +296,16 @@ Add-Type -AssemblyName System.Windows.Forms
 `;
 }
 
-/** woa-browser-gpu-switch.ps1: woa-rk3576's browser GPU switch on or off (BROWSER-GPU.md, Mode). */
-export function browserSwitchScript(): string {
-  return `${BOM}# Written by Maskrom Studio (src/woa/desktop-tools.ts). Turns woa-rk3576's browser
-# GPU switch (--disable-direct-composition for Edge, Chrome and WebView2 at WDDM 2.x)
-# on or off with its own script's Enable and Disable actions.
-$ErrorActionPreference = 'Continue'
-${LANG}
-${ELEVATE}
-if (-not (Test-Admin)) { Invoke-Elevated '' }
-Add-Type -AssemblyName System.Windows.Forms
-$Title = T 'Browser GPU switch' '浏览器 GPU 开关'
-$Bg = Join-Path $env:ProgramFiles 'RK3576\\browser-gpu\\rk3576-browser-gpu.ps1'
-if (-not (Test-Path $Bg)) {
-  [System.Windows.Forms.MessageBox]::Show((T "The switch is not installed ($Bg is missing)." "没有安装此开关（缺少 $Bg）。"), $Title, 'OK', 'Warning') | Out-Null
-  exit 1
-}
-# Mode 0 is off; no value is the default, auto (on).
-$mode = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\RK3576\\BrowserGpu' -Name Mode -ErrorAction SilentlyContinue).Mode
-$on = -not ($mode -eq 0)
-if ($on) { $ask = T 'GPU rendering for Edge, Chrome and WebView2 is ON. Turn it off?' 'Edge、Chrome 和 WebView2 的 GPU 渲染已打开。要关闭吗？'; $action = 'Disable' }
-else { $ask = T 'GPU rendering for Edge, Chrome and WebView2 is OFF. Turn it on?' 'Edge、Chrome 和 WebView2 的 GPU 渲染已关闭。要打开吗？'; $action = 'Enable' }
-if ([System.Windows.Forms.MessageBox]::Show($ask, $Title, 'YesNo', 'Question') -ne 'Yes') { exit 0 }
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Bg -Action $action
-$done = T "Done ($action, exit $LASTEXITCODE). Close and reopen Edge and Chrome." "完成（$action，退出码 $LASTEXITCODE）。请关闭并重新打开 Edge 和 Chrome。"
-[System.Windows.Forms.MessageBox]::Show($done, $Title, 'OK', 'Information') | Out-Null
-`;
-}
-
 /** Every script, by file name, for the staging volume. */
 export function desktopScripts(): Array<{ name: string; text: string }> {
   return [
     { name: DESKTOP_TOOLS_FILE, text: desktopToolsScript() },
     { name: DIAG_FILE, text: diagScript() },
     { name: SSH_FIX_FILE, text: sshFixScript() },
-    { name: BROWSER_SWITCH_FILE, text: browserSwitchScript() },
   ];
 }
 
-/** SetupComplete.cmd lines: make the folder, after the RK3576 tools and the browser GPU switch are in. */
+/** SetupComplete.cmd lines: make the folder, after the RK3576 tools and the browser switch cleanup. */
 export function desktopToolsFirstStart(): string[] {
   const ps = `%WINDIR%\\Setup\\Scripts\\${DESKTOP_TOOLS_FILE}`;
   return [

@@ -1,4 +1,4 @@
-// Edge, Chrome and WebView2 on the GPU (src/woa/browser-gpu.ts): the copy of
+// The browser switch cleanup (src/woa/browser-gpu.ts): the copy of
 // woa-rk3576's rk3576-browser-gpu.ps1, and where the install runs it. The
 // script itself is tested on Windows (browser-gpu job in ci.yml).
 import { readFileSync } from 'node:fs';
@@ -19,11 +19,13 @@ describe('the script', () => {
   it('is ASCII, as Windows PowerShell 5.1 reads a file without a BOM', () => {
     expect(/[^\x00-\x7f]/.test(ps1)).toBe(false);
   });
-  it('adds --disable-direct-composition, only at WDDM 2.x, with a task and a revert', () => {
+  it('only takes --disable-direct-composition out, and removes version 1\'s task', () => {
+    expect(BROWSER_GPU_VERSION).toBeGreaterThanOrEqual(2);
     expect(ps1).toContain("$BgFlag = '--disable-direct-composition'");
-    expect(ps1).toContain('RKCP7402');
-    expect(ps1).toContain('-ge 0x2000');
     expect(ps1).toContain("$BgTaskName = 'Browser GPU'");
+    expect(ps1).toContain('Unregister-ScheduledTask');
+    expect(ps1).not.toContain('Register-ScheduledTask -');
+    expect(ps1).not.toMatch(/function (Add-Flag|Sync-|Get-GpuGate|Get-TaskXml)/);
     expect(ps1).toMatch(/ValidateSet\('Status', 'Apply', 'Revert', 'Enable', 'Disable', 'Install', 'Uninstall'\)/);
   });
 });

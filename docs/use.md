@@ -185,10 +185,9 @@ is installed.
   addresses: check it before posting it.
 - **Fix SSH** (with SSH on): registers and starts the OpenSSH server and
   opens port 22 on every network.
-- **Browser GPU switch:** turns GPU rendering for Edge and Chrome on or off.
 - **User guide:** this page.
 
-Collect diagnostics, Fix SSH and the browser switch ask for administrator
+Collect diagnostics and Fix SSH ask for administrator
 rights. To bring the folder back, run as administrator:
 `powershell -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\woa-desktop-tools.ps1`
 
@@ -207,19 +206,13 @@ drivers and WebView2 are not touched. Each item and how to undo it:
 
 ## Edge, Chrome and WebView2 on the GPU
 
-At WDDM 2.x (the GPU driver's default) Edge and Chrome render on the GPU
-only when started with `--disable-direct-composition`. Every install adds
-woa-rk3576's switch: the flag goes onto their Start menu, desktop and
-taskbar shortcuts, the link and PDF handlers and WebView2's arguments;
-Edge's startup boost and both browsers' background mode are turned off. A
-scheduled task (`\RK3576\Browser GPU`) puts the flag back after browser
-updates and removes it when the GPU is not at WDDM 2.x. It also covers a
-Chrome you install yourself.
+They render on the GPU without any switch on the current GPU driver. An
+older RK3576 tools bundle added `--disable-direct-composition` to their
+shortcuts and a scheduled task that kept it there; it never helped. Every
+install takes that out again at the first start.
 
-Turn it off on the board: `HKLM\SOFTWARE\RK3576\BrowserGpu`, `Mode` = 0
-(DWORD), or from an administrator prompt
-`powershell -ExecutionPolicy Bypass -File "%ProgramFiles%\RK3576\browser-gpu\rk3576-browser-gpu.ps1" -Action Disable`
-(`-Action Uninstall` removes it). Details:
+On a board that already has the switch, install the current RK3576 tools
+(`install.cmd`): that takes it out too. Details:
 [woa-rk3576, BROWSER-GPU.md](https://github.com/gahingwoo/woa-rk3576/blob/main/tools/rk3576-tools/BROWSER-GPU.md).
 
 ## Other targets: an SD card or an NVMe drive

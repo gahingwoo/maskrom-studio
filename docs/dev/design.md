@@ -262,11 +262,11 @@ Chosen on the Windows setup page:
   used.
 - **Desktop folder** (always). `src/woa/desktop-tools.ts`: SetupComplete.cmd
   runs `woa-desktop-tools.ps1` as SYSTEM after the RK3576 tools and the
-  browser switch; it makes "RK3576 Tools" / "RK3576 工具" (by the system UI
+  browser switch cleanup; it makes "RK3576 Tools" / "RK3576 工具" (by the system UI
   language) on the Public Desktop with .lnk/.url files only, each only when
   its target exists. The scripts stay in `\Windows\Setup\Scripts`:
-  `woa-diag.ps1` (read only), `woa-ssh-fix.ps1`, `woa-browser-gpu-switch.ps1`
-  (those three elevate through UAC). The drivers entry is a link to
+  `woa-diag.ps1` (read only) and `woa-ssh-fix.ps1` (both elevate through
+  UAC). The drivers entry is a link to
   woa-rk3576 docs/drivers.md: no driver installer is left on the board.
 - **RK3576 tools** (on when the release has them). `rk3576-tools-arm64*.zip`
   from the woa-rk3576 release (checked against SHA256SUMS.txt and GitHub's
@@ -333,24 +333,22 @@ installs the arm64 Notepad app when wanted.
 
 ## Edge, Chrome and WebView2 on the GPU
 
-At WDDM 2.x (maliwddm's default) Chromium's DirectComposition presents fail
-on the Mali-G52 and the browsers fall back to software after three GPU
-process crashes; with `--disable-direct-composition` they render on the GPU
-(seen on a board). The browser process reads that switch too, so the
-driver cannot set it, and no Edge or Chrome policy sets command-line
-switches.
+They need no switch on the fixed maliwddm (wddm-mali-g52 2df1808 or later):
+DirectComposition runs at 60 fps at 1440p. Version 1 of woa-rk3576's
+`tools/rk3576-tools/setup/rk3576-browser-gpu.ps1` added
+`--disable-direct-composition` to every launch path, with a scheduled task;
+that switch never helped (wddm-mali-g52 `docs/EDGE-PRESENT.md`). Version 2
+only takes out what version 1 added; its `BROWSER-GPU.md` is the reference.
 
-woa-rk3576's `tools/rk3576-tools/setup/rk3576-browser-gpu.ps1` adds it to
-every launch path and keeps it there with a scheduled task; its
-`BROWSER-GPU.md` is the reference. A copy lives in `src/woa/browser-gpu/`
-(with its PowerShell tests), turned into `src/woa/browser-gpu-script.ts` by
-`scripts/sync-browser-gpu.mjs`; `test/browser-gpu.test.ts` fails when they
-disagree, and CI warns when the copy differs from woa-rk3576's main. Every
-install puts it in `\Windows\Setup\Scripts`; SetupComplete.cmd runs
-`-Action Install` after Chrome and the RK3576 tools, then deletes the copy.
-`browserGpu: false` in `SetupOptions` leaves it out (no UI switch; on the
-board, `Mode` 0 turns it off). The tools bundle installs the same script
-and task; the higher `$BgVersion` wins.
+A copy lives in `src/woa/browser-gpu/` (with its PowerShell tests), turned
+into `src/woa/browser-gpu-script.ts` by `scripts/sync-browser-gpu.mjs`;
+`test/browser-gpu.test.ts` fails when they disagree, and CI warns when the
+copy differs from woa-rk3576's main. Every install puts it in
+`\Windows\Setup\Scripts`; SetupComplete.cmd runs `-Action Install` after
+Chrome and the RK3576 tools, then deletes the copy. It stays because a tools
+bundle built before version 2 (the woa-rk3576 `ci` release has one) still
+installs version 1 at its first boot; on a Windows without the switch it
+changes nothing. `browserGpu: false` in `SetupOptions` leaves it out.
 
 ## Disk size for Windows
 
