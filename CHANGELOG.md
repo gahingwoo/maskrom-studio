@@ -1,71 +1,60 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (unreleased)
 
 Maskrom Studio ("Install and restore systems and UEFI firmware on
 Rockchip boards"): repository gahingwoo/maskrom-studio, app id
 com.gahingwoo.MaskromStudio. Settings from an earlier install are carried
 over on the first start.
 
-- Windows image vetting: architecture and build from the image, what was
-  found shown, and where to get 23H2 ARM64.
-- Armbian or a factory update.img onto the whole eMMC.
-- Firmware upgrade that keeps Windows and the UEFI settings.
-- ROCK 4D: the 16 MiB copy of the SPI NOR flash taken before a write over
-  MaskROM could not be saved (the backup limit was 1 MiB), so every such
-  write stopped before writing.
-- About Maskrom Studio.
-- Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode): Armbian's
-  root partition at the end of the eMMC, its U-Boot in the firmware slot,
-  started from the firmware's "Armbian (U-Boot)" boot option.
-- Radxa ROCK 4D: Windows on the NVMe drive and Armbian (vendor or edge,
-  Armbian's own image) on an SD card in one job, Advanced mode. The board's
-  SPL is read over MaskROM first: without the Armbian one-shot (new U-Boot
-  SPL, not in a release yet) nothing is written.
-- WinPE's install screen names the disk it installs to (eMMC, SD card or
-  NVMe drive) and gives the eMMC timing only for the eMMC.
-- A self-test on Windows' first desktop, with an optional prefilled GitHub
-  issue.
-- How to get a Windows 11 23H2 ARM64 image with UUP dump (docs).
-- "Sign in automatically" for a Windows install that skips setup: signs in
-  on every start, with the password kept as an LSA secret instead of plain
-  text in the registry.
-- Edge, Chrome and WebView2: the first start takes out the
-  --disable-direct-composition an older RK3576 tools bundle may have added,
-  with its scheduled task. The fixed GPU driver needs no browser switch.
-- Radxa ROCK 4D: "UEFI firmware, keep the settings" for its SPI NOR flash
-  (sectors 0 to 32255; the settings at 0xFC0000 stay). Every ROCK 4D write
-  over MaskROM selects the SPI NOR (`cs 9`), refuses any other storage,
-  checks the image is the ROCK 4D's, copies the whole flash to the PC first
-  and reads back what it wrote.
-- NTriver is the recommended place to get Windows for everyone, not only
-  in mainland China.
-- "Skip setup": language, keyboard and time zone are searchable lists
-  with names (Microsoft's language and input profile tables, CLDR's
-  Windows zones) instead of typed codes, preselected from this computer.
-  The answer file gets the same codes as before.
+- Stable releases: edk2-rk3576 0.5.0 and woa-rk3576 0.5.0. Windows on the
+  Radxa ROCK 4D with that firmware, whose image has ACPI tables.
+- What the chosen firmware supports, per board, from the release's
+  FEATURES.json, listed where the firmware is chosen. Windows is refused
+  with a pointer to the CI builds when the board's image has no ACPI
+  tables, and Armbian next to Windows is offered only when the image has
+  "Armbian (U-Boot)".
+- Charsiu Desktop is installed on Windows by default (the app only, no
+  model): charsiu-desktop 0.3.0's arm64 installer, checked against its
+  SHA-256 and installed for the first user who signs in. It can be turned
+  off in Advanced mode.
 - The RK3576 Windows driver package is installed automatically: the
   woa-rk3576 release's rk3576-drivers-arm64.zip (GPU, video decoder, NPU,
   audio, storage, network and the rest), checked against the release's
   SHA-256, with each board's own list. "Add a driver folder" is now only
   for extra drivers.
-- .txt files open again on installs from the 22621 ARM64 media: its Notepad
-  app is x64 only without the x64 framework it needs, so it is
-  unprovisioned and notepad.exe opens them. The self-test shows its whole
-  report in its message box. The trim lists are checked against a recorded
-  inventory of that image: no framework, no app that stays.
 - An "RK3576 Tools" folder (Chinese name on a Chinese Windows) on the
   Public Desktop, shortcuts only: self-test, RK3576 Monitor, drivers guide,
   collect diagnostics, fix SSH, user guide.
-- SSH: port 22 is opened on every firewall profile. It was Private and
-  Domain only, so on a first network that came up as Public (a ROCK 4D,
-  2026-11-26) SSH was blocked. Installs from before this: see Known issues
-  in docs/use.md.
-- What the chosen firmware supports, per board, from the release's
-  FEATURES.json (checked like the images; a built-in table for 0.4.x):
-  listed where the firmware is chosen, Windows refused with a pointer to
-  the CI builds when the board's image has no ACPI tables, and Armbian
-  next to Windows offered only when the image has "Armbian (U-Boot)".
+- A self-test on Windows' first desktop, with an optional prefilled GitHub
+  issue.
+- "Sign in automatically" for a Windows install that skips setup: signs in
+  on every start, with the password kept as an LSA secret instead of plain
+  text in the registry.
+- "Skip setup": language, keyboard and time zone are searchable lists
+  with names (Microsoft's language and input profile tables, CLDR's
+  Windows zones) instead of typed codes, preselected from this computer.
+- Windows image vetting: architecture and build from the image, what was
+  found shown, and where to get 23H2 ARM64.
+- WinPE's install screen names the disk it installs to (eMMC, SD card or
+  NVMe drive) and gives the eMMC timing only for the eMMC.
+- Firmware upgrade that keeps Windows and the UEFI settings.
+- Radxa ROCK 4D: "UEFI firmware, keep the settings" for its SPI NOR flash
+  (sectors 0 to 32255; the settings at 0xFC0000 stay). Every ROCK 4D write
+  over MaskROM selects the SPI NOR (`cs 9`), refuses any other storage,
+  checks the image is the ROCK 4D's, copies the whole flash to the PC first
+  and reads back what it wrote.
+- Armbian or a factory update.img onto the whole eMMC.
+- Experimental, Advanced mode: Windows and Armbian on one eMMC (TaishanPi
+  3M): Armbian's root partition at the end of the eMMC, its U-Boot in the
+  firmware slot, started from the firmware's "Armbian (U-Boot)" boot
+  option.
+- Experimental, Advanced mode: Radxa ROCK 4D with Windows on the NVMe
+  drive and Armbian (vendor or edge, Armbian's own image) on an SD card in
+  one job. The board's SPL is read over MaskROM first: without the Armbian
+  one-shot (edk2-rk3576 0.5.0 or later) nothing is written.
+- How to get a Windows 11 23H2 ARM64 image with UUP dump (docs).
+- About Maskrom Studio.
 
 ## First version
 

@@ -98,6 +98,7 @@ try {
   expect(/Needs firmware with the Armbian one-shot/.test(fw) && /U-Boot v2026\.10/.test(fw) && /reads the SPL from the board over MaskROM/.test(fw), 'the setup step says what the firmware must have, before anything is ticked');
   expect(/writes a one-time request to the SD card and restarts/.test(fw) && /is Windows again/.test(fw), 'and how Armbian starts');
   expect(/Also write Armbian to an SD card/.test(await text(page, 'label[for="hybrid-on"]')), 'the box says SD card, not eMMC');
+  expect(/\(experimental\)/.test(await text(page, 'label[for="hybrid-on"]')) && /not yet been run from start to finish on a board/.test(await text(page, '#hybrid-experimental')), 'the box says it is experimental');
   const a = await startRun(page);
   console.log(JSON.stringify(a, null, 2));
   expect(!a.setup.sizeSlider && /whole SD card/.test(a.setup.sdSize), 'no size slider: Armbian takes the card');
@@ -116,6 +117,7 @@ try {
   await toSetup(page, 'zh-CN');
   const zh = await text(page, '#hybrid-firmware');
   expect(/需要带 Armbian 单次启动的固件/.test(zh) && /一次性的请求/.test(zh), 'the firmware note in Chinese');
+  expect(/实验性/.test(await text(page, 'label[for="hybrid-on"]')) && /实验性功能/.test(await text(page, '#hybrid-experimental')), 'and says it is experimental in Chinese');
   const b = await startRun(page);
   console.log(JSON.stringify(b.run, null, 2));
   expect(b.run.progress.some((x) => /能：它的 SPL 带 Armbian 单次启动/.test(x)), 'the check passes on the new SPL');

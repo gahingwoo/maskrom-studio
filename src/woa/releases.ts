@@ -33,7 +33,8 @@ export function parseSums(text: string): Map<string, string> {
   return out;
 }
 
-function asset(rel: GithubRelease, sums: Map<string, string>, name: string): ReleaseAsset | string {
+/** A release file with the SHA-256 SHA256SUMS.txt and GitHub's digest agree on, or why it cannot be used. */
+export function releaseAsset(rel: GithubRelease, sums: Map<string, string>, name: string): ReleaseAsset | string {
   const a = rel.assets.find((x) => x.name === name);
   if (!a) return `${rel.tag_name} has no ${name}`;
   const sum = sums.get(name);
@@ -60,7 +61,7 @@ export function firmwareRelease(rel: GithubRelease, sums: Map<string, string>): 
   for (const b of WOA_BOARDS) {
     const name = rel.assets.map((a) => a.name).find((n) => n.startsWith(b.firmwareAsset) && n.endsWith('.img'));
     if (!name) { problems.push(`${rel.tag_name} has no ${b.firmwareAsset}*.img`); continue; }
-    const a = asset(rel, sums, name);
+    const a = releaseAsset(rel, sums, name);
     if (typeof a === 'string') problems.push(a); else images[b.id] = a;
   }
   const sdcard: FirmwareRelease['sdcard'] = {};
@@ -69,7 +70,7 @@ export function firmwareRelease(rel: GithubRelease, sums: Map<string, string>): 
     if (prefix === b.firmwareAsset) continue;
     const name = rel.assets.map((x) => x.name).find((n) => n.startsWith(prefix) && n.endsWith('.img'));
     if (!name) continue;
-    const a = asset(rel, sums, name);
+    const a = releaseAsset(rel, sums, name);
     if (typeof a === 'string') problems.push(a); else sdcard[b.id] = a;
   }
   return { tag: rel.tag_name, url: rel.html_url ?? null, images, sdcard, features: builtinFeatures(rel.tag_name), problems };
@@ -83,7 +84,7 @@ export function firmwareRelease(rel: GithubRelease, sums: Map<string, string>): 
  */
 export async function loadFirmwareFeatures(fw: FirmwareRelease, rel: GithubRelease, sums: Map<string, string>, fetchFn: Fetch): Promise<FirmwareRelease> {
   if (!rel.assets.some((a) => a.name === FEATURES_ASSET)) return fw;
-  const a = asset(rel, sums, FEATURES_ASSET);
+  const a = releaseAsset(rel, sums, FEATURES_ASSET);
   if (typeof a === 'string') return { ...fw, problems: [...fw.problems, a] };
   try {
     const r = await fetchFn(a.url);
@@ -112,12 +113,12 @@ export const TOOLS_ASSET = /^rk3576-tools-arm64.*\.zip$/;
 export function winpeRelease(rel: GithubRelease, sums: Map<string, string>): WinpeRelease {
   const name = rel.assets.map((a) => a.name).find((n) => /^woa-rk3576-winpe-.*\.img\.xz$/.test(n));
   if (!name) return { tag: rel.tag_name, url: rel.html_url ?? null, image: null, problems: [`${rel.tag_name} has no woa-rk3576-winpe-*.img.xz`] };
-  const a = asset(rel, sums, name);
+  const a = releaseAsset(rel, sums, name);
   const toolsName = rel.assets.map((x) => x.name).find((n) => TOOLS_ASSET.test(n));
-  const t = toolsName ? asset(rel, sums, toolsName) : null;
+  const t = toolsName ? releaseAsset(rel, sums, toolsName) : null;
   const tools = t && typeof t !== 'string' ? t : null;
   const driversName = rel.assets.map((x) => x.name).find((n) => DRIVERS_ASSET.test(n));
-  const dr = driversName ? asset(rel, sums, driversName) : null;
+  const dr = driversName ? releaseAsset(rel, sums, driversName) : null;
   const drivers = dr && typeof dr !== 'string' ? dr : null;
   const later = [t, dr].filter((x): x is string => typeof x === 'string');
   return typeof a === 'string'

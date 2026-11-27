@@ -12,7 +12,7 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon';
 import { formatBytes } from '../shared/format';
-import type { ArmbianChoice, FactoryChoice, ReleaseTier, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { ArmbianChoice, FactoryChoice, ReleaseTier, UpgradeImage, BoardHereInfo, DriverFolder, EditionInfo, ExtrasWanted, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import type { Target } from '../shared/targets';
 import type { UpdateOffer } from '../shared/update';
 import { firmwareTargets, WOA_BOARDS, woaBoard, type BoardId, type WindowsTarget, type WoaBoard } from '../woa/boards';
@@ -135,6 +135,8 @@ export function App() {
   const [trimSimple, setTrimSimple] = useState(true);
   const [trimPick, setTrimPick] = useState<TrimOptions>(RECOMMENDED_TRIM);
   const [rkToolsOn, setRkToolsOn] = useState(true);
+  // Charsiu Desktop, on by default (decided 2026-11-25; charsiu-desktop.ts): the app only, no model.
+  const [charsiuOn, setCharsiuOn] = useState(DEFAULT_SETUP.charsiuDesktop === true);
   const [driversError, setDriversError] = useState<string | null>(null);
   const [drives, setDrives] = useState<Target[] | null>(null);
   const [stick, setStick] = useState<string | null>(null);
@@ -296,9 +298,10 @@ export function App() {
   // Offered only when the chosen firmware release can start it (FEATURES.json armbianOnce); on the ROCK 4D the
   // SPL on the board is still read over MaskROM before anything is written (armbian-once.ts).
   const hybridFirmware = fwHas('armbianOnce') !== false;
-  const hybridPossible = !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && hybridFirmware
+  // Experimental (never run end to end on a board): Advanced mode only.
+  const hybridPossible = mode === 'advanced' && !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && hybridFirmware
     && (hybridKind === 'one-emmc' ? staged && dest === 'emmc' : dest === 'nvme');
-  const hybridNoFirmware = !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && !hybridFirmware;
+  const hybridNoFirmware = mode === 'advanced' && !!board && !!hybridKind && !!ARMBIAN_RESTORE[board.id] && task === 'windows' && !onBoard && !hybridFirmware;
   const hybridOn = hybridPossible && withArmbian;
   const hybridEmmc = hybridOn && hybridKind === 'one-emmc';
   const hybridSd = hybridOn && hybridKind === 'nvme-and-sd';
@@ -320,9 +323,11 @@ export function App() {
   const kindWords = board ? BOARD_EXTRA_KINDS[board.id].map((k) => t(k)) : [];
   const boardKinds = kindWords.length > 1 ? `${kindWords.slice(0, -1).join(t('drivers.sep'))}${t('drivers.and')}${kindWords[kindWords.length - 1]}` : kindWords.join('');
   const rkTools = rkToolsOn && toolsThere;
+  const charsiuThere = !!releases?.charsiu;
+  const charsiuDesktop = charsiuOn && charsiuThere;
   const skipOn = skip && mode !== 'simple';
   const setup: SetupOptions = { skipSetup: skipOn ? account : null, ssh, sshKey: ssh ? sshKey : '', ...(layoutChoice ? { layout: layoutChoice } : {}),
-    ...(anyTrim(trim) ? { trim } : {}), ...(rkTools ? { rkTools: true } : {}), ...(hybridSd ? { armbianOnSd: true } : {}) };
+    ...(anyTrim(trim) ? { trim } : {}), ...(rkTools ? { rkTools: true } : {}), ...(charsiuDesktop ? { charsiuDesktop: true } : {}), ...(hybridSd ? { armbianOnSd: true } : {}) };
   const accountErr = skipOn ? accountProblem(account) : null;
   const passwordMismatch = skipOn && account.password !== password2;
   const keyErr = ssh ? sshKeyProblem(sshKey) : null;
@@ -412,7 +417,7 @@ export function App() {
   const STAGE_NEXT = ['next.stage.1', 'next.stage.2', 'next.stage.3', 'next.stage.4'].map((k) => t(k));
 
   const startMaskrom = async (jobFor: (served: Record<string, Served>, extras: Array<{ path: string; data: Uint8Array }>) => WoaJob,
-    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId } | null) => {
+    prep: Array<{ id: string; get: () => Promise<Served | { error: string }> }>, extras: ExtrasWanted | null) => {
     const served: Record<string, Served> = {};
     for (const p of prep) {
       setStage(p.id, { percent: 0, note: t('run.starting') });
@@ -423,7 +428,7 @@ export function App() {
       setStage(p.id, { percent: 100, note: `${s.name}, ${formatBytes(s.size)}` });
     }
     let extraFiles: Array<{ path: string; data: Uint8Array }> = [];
-    if (extras && (extras.ssh || extras.drivers || extras.chrome || extras.rkTools || extras.boardId)) {
+    if (extras && (extras.ssh || extras.drivers || extras.chrome || extras.rkTools || extras.charsiu || extras.boardId)) {
       setStage('extras', { percent: 0, note: t('run.starting') });
       const x = await withProgress('extras', () => api.prepareExtras(extras));
       if ('error' in x) { finish({ ok: false, title: errorText(x.error) }); return; }
@@ -571,7 +576,7 @@ export function App() {
       setRun({ title: t('run.staging'), log: [], confirm: null, result: null, stages: [
         { id: 'winpe', label: t('run.winpe', { tag: releases?.winpe?.tier.label ?? '' }), percent: null },
         { id: 'image', label: t('run.image', { file: windows!.fileName }), percent: null },
-        ...(ssh || drivers || trim.chrome || rkTools || packageThere ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
+        ...(ssh || drivers || trim.chrome || rkTools || charsiuDesktop || packageThere ? [{ id: 'extras', label: t('run.extras'), percent: null }] : []),
         ...(hybridEmmc ? [{ id: 'armbian', label: t('run.restore.armbian'), percent: null }] : []),
         { id: 'board', label: t('run.board'), percent: null },
         { id: 'write', label: t('run.write'), percent: 0 },
@@ -589,7 +594,7 @@ export function App() {
         { id: 'winpe', get: () => api.prepareWinpe() },
         { id: 'image', get: () => api.serveWindows(windows!.token) },
         ...(hybridEmmc ? [{ id: 'armbian', get: () => api.prepareArmbian(board.id, hybridId!) }] : []),
-      ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, ...(packageThere ? { boardId: board.id } : {}) });
+      ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, charsiu: charsiuDesktop, ...(packageThere ? { boardId: board.id } : {}) });
       return;
     }
     setRun({ title: t('run.firmware'), log: [], confirm: null, result: null, stages: [
@@ -1094,6 +1099,7 @@ export function App() {
       <Checkbox id="hybrid-on" label={t(hybridKind === 'nvme-and-sd' ? 'hybrid.on.sd' : 'hybrid.on')}
         description={t(hybridKind === 'nvme-and-sd' ? 'hybrid.on.sd.desc' : 'hybrid.on.desc')} isChecked={withArmbian}
         onChange={(_e, v) => { setWithArmbian(v); if (v) { setHybridId(null); setSdDrive(null); if (dest !== 'emmc') refreshDrives(SD_MIN); } }} />
+      <Content component="p" id="hybrid-experimental">{t('hybrid.experimental')}</Content>
       {/* The ROCK 4D: what the firmware must have, said before anything is chosen; the app checks it over MaskROM. */}
       {hybridKind === 'nvme-and-sd' && (
         <Alert isInline variant="warning" id="hybrid-firmware" title={t('hybrid.sd.fw.title')}>
@@ -1176,6 +1182,8 @@ export function App() {
     <FormGroup label={t('tools.label')} fieldId="rk-tools" role="group">
       <Checkbox id="rk-tools" label={t('tools.on')} isChecked={rkTools} isDisabled={!toolsThere} onChange={(_e, v) => setRkToolsOn(v)}
         description={toolsThere ? t('tools.desc') : t('tools.missing')} />
+      <Checkbox id="charsiu-desktop" label={t('charsiu.on')} isChecked={charsiuDesktop} isDisabled={!charsiuThere} onChange={(_e, v) => setCharsiuOn(v)}
+        description={releases?.charsiu ? t('charsiu.desc', { tag: releases.charsiu.tag, size: formatBytes(releases.charsiu.size) }) : t('charsiu.missing')} />
     </FormGroup>
   );
   const setupStep = (
@@ -1297,6 +1305,7 @@ export function App() {
         [t('review.drivers'), t(packageThere ? 'review.drivers.package' : 'review.drivers.value', { file: releases?.winpe?.drivers?.file ?? '', extra: drivers ? t('review.drivers.extra', { name: drivers.name }) : '' })],
         [t('review.trim'), anyTrim(trim) ? TRIM_KEYS.filter((k) => trim[k]).map((k) => t(`trim.${k}`)).join('; ') : t('review.trim.none')],
         [t('review.tools'), rkTools ? t('tools.on') : t('review.trim.none')],
+        [t('review.charsiu'), charsiuDesktop ? t('review.charsiu.on', { tag: releases?.charsiu?.tag ?? '' }) : t('review.trim.none')],
         [t('review.target'), t(`review.target.${dest}.${method}`)],
         ...(hybridOn ? [[t('review.armbian'), hybridChoice ? t('review.armbian.value', { what: `${offerWords(hybridChoice)}, ${distroWords(hybridChoice.distro)}`, version: hybridChoice.version, kernel: hybridChoice.kernel }) : t('review.notChosen')] as [string, string]] : []),
         ...(staged ? [[t('layout.label'), layoutDisk ? layoutRows().map(([k, v]) => `${k}: ${v}`).join('; ') : t('layout.preview.later')] as [string, string]] : []),
@@ -1473,12 +1482,13 @@ export function App() {
     if (armbianId && offerList.length && !simpleArmbianIds.includes(armbianId)) out.push(t('mode.reset.branch'));
     if (!keepSettings) out.push(t('mode.reset.keep'));
     if (via === 'here') out.push(t('mode.reset.here'));
+    if (withArmbian) out.push(t('mode.reset.hybrid'));
     return out;
   };
   const toSimple = async () => {
     if (boardId && !SIMPLE_BOARDS.includes(boardId)) setBoardId(null);
     if (task && !SIMPLE_TASKS.includes(task)) setTask(null);
-    setLayoutMode('whole'); setRestoreTo('emmc'); setDest('emmc'); setMethod('stage');
+    setLayoutMode('whole'); setRestoreTo('emmc'); setDest('emmc'); setMethod('stage'); setWithArmbian(false);
     if (armbianId && offerList.length && !simpleArmbianIds.includes(armbianId)) setArmbianId(simpleArmbian.recommended); setKeepSettings(true); setVia('maskrom');
     const st = await api.getSettings();
     if (st.firmwareChannel !== 'stable') { await api.setSettings({ firmwareChannel: 'stable' }); api.releases(true).then(setReleases); }

@@ -11,6 +11,9 @@ import { crlf, LAUNCHER } from '../src/woa/stage-scripts';
 import { BROWSER_GPU_PS1 } from '../src/woa/browser-gpu-script';
 import { readArmbianImage, SLOT_LBA, resizeLeavesTableAlone } from '../src/woa/armbian-hybrid';
 import { fakeArmbian } from './armbian-fixture';
+import { CHARSIU_SETUP_PATH, charsiuScript } from '../src/woa/charsiu-desktop';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 
 const has = (cmd: string, args: string[]) => { const r = spawnSync(cmd, args); return r.status !== null && !r.error; };
 const tools = has('mkfs.vfat', ['--help']) && has('mcopy', ['--version']) && has('sgdisk', ['--version']) && has('sfdisk', ['--version']);
@@ -150,6 +153,21 @@ describe('staged install layout', () => {
     expect(plan.certificates.length).toBe(2);
     expect(() => planStage({ board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't',
       extras: [{ path: 'rk3576-drivers/../x.inf', data: new Uint8Array(1) }] })).toThrow(/cannot go on the staging volume/);
+    execFileSync('rm', ['-rf', dir]);
+  }, 60000);
+
+  it('stages Charsiu Desktop\'s installer and its first sign-in script, and refuses the choice without the installer', () => {
+    if (!tools) return;
+    const dir = mkdtempSync(join(tmpdir(), 'stage-charsiu-'));
+    const setup = { skipSetup: null, ssh: false, sshKey: '', charsiuDesktop: true };
+    const rock4d = { board: woaBoard('rock4d')!, target: 'nvme' as const, diskBytes: 256e9, head: new Uint8Array(34 * 512), image, rand, appVersion: 't' };
+    expect(() => planStage({ ...rock4d, winpe: fileSource(fakeWinpe(dir)), setup })).toThrow(/Charsiu Desktop is chosen, but its installer is missing/);
+    const installer = new Uint8Array(70000).fill(0x4d);
+    const plan = planStage({ ...rock4d, winpe: fileSource(fakeWinpe(dir)), setup, extras: [{ path: CHARSIU_SETUP_PATH, data: installer }] });
+    const vol = plan.regions.find((r) => r.label === 'Windows image')!.source;
+    const raw = Buffer.from(vol.read(0, vol.size));
+    expect(raw.indexOf(Buffer.from(crlf(charsiuScript(bytesToHex(sha256(installer)))).subarray(0, 300)))).toBeGreaterThan(0);
+    expect(raw.indexOf(Buffer.from(installer))).toBeGreaterThan(0);
     execFileSync('rm', ['-rf', dir]);
   }, 60000);
 
