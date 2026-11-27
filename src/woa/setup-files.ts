@@ -52,6 +52,7 @@ import type { LayoutChoice } from './windows-layout';
 import { chromeFirstStart, type TrimOptions } from './trim';
 import { browserGpuFirstStart } from './browser-gpu';
 import { desktopToolsFirstStart, SSH_RULE } from './desktop-tools';
+import { charsiuRunOnce } from './charsiu-desktop';
 
 export const OPENSSH = {
   version: '9.5.0.0p1-Beta',
@@ -89,6 +90,8 @@ export interface SetupOptions {
   trim?: TrimOptions;
   /** Install the RK3576 tools bundle (rk-monitor, NPU tools) from the woa-rk3576 release. */
   rkTools?: boolean;
+  /** Install Charsiu Desktop (charsiu-desktop.ts) for the first user who signs in; no model. */
+  charsiuDesktop?: boolean;
   /**
    * Take an older tools bundle's --disable-direct-composition back out of
    * Edge, Chrome and WebView2 (browser-gpu.ts): on unless false.
@@ -101,7 +104,8 @@ export interface SetupOptions {
   armbianOnSd?: boolean;
 }
 
-export const DEFAULT_SETUP: SetupOptions = { skipSetup: null, ssh: true, sshKey: '' };
+/** The setup page's starting point: SSH on, Charsiu Desktop on (decided 2026-11-25). */
+export const DEFAULT_SETUP: SetupOptions = { skipSetup: null, ssh: true, sshKey: '', charsiuDesktop: true };
 
 /** Why an account cannot be used, or null. Messages are keys for the page's translations. */
 export function accountProblem(a: Account): string | null {
@@ -351,6 +355,7 @@ export function setupComplete(o: SetupOptions): string {
     );
   }
   if (o.browserGpu !== false) l.push(...browserGpuFirstStart());
+  if (o.charsiuDesktop) l.push(...charsiuRunOnce());
   l.push(...selfTestRunOnce());
   l.push(...desktopToolsFirstStart());
   if (o.skipSetup?.autoLogonAlways) {

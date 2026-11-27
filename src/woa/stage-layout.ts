@@ -31,6 +31,7 @@ import type { WindowsTarget, WoaBoard } from './boards';
 import { certsCmd, trustedCerts } from './certs';
 import { AUTOLOGON_FILE, autoLogonScript, setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { anyTrim, CHROME_MSI, trimCmd } from './trim';
+import { CHARSIU_SETUP_PATH, charsiuGenerated } from './charsiu-desktop';
 import { SELFTEST_FILE, selfTestScript } from './selftest';
 import { desktopScripts } from './desktop-tools';
 import { BROWSER_GPU_FILE, browserGpuScript } from './browser-gpu';
@@ -204,13 +205,14 @@ export function planStage(o: StageInput): StagePlan {
   const setup = o.setup ?? { skipSetup: null, ssh: false, sshKey: '' };
   const extras = (o.extras ?? []).filter((e) => e.data.length > 0);
   for (const e of extras) {
-    if (!/^(openssh|extra-drivers|rk3576-drivers|chrome|rk3576-tools)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
+    if (!/^(openssh|extra-drivers|rk3576-drivers|chrome|rk3576-tools|charsiu)\/[^\\:*?"<>|]+$/.test(e.path) || e.path.split('/').some((p) => p === '..' || p === '')) {
       throw new StageError(`${e.path} cannot go on the staging volume.`);
     }
   }
   if (setup.ssh && !extras.some((e) => e.path === 'openssh/sshd.exe')) throw new StageError('SSH is on, but the OpenSSH files are missing.');
   if (setup.trim?.chrome && !extras.some((e) => e.path === CHROME_MSI.path)) throw new StageError('Chrome is chosen, but its installer is missing.');
   if (setup.rkTools && !extras.some((e) => e.path === 'rk3576-tools/offline-install.cmd')) throw new StageError('The RK3576 tools are chosen, but the bundle is missing.');
+  if (setup.charsiuDesktop && !extras.some((e) => e.path === CHARSIU_SETUP_PATH)) throw new StageError('Charsiu Desktop is chosen, but its installer is missing.');
   const catalogs = [
     ...fat.listFiles('woa-drivers').filter((p) => /\.cat$/i.test(p)).map((p) => fat.readFile(p)),
     ...fat.listFiles('woa-audio').filter((p) => /\.cat$/i.test(p)).map((p) => fat.readFile(p)),
@@ -223,6 +225,7 @@ export function planStage(o: StageInput): StagePlan {
     { name: SELFTEST_FILE, source: bytesSource(crlf(selfTestScript({ appVersion: o.appVersion }))) },
     ...desktopScripts().map((f) => ({ name: f.name, source: bytesSource(crlf(f.text)) })),
     ...(setup.browserGpu !== false ? [{ name: BROWSER_GPU_FILE, source: bytesSource(crlf(browserGpuScript())) }] : []),
+    ...(setup.charsiuDesktop ? charsiuGenerated(extras).map((f) => ({ name: f.name, source: bytesSource(crlf(f.text)) })) : []),
     ...(setup.skipSetup ? [{ name: 'unattend.xml', source: bytesSource(crlf(unattendXml(setup.skipSetup))) }] : []),
     ...(setup.skipSetup?.autoLogonAlways ? [{ name: AUTOLOGON_FILE, source: bytesSource(crlf(autoLogonScript(setup.skipSetup))) }] : []),
     ...(anyTrim(setup.trim) ? [{ name: 'woa-trim.cmd', source: bytesSource(crlf(trimCmd(setup.trim!))) }] : []),

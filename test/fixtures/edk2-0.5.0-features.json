@@ -1,0 +1,169 @@
+{
+  "schema": 1,
+  "tag": "0.5.0",
+  "assetVersion": "0.5.0",
+  "commit": "a3f17fed556858b8209ebfa1fba009b7bc72b591",
+  "boards": {
+    "CM5IO": {
+      "firmwareVersion": "rk3576-CM5IO-0.5.0",
+      "bootMedium": "sdcard",
+      "spl": {
+        "built": true,
+        "armbianOnce": true,
+        "armbianOnceSdRequest": false
+      },
+      "features": {
+        "windows": {
+          "built": true,
+          "acpiTables": true,
+          "configTableDefault": "acpi+fdt"
+        },
+        "armbianOnce": {
+          "built": true,
+          "uefiApp": true,
+          "splBuilt": true,
+          "splTagInImage": true,
+          "requestOn": "emmc",
+          "splSdRequest": false
+        },
+        "hdmi": {
+          "built": true
+        },
+        "dsi": {
+          "built": false
+        },
+        "usbcDp": {
+          "built": true,
+          "default": "off"
+        },
+        "cpuIdle": {
+          "built": true,
+          "default": "off"
+        },
+        "fanControl": {
+          "built": true,
+          "default": "always-on",
+          "bootDutyPercent": 100
+        },
+        "networkBoot": {
+          "built": true,
+          "default": "on"
+        },
+        "httpBoot": {
+          "built": true,
+          "default": "off"
+        },
+        "secureBoot": {
+          "built": true
+        }
+      }
+    },
+    "ROCK4D": {
+      "firmwareVersion": "rk3576-ROCK4D-0.5.0",
+      "bootMedium": "spi",
+      "spl": {
+        "built": true,
+        "armbianOnce": true,
+        "armbianOnceSdRequest": true
+      },
+      "features": {
+        "windows": {
+          "built": true,
+          "acpiTables": true,
+          "configTableDefault": "acpi+fdt"
+        },
+        "armbianOnce": {
+          "built": true,
+          "uefiApp": true,
+          "splBuilt": true,
+          "splTagInImage": true,
+          "requestOn": "sd",
+          "splSdRequest": true
+        },
+        "hdmi": {
+          "built": true
+        },
+        "dsi": {
+          "built": false
+        },
+        "usbcDp": {
+          "built": false
+        },
+        "cpuIdle": {
+          "built": true,
+          "default": "off"
+        },
+        "fanControl": {
+          "built": true,
+          "default": "always-on",
+          "bootDutyPercent": 100
+        },
+        "networkBoot": {
+          "built": true,
+          "default": "on"
+        },
+        "httpBoot": {
+          "built": true,
+          "default": "off"
+        },
+        "secureBoot": {
+          "built": true
+        }
+      }
+    },
+    "TaishanPi3M": {
+      "firmwareVersion": "rk3576-TaishanPi3M-0.5.0",
+      "bootMedium": "sdcard",
+      "spl": {
+        "built": true,
+        "armbianOnce": true,
+        "armbianOnceSdRequest": false
+      },
+      "features": {
+        "windows": {
+          "built": true,
+          "acpiTables": true,
+          "configTableDefault": "acpi+fdt"
+        },
+        "armbianOnce": {
+          "built": true,
+          "uefiApp": true,
+          "splBuilt": true,
+          "splTagInImage": true,
+          "requestOn": "emmc",
+          "splSdRequest": false
+        },
+        "hdmi": {
+          "built": true
+        },
+        "dsi": {
+          "built": true
+        },
+        "usbcDp": {
+          "built": true,
+          "default": "off"
+        },
+        "cpuIdle": {
+          "built": true,
+          "default": "off"
+        },
+        "fanControl": {
+          "built": true,
+          "default": "always-on",
+          "bootDutyPercent": 100
+        },
+        "networkBoot": {
+          "built": true,
+          "default": "on"
+        },
+        "httpBoot": {
+          "built": true,
+          "default": "off"
+        },
+        "secureBoot": {
+          "built": true
+        }
+      }
+    }
+  }
+}

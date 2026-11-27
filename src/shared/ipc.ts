@@ -27,8 +27,13 @@ export interface Releases {
   winpe: { tag: string; url: string | null; file: string; size: number; tier: ReleaseTier; tools: { file: string; size: number } | null;
     /** The RK3576 Windows driver package of the release; null: the release has none, the WinPE's drivers are installed. */
     drivers?: { file: string; size: number } | null } | null;
+  /** Charsiu Desktop's Windows installer (charsiu-desktop.ts, pinned to its stable release); null: not offered. */
+  charsiu?: { tag: string; file: string; size: number } | null;
   problems: string[];
 }
+
+/** What goes onto the staging volume besides the image (prepareExtras). */
+export interface ExtrasWanted { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; charsiu?: boolean; boardId?: BoardId }
 
 /** Which tier a release came from: asked for, used (CI falls back to Prerelease where there is no CI release), its label and commit. */
 export interface ReleaseTier { asked: 'stable' | 'prerelease' | 'ci'; used: 'stable' | 'prerelease' | 'ci'; label: string; commit: string | null }
@@ -210,8 +215,8 @@ export interface ImagerApi {
   serveWindows(token: string): Promise<Served | { error: string }>;
   /** Choose a folder of extra driver packages (wddm-mali-g52, gt9271, ...). Errors are translation keys or messages. */
   pickDrivers(): Promise<DriverFolder | { error: string } | null>;
-  /** The files that go onto the staging volume besides the image: OpenSSH (pinned release), the board's drivers from the release's driver package (boardId), the added driver folder, Chrome, the RK3576 tools. */
-  prepareExtras(o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId }): Promise<{ files: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
+  /** The files that go onto the staging volume besides the image: OpenSSH (pinned release), the board's drivers from the release's driver package (boardId), the added driver folder, Chrome, the RK3576 tools, Charsiu Desktop. */
+  prepareExtras(o: ExtrasWanted): Promise<{ files: Array<{ path: string; data: Uint8Array }> } | { error: string }>;
   /** Is this app running on an RK3576 board (Linux)? */
   boardHere(): Promise<BoardHereInfo>;
   /** Windows host only: build a finished Windows with DISM on a drive here, or in a VHD for the eMMC. */

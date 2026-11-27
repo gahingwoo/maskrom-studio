@@ -18,7 +18,7 @@ import { checkNewImage } from '../woa/upgrade-plan';
 import type { UpgradeImage } from '../shared/ipc';
 import { ARMBIAN_RESTORE, minimumDiskBytes, parseArmbianIndex, type ArmbianOffer } from '../woa/armbian-restore';
 import type { ArmbianChoice, DriveWriteRequest, FactoryChoice } from '../shared/ipc';
-import type { BoardHereInfo, BoardJobRequest, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
+import type { BoardHereInfo, BoardJobRequest, ExtrasWanted, JobProgress, JobResult, Releases, Served, WindowsChoice } from '../shared/ipc';
 import { helperLaunch, loadSudoPrompt, runHelper, sudoPromptElevate } from './elevate';
 import { decompress, fetchImage, forgetFile, serveFile, serveFileAs } from './images';
 import { ensureLoader } from './loader-cache';
@@ -34,6 +34,7 @@ import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './wind
 import { selectPackage } from '../woa/driver-package';
 import { FEATURE_KEYS } from '../woa/firmware-features';
 import { firmwareRelease, FIRMWARE_REPO, loadFirmwareFeatures, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
+import { CHARSIU_DESKTOP, CHARSIU_SETUP_PATH } from '../woa/charsiu-desktop';
 import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
 import { fileSource, planDiskStage, type BoardJob } from '../helper/board-write';
@@ -212,6 +213,8 @@ ipcMain.handle('woa:releases', async (_e, force: boolean): Promise<Releases> => 
     winpe: winpe?.image ? { tag: winpe.tag, url: winpe.url, file: winpe.image.file, size: winpe.image.size, tier: winpeTier!,
       tools: toolsAsset() ? { file: toolsAsset()!.file, size: toolsAsset()!.size } : null,
       drivers: driversAsset() ? { file: driversAsset()!.file, size: driversAsset()!.size } : null } : null,
+    // The pinned installer (charsiu-desktop.ts); none with the made-up releases, so e2e runs stay offline.
+    charsiu: FAKE_RELEASES ? null : { tag: CHARSIU_DESKTOP.tag, file: CHARSIU_DESKTOP.file, size: CHARSIU_DESKTOP.size },
     problems: [...problems, ...(firmware?.problems ?? []), ...(winpe?.problems ?? [])],
   };
 });
@@ -729,14 +732,21 @@ async function chromeFiles(wc: WebContents, signal: AbortSignal): Promise<Array<
   ];
 }
 
+/** Charsiu Desktop's installer (charsiu-desktop.ts, pinned), downloaded once and checked against its SHA-256. */
+async function charsiuFiles(wc: WebContents, signal: AbortSignal): Promise<Array<{ path: string; data: Uint8Array }>> {
+  const file = await fetchImage({ ...CHARSIU_DESKTOP, sample: false }, cacheDir(), (p) => sendProgress(wc, p), signal);
+  return [{ path: CHARSIU_SETUP_PATH, data: new Uint8Array(readFileSync(file)) }];
+}
+
 /** Everything besides the image that goes onto the staging volume (or the PC build's folder). */
-async function extrasFor(wc: WebContents, signal: AbortSignal, o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId }) {
+async function extrasFor(wc: WebContents, signal: AbortSignal, o: ExtrasWanted) {
   return [
     ...(o.boardId ? await packageDriverFiles(wc, signal, o.boardId) : []),
     ...(o.ssh ? await opensshFiles(wc, signal) : []),
     ...(o.drivers ? driverFiles(o.drivers) : []),
     ...(o.chrome ? await chromeFiles(wc, signal) : []),
     ...(o.rkTools ? await toolsFiles(wc, signal) : []),
+    ...(o.charsiu ? await charsiuFiles(wc, signal) : []),
   ];
 }
 
@@ -746,7 +756,7 @@ ipcMain.handle('woa:pick-drivers', async () => {
   return readDriverFolder(r.filePaths[0]);
 });
 
-ipcMain.handle('woa:prepare-extras', (e, o: { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; boardId?: BoardId }) => exclusive(async (signal) => {
+ipcMain.handle('woa:prepare-extras', (e, o: ExtrasWanted) => exclusive(async (signal) => {
   try {
     const files = await extrasFor(e.sender, signal, o);
     return { files };
@@ -779,7 +789,7 @@ ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (
       diskBytes = drives.find((d) => d.device === req.device)!.size ?? undefined;
     }
     const pe = await winpeFile(wc, signal);
-    const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, boardId: req.boardId });
+    const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId });
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     const vhdPath = join(dir, 'woa-emmc.vhd');
@@ -905,7 +915,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
-      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, boardId: req.boardId });
+      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId });
       bj = { kind: 'stage-disk', target: req.target, device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
@@ -918,7 +928,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
-      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, boardId: req.boardId });
+      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId });
       bj = { kind: 'stage', device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,

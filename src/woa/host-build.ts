@@ -14,6 +14,7 @@ import { anyTrim, trimCmd } from './trim';
 import { SELFTEST_FILE, selfTestScript } from './selftest';
 import { desktopScripts } from './desktop-tools';
 import { BROWSER_GPU_FILE, browserGpuScript } from './browser-gpu';
+import { CHARSIU_SETUP_PATH, charsiuGenerated } from './charsiu-desktop';
 
 export interface HostBuildInput {
   target: DiskTarget;
@@ -46,6 +47,7 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
     ...o.extras.filter((e) => /^(extra-drivers|rk3576-drivers)\/.*\.cat$/i.test(e.path)).map((e) => e.data),
   ];
   const certs = trustedCerts(catalogs);
+  if (o.setup.charsiuDesktop && !o.extras.some((e) => e.path === CHARSIU_SETUP_PATH)) throw new StageError('Charsiu Desktop is chosen, but its installer is missing.');
   const ini: Record<string, string | number> = {
     tool: `Maskrom Studio ${o.appVersion}`,
     mode: o.mode,
@@ -73,6 +75,7 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
     { path: SELFTEST_FILE, data: crlf(selfTestScript({ appVersion: o.appVersion })) },
     ...desktopScripts().map((f) => ({ path: f.name, data: crlf(f.text) })),
     ...(o.setup.browserGpu !== false ? [{ path: BROWSER_GPU_FILE, data: crlf(browserGpuScript()) }] : []),
+    ...(o.setup.charsiuDesktop ? charsiuGenerated(o.extras).map((f) => ({ path: f.name, data: crlf(f.text) })) : []),
     ...(certs.length ? [{ path: 'woa-certs.cmd', data: crlf(certsCmd(certs)) }] : []),
     ...(o.setup.skipSetup ? [{ path: 'unattend.xml', data: crlf(unattendXml(o.setup.skipSetup)) }] : []),
     ...(o.setup.skipSetup?.autoLogonAlways ? [{ path: AUTOLOGON_FILE, data: crlf(autoLogonScript(o.setup.skipSetup)) }] : []),

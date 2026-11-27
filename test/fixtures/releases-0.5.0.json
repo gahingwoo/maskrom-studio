@@ -1,0 +1,156 @@
+{
+  "_comment": "Recorded 2026-11-27 with gh api repos/gahingwoo/<repo>/releases/tags/<tag> (fields the app reads) and each release's SHA256SUMS.txt. FEATURES.json is cut down to test/fixtures/edk2-0.5.0-features.json (settings and images left out), so its size, digest and SHA256SUMS.txt line are those of that file. The charsiu-desktop screenshots are left out.",
+  "edk2": {
+    "tag_name": "0.5.0",
+    "name": "0.5.0",
+    "draft": false,
+    "prerelease": false,
+    "html_url": "https://github.com/gahingwoo/edk2-rk3576/releases/tag/0.5.0",
+    "target_commitish": "main",
+    "assets": [
+      {
+        "name": "CM5IO-emmc-edk2-0.5.0.img",
+        "size": 33554432,
+        "digest": "sha256:b235fc06bde9dfc3a2fc17ea37897a71acac8c94cd03bbdeeba880f82a0f97d2",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/CM5IO-emmc-edk2-0.5.0.img"
+      },
+      {
+        "name": "CM5IO-emmc.sfdisk",
+        "size": 537,
+        "digest": "sha256:924a2a73740003ebd76d5f5d830645401d0dc92f1bd5b7f34c9f3cc16a681c76",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/CM5IO-emmc.sfdisk"
+      },
+      {
+        "name": "CM5IO-sdcard-edk2-0.5.0.img",
+        "size": 33554432,
+        "digest": "sha256:f3a21c50deb51f9f334e463f106573e328524fe8983dc5372aad6ecbd9b6c2dc",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/CM5IO-sdcard-edk2-0.5.0.img"
+      },
+      {
+        "name": "FEATURES.json",
+        "size": 3755,
+        "digest": "sha256:3c7e6dd6f27f6915896baa60b522811c328929e6871133e966a0264cfe228f20",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/FEATURES.json"
+      },
+      {
+        "name": "OFL-1.1.txt",
+        "size": 4923,
+        "digest": "sha256:d9f96ea8b7347866dffff09d3bafa490f3c8905fee4b727fa1e02f0952f28f50",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/OFL-1.1.txt"
+      },
+      {
+        "name": "ROCK4D-spi-edk2-0.5.0.img",
+        "size": 16777216,
+        "digest": "sha256:d71a97c0e86f066d591eb85dab1aff8bba9ba3d7daebe7665ad2630873d3b82b",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/ROCK4D-spi-edk2-0.5.0.img"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "size": 991,
+        "digest": "sha256:91733ced152df68a44fdf7473caa074b85fcc9c4d48b3b2dc13fb39bee45a88c",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/SHA256SUMS.txt"
+      },
+      {
+        "name": "TaishanPi3M-emmc-edk2-0.5.0.img",
+        "size": 33554432,
+        "digest": "sha256:b7598aa4704a7cb44234eba027824c1820b62ce1fca3bfeddf8cfaa3bc7459b3",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/TaishanPi3M-emmc-edk2-0.5.0.img"
+      },
+      {
+        "name": "TaishanPi3M-emmc.sfdisk",
+        "size": 555,
+        "digest": "sha256:24805c5ba5fe5ae86c93f5cbc4faecde10b4445792eaf053a36c41aa95f6cbc6",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/TaishanPi3M-emmc.sfdisk"
+      },
+      {
+        "name": "TaishanPi3M-msk-pads.png",
+        "size": 3218229,
+        "digest": "sha256:f2abbf5c37e4afd0daf9faf278261daaac94ac75fbbf22992cc5b59226038c77",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/TaishanPi3M-msk-pads.png"
+      },
+      {
+        "name": "TaishanPi3M-sdcard-edk2-0.5.0.img",
+        "size": 33554432,
+        "digest": "sha256:c12fe74f2deb1e937e85ab651cb45eec4daf4e79aeffd0136b074d27d38b326a",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/TaishanPi3M-sdcard-edk2-0.5.0.img"
+      },
+      {
+        "name": "TaishanPi3M-spl-0.5.0.bin",
+        "size": 203264,
+        "digest": "sha256:24ca3a41677e0499e539cabd0627ab25d8c99d494caaf40092458a2ceb46398f",
+        "browser_download_url": "https://github.com/gahingwoo/edk2-rk3576/releases/download/0.5.0/TaishanPi3M-spl-0.5.0.bin"
+      }
+    ]
+  },
+  "edk2Sums": "b235fc06bde9dfc3a2fc17ea37897a71acac8c94cd03bbdeeba880f82a0f97d2  CM5IO-emmc-edk2-0.5.0.img\nf3a21c50deb51f9f334e463f106573e328524fe8983dc5372aad6ecbd9b6c2dc  CM5IO-sdcard-edk2-0.5.0.img\nd71a97c0e86f066d591eb85dab1aff8bba9ba3d7daebe7665ad2630873d3b82b  ROCK4D-spi-edk2-0.5.0.img\nb7598aa4704a7cb44234eba027824c1820b62ce1fca3bfeddf8cfaa3bc7459b3  TaishanPi3M-emmc-edk2-0.5.0.img\nc12fe74f2deb1e937e85ab651cb45eec4daf4e79aeffd0136b074d27d38b326a  TaishanPi3M-sdcard-edk2-0.5.0.img\n24ca3a41677e0499e539cabd0627ab25d8c99d494caaf40092458a2ceb46398f  TaishanPi3M-spl-0.5.0.bin\n924a2a73740003ebd76d5f5d830645401d0dc92f1bd5b7f34c9f3cc16a681c76  CM5IO-emmc.sfdisk\n24805c5ba5fe5ae86c93f5cbc4faecde10b4445792eaf053a36c41aa95f6cbc6  TaishanPi3M-emmc.sfdisk\nf2abbf5c37e4afd0daf9faf278261daaac94ac75fbbf22992cc5b59226038c77  TaishanPi3M-msk-pads.png\n3c7e6dd6f27f6915896baa60b522811c328929e6871133e966a0264cfe228f20  FEATURES.json\nd9f96ea8b7347866dffff09d3bafa490f3c8905fee4b727fa1e02f0952f28f50  OFL-1.1.txt\n",
+  "woa": {
+    "tag_name": "0.5.0",
+    "name": "0.5.0",
+    "draft": false,
+    "prerelease": false,
+    "html_url": "https://github.com/gahingwoo/woa-rk3576/releases/tag/0.5.0",
+    "target_commitish": "main",
+    "assets": [
+      {
+        "name": "rk3576-drivers-arm64-0.5.0.zip",
+        "size": 79385756,
+        "digest": "sha256:ef1af94b823396a9a982b9d0a91f8e1a995d4320543bd8f009b161ae5863a9a0",
+        "browser_download_url": "https://github.com/gahingwoo/woa-rk3576/releases/download/0.5.0/rk3576-drivers-arm64-0.5.0.zip"
+      },
+      {
+        "name": "rk3576-tools-arm64-0.5.0.zip",
+        "size": 901256,
+        "digest": "sha256:65093e01b939979f08e2c284f7a9d12c0f540cd4b9f8995eaff3bd58c140ef08",
+        "browser_download_url": "https://github.com/gahingwoo/woa-rk3576/releases/download/0.5.0/rk3576-tools-arm64-0.5.0.zip"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "size": 288,
+        "digest": "sha256:463b333494780d065c3b20fbde4a13f7bfb67278885fcf1b69973f0666eb636d",
+        "browser_download_url": "https://github.com/gahingwoo/woa-rk3576/releases/download/0.5.0/SHA256SUMS.txt"
+      },
+      {
+        "name": "woa-rk3576-winpe-0.5.0.img.xz",
+        "size": 353217592,
+        "digest": "sha256:0f7b12da0e154474e5a086608ff190d376173c0985057f95ab69013d82320ec5",
+        "browser_download_url": "https://github.com/gahingwoo/woa-rk3576/releases/download/0.5.0/woa-rk3576-winpe-0.5.0.img.xz"
+      }
+    ]
+  },
+  "woaSums": "ef1af94b823396a9a982b9d0a91f8e1a995d4320543bd8f009b161ae5863a9a0  rk3576-drivers-arm64-0.5.0.zip\n65093e01b939979f08e2c284f7a9d12c0f540cd4b9f8995eaff3bd58c140ef08  rk3576-tools-arm64-0.5.0.zip\n0f7b12da0e154474e5a086608ff190d376173c0985057f95ab69013d82320ec5  woa-rk3576-winpe-0.5.0.img.xz\n",
+  "charsiu": {
+    "tag_name": "v0.3.0",
+    "name": "Charsiu Desktop 0.3.0",
+    "draft": false,
+    "prerelease": false,
+    "html_url": "https://github.com/gahingwoo/charsiu-desktop/releases/tag/v0.3.0",
+    "target_commitish": "6bfc7207f5b9a1f4c6161599fec631cb355a5c6e",
+    "assets": [
+      {
+        "name": "Charsiu.Desktop_0.3.0_aarch64.AppImage",
+        "size": 79161864,
+        "digest": "sha256:33973bd2727eb5e1c70c081e43feb51b519cee61e07f9da1e8536612973c11dd",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/v0.3.0/Charsiu.Desktop_0.3.0_aarch64.AppImage"
+      },
+      {
+        "name": "Charsiu.Desktop_0.3.0_arm64-setup.exe",
+        "size": 1856664,
+        "digest": "sha256:6f56f87ac9b7b9278782c6ff716af5206afa560fc1df211885a92a10dc339ef2",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/v0.3.0/Charsiu.Desktop_0.3.0_arm64-setup.exe"
+      },
+      {
+        "name": "Charsiu.Desktop_0.3.0_arm64.deb",
+        "size": 2277400,
+        "digest": "sha256:3fbc111f0d767b31a43f6df27ee121a5e4df48c029686c77316400d71be55b43",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/v0.3.0/Charsiu.Desktop_0.3.0_arm64.deb"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "size": 307,
+        "digest": "sha256:5bd3ad9531bfab93a1f752a8c4a96e0838fbf0191e5a60b924252d109d0fc20a",
+        "browser_download_url": "https://github.com/gahingwoo/charsiu-desktop/releases/download/v0.3.0/SHA256SUMS.txt"
+      }
+    ]
+  },
+  "charsiuSums": "4d83003c7ff55ee0c31fd4cde6181d1e30fa00b98201fce7c3442498bb731d37  Charsiu.Desktop_0.3.0_arm64-setup.exe\n0b6285b376f239774ab30286ae396ba2e314164a1cd446889a30a23a7aa53c9b  Charsiu.Desktop_0.3.0_arm64.deb\n7f4cd556b61a6117ac473242b160f6d44909efae82bac5e119c260358d1d96f5  Charsiu.Desktop_0.3.0_aarch64.AppImage\n"
+}

@@ -152,7 +152,7 @@ if exist "%STAGE%\openssh\sshd.exe" (
 
 rem --- 4c. Notepad: only on images whose Notepad app cannot start (trim.ts, notepadFixCmd)
 ${notepadFixCmd()}
-rem --- 4d. trimming and the RK3576 tools (each optional; neither stops the install)
+rem --- 4d. trimming, the RK3576 tools and Charsiu Desktop (each optional; none stops the install)
 if exist "%STAGE%\woa-trim.cmd" (
   echo Trimming Windows: apps and background services, as chosen.
   call "%STAGE%\woa-trim.cmd"
@@ -162,6 +162,13 @@ if exist "%STAGE%\rk3576-tools\offline-install.cmd" (
   rem Its own cmd: the bundle's script keeps its variables to itself. No /hook:
   rem SetupComplete.cmd above already calls its first-boot step.
   cmd /c ""%STAGE%\rk3576-tools\offline-install.cmd" W:\" >> "%LOG%" 2>&1 || echo The RK3576 tools could not be installed ^(exit !errorlevel!^); Windows goes on without them. >> "%LOG%"
+)
+if exist "%STAGE%\charsiu\charsiu-desktop-setup.exe" (
+  echo Charsiu Desktop: its installer, for the first sign-in.
+  rem charsiu-desktop.ts: it installs per user, so SetupComplete.cmd leaves it to the first sign-in.
+  mkdir "W:\ProgramData\Maskrom Studio" 2>nul
+  copy /y "%STAGE%\charsiu\charsiu-desktop-setup.exe" "W:\ProgramData\Maskrom Studio\charsiu-desktop-setup.exe" >> "%LOG%" 2>&1
+  if exist "%STAGE%\woa-charsiu.ps1" copy /y "%STAGE%\woa-charsiu.ps1" W:\Windows\Setup\Scripts\woa-charsiu.ps1 >nul
 )
 
 `;

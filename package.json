@@ -1,7 +1,7 @@
 {
   "name": "maskrom-studio",
   "productName": "Maskrom Studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Install and restore systems and UEFI firmware on Rockchip boards.",
   "homepage": "https://github.com/gahingwoo/maskrom-studio",
   "license": "GPL-2.0-only",

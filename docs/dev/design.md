@@ -277,6 +277,13 @@ Chosen on the Windows setup page:
   woa-rk3576's tools/rk3576-tools/README.md. For testing,
   `WOA_IMAGER_RK3576_TOOLS_URL`, `_SHA256` and `_SIZE` point at another
   build.
+- **Charsiu Desktop** (on). `src/woa/charsiu-desktop.ts`: charsiu-desktop
+  v0.3.0's arm64 setup.exe, pinned by URL, size and SHA-256 (that release's
+  SHA256SUMS.txt is stale, so it is not read from the release), goes to
+  `\ProgramData\Maskrom Studio`. It installs per user, so SetupComplete.cmd
+  only adds an HKLM RunOnce value: at the first sign-in `woa-charsiu.ps1`
+  checks the SHA-256, runs it with `/S` and deletes both. No model, no
+  charsiu command line.
 
 ## Trimming Windows
 
