@@ -34,7 +34,7 @@ import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './wind
 import { selectPackage } from '../woa/driver-package';
 import { FEATURE_KEYS } from '../woa/firmware-features';
 import { firmwareRelease, FIRMWARE_REPO, loadFirmwareFeatures, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
-import { CHARSIU_DESKTOP, CHARSIU_SETUP_PATH } from '../woa/charsiu-desktop';
+import { CHARSIU_PINNED, CHARSIU_REPO, CHARSIU_SETUP_PATH, charsiuFromRelease, chooseCharsiu, type CharsiuInstaller } from '../woa/charsiu-desktop';
 import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
 import { fileSource, planDiskStage, type BoardJob } from '../helper/board-write';
@@ -150,6 +150,8 @@ let winpe: WinpeRelease | null = null;
 interface Tier { asked: Channel; used: Channel; label: string; commit: string | null }
 let firmwareTier: Tier | null = null;
 let winpeTier: Tier | null = null;
+/** Charsiu Desktop's installer: its stable release's, else the pin (charsiu-desktop.ts). */
+let charsiuInstaller: CharsiuInstaller | null = null;
 
 /**
  * The release of `repo` for `channel`. A repository without a CI release yet
@@ -201,6 +203,16 @@ ipcMain.handle('woa:releases', async (_e, force: boolean): Promise<Releases> => 
       winpeTier = tier;
     } catch (e) { problems.push(`woa-rk3576: ${(e as Error).message}`); winpe = null; winpeTier = null; }
   }
+  if (!FAKE_RELEASES && (!charsiuInstaller || force)) {
+    let found: CharsiuInstaller | string | null = null;
+    try {
+      const { rel, sums } = await tierRelease(CHARSIU_REPO, 'stable', fetchFn);
+      found = charsiuFromRelease(rel, sums);
+    } catch (e) { found = (e as Error).message; }
+    const { installer, why } = chooseCharsiu(found);
+    if (why) console.log(`Charsiu Desktop: the pinned ${installer.file} (${why})`);
+    charsiuInstaller = installer;
+  }
   return {
     firmware: firmware ? {
       tag: firmware.tag, url: firmware.url,
@@ -213,8 +225,8 @@ ipcMain.handle('woa:releases', async (_e, force: boolean): Promise<Releases> => 
     winpe: winpe?.image ? { tag: winpe.tag, url: winpe.url, file: winpe.image.file, size: winpe.image.size, tier: winpeTier!,
       tools: toolsAsset() ? { file: toolsAsset()!.file, size: toolsAsset()!.size } : null,
       drivers: driversAsset() ? { file: driversAsset()!.file, size: driversAsset()!.size } : null } : null,
-    // The pinned installer (charsiu-desktop.ts); none with the made-up releases, so e2e runs stay offline.
-    charsiu: FAKE_RELEASES ? null : { tag: CHARSIU_DESKTOP.tag, file: CHARSIU_DESKTOP.file, size: CHARSIU_DESKTOP.size },
+    // The release's or the pinned installer (charsiu-desktop.ts); none with the made-up releases, so e2e runs stay offline.
+    charsiu: FAKE_RELEASES || !charsiuInstaller ? null : { tag: charsiuInstaller.tag, file: charsiuInstaller.file, size: charsiuInstaller.size },
     problems: [...problems, ...(firmware?.problems ?? []), ...(winpe?.problems ?? [])],
   };
 });
@@ -732,9 +744,10 @@ async function chromeFiles(wc: WebContents, signal: AbortSignal): Promise<Array<
   ];
 }
 
-/** Charsiu Desktop's installer (charsiu-desktop.ts, pinned), downloaded once and checked against its SHA-256. */
+/** Charsiu Desktop's installer (charsiu-desktop.ts: the release's, else the pin), downloaded once and checked against its SHA-256. */
 async function charsiuFiles(wc: WebContents, signal: AbortSignal): Promise<Array<{ path: string; data: Uint8Array }>> {
-  const file = await fetchImage({ ...CHARSIU_DESKTOP, sample: false }, cacheDir(), (p) => sendProgress(wc, p), signal);
+  const c = charsiuInstaller ?? CHARSIU_PINNED;
+  const file = await fetchImage({ file: c.file, url: c.url, size: c.size, sha256: c.sha256, sample: false }, cacheDir(), (p) => sendProgress(wc, p), signal);
   return [{ path: CHARSIU_SETUP_PATH, data: new Uint8Array(readFileSync(file)) }];
 }
 

@@ -4,13 +4,17 @@
 // is downloaded, and the charsiu command line stays in the RK3576 tools.
 //
 // The installer is the arm64 setup.exe of charsiu-desktop's stable release,
-// pinned below with its size and SHA-256 like OpenSSH (setup-files.ts) and
-// checked after the download (release-download.ts). Pinned, not read from the
-// release at write time: v0.3.0's SHA256SUMS.txt was uploaded before the
-// binaries were replaced, so it disagrees with GitHub's digest for every one
-// of them and releases.ts would refuse the release. The SHA-256 here is
-// GitHub's digest, which matches the file. test/charsiu-desktop.test.ts
-// checks it against the recorded release.
+// read from the release like the other downloads (charsiuFromRelease: the
+// file is charsiu-desktop_<version>_arm64-setup.exe, and SHA256SUMS.txt and
+// GitHub's digest must both name it and agree) and checked after the
+// download (release-download.ts). Until such a release is out, the pin below
+// is used instead (chooseCharsiu): v0.3.0's SHA256SUMS.txt was uploaded
+// before the binaries were replaced, so it disagrees with GitHub's digest
+// for every one of them, and its file is Charsiu.Desktop_0.3.0_..., so the
+// release is refused and the pin, with GitHub's digest, which matches the
+// file, takes its place. test/charsiu-desktop.test.ts checks both against
+// recorded releases. Once a release with matching checksums is out, the pin
+// can go.
 //
 // It is a Tauri NSIS installer with installMode "currentUser": run as SYSTEM
 // from SetupComplete.cmd it would install into the system profile, so it
@@ -26,6 +30,7 @@
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { releaseAsset, type GithubRelease } from './releases';
 
 export const CHARSIU_REPO = 'gahingwoo/charsiu-desktop';
 export const CHARSIU_DESKTOP = {
@@ -36,6 +41,37 @@ export const CHARSIU_DESKTOP = {
   size: 1856664,
   sha256: '6f56f87ac9b7b9278782c6ff716af5206afa560fc1df211885a92a10dc339ef2',
 };
+/** The installer that is downloaded: from the stable release, or the pin. */
+export interface CharsiuInstaller { tag: string; file: string; url: string; size: number; sha256: string; from: 'release' | 'pinned' }
+
+export const CHARSIU_PINNED: CharsiuInstaller = {
+  tag: CHARSIU_DESKTOP.tag, file: CHARSIU_DESKTOP.file, url: CHARSIU_DESKTOP.url,
+  size: CHARSIU_DESKTOP.size, sha256: CHARSIU_DESKTOP.sha256, from: 'pinned',
+};
+
+/** The arm64 installer's name in a release (charsiu-desktop .github/scripts/package.sh). */
+export const CHARSIU_SETUP_ASSET = /^charsiu-desktop_\d+\.\d+\.\d+_arm64-setup\.exe$/;
+
+/**
+ * A release's arm64 installer, checked like the other downloads (releases.ts
+ * releaseAsset: GitHub's digest and SHA256SUMS.txt agree), and only when
+ * SHA256SUMS.txt names it; or why it cannot be used.
+ */
+export function charsiuFromRelease(rel: GithubRelease, sums: Map<string, string>): CharsiuInstaller | string {
+  const name = rel.assets.map((a) => a.name).find((n) => CHARSIU_SETUP_ASSET.test(n));
+  if (!name) return `${rel.tag_name} has no charsiu-desktop_<version>_arm64-setup.exe`;
+  if (!sums.has(name)) return `${rel.tag_name}: SHA256SUMS.txt does not list ${name}`;
+  const a = releaseAsset(rel, sums, name);
+  if (typeof a === 'string') return a;
+  return { tag: rel.tag_name, file: a.file, url: a.url, size: a.size, sha256: a.sha256, from: 'release' };
+}
+
+/** The release's installer when it checked out, else the pin, with why. */
+export function chooseCharsiu(found: CharsiuInstaller | string | null): { installer: CharsiuInstaller; why: string | null } {
+  if (found && typeof found !== 'string') return { installer: found, why: null };
+  return { installer: CHARSIU_PINNED, why: found ?? 'no release read' };
+}
+
 /** Where the installer goes on the staging volume, whatever its release calls it. */
 export const CHARSIU_SETUP_PATH = 'charsiu/charsiu-desktop-setup.exe';
 export const CHARSIU_FILE = 'woa-charsiu.ps1';
