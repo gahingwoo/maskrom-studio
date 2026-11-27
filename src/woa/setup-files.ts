@@ -90,8 +90,8 @@ export interface SetupOptions {
   /** Install the RK3576 tools bundle (rk-monitor, NPU tools) from the woa-rk3576 release. */
   rkTools?: boolean;
   /**
-   * Edge, Chrome and WebView2 on the GPU at WDDM 2.x (browser-gpu.ts): on
-   * unless false. Turned off on the board, not here: the script's Mode switch.
+   * Take an older tools bundle's --disable-direct-composition back out of
+   * Edge, Chrome and WebView2 (browser-gpu.ts): on unless false.
    */
   browserGpu?: boolean;
   /**

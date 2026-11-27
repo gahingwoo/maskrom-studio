@@ -146,11 +146,13 @@ jobs:
         run: node test/e2e/sd-loop.mjs
 
   browser-gpu:
-    name: Browser GPU script (Windows PowerShell 5.1)
+    name: Browser switch cleanup script (Windows PowerShell 5.1)
     # src/woa/browser-gpu/rk3576-browser-gpu.ps1, the copy of woa-rk3576's
-    # that every Windows install runs: its own tests, a dry run on the
-    # runner, and a warning when it differs from woa-rk3576's main
-    # (scripts/sync-browser-gpu.mjs brings it over).
+    # that every Windows install runs to take out the browser switch an
+    # older tools bundle added: its own tests, a dry run and a real run on
+    # the runner (it must change nothing there), and a warning when it
+    # differs from woa-rk3576's main (scripts/sync-browser-gpu.mjs brings
+    # it over).
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
@@ -161,14 +163,20 @@ jobs:
           $PSVersionTable.PSVersion
           powershell -NoProfile -ExecutionPolicy Bypass -File src\woa\browser-gpu\browser-gpu.tests.ps1 -Script (Resolve-Path src\woa\browser-gpu\rk3576-browser-gpu.ps1)
           if ($LASTEXITCODE -ne 0) { throw 'browser-gpu.tests.ps1 failed' }
-      - name: Status and a dry run on the runner (no RK3576, so the gate says no)
+      - name: Status, a dry run and an install on the runner (nothing to take out there)
         shell: powershell
         run: |
+          $k = 'HKLM:\SOFTWARE\Classes\MSEdgeHTM\shell\open\command'
+          $before = (Get-Item $k).GetValue('', $null, 'DoNotExpandEnvironmentNames')
           powershell -NoProfile -ExecutionPolicy Bypass -File src\woa\browser-gpu\rk3576-browser-gpu.ps1 -Action Status
           if ($LASTEXITCODE -ne 0) { throw 'Status' }
           powershell -NoProfile -ExecutionPolicy Bypass -File src\woa\browser-gpu\rk3576-browser-gpu.ps1 -Action Install -DryRun
           if ($LASTEXITCODE -ne 0) { throw 'Install -DryRun' }
-          if (Get-ScheduledTask -TaskPath '\RK3576\' -ErrorAction SilentlyContinue) { throw 'a dry run registered the task' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File src\woa\browser-gpu\rk3576-browser-gpu.ps1 -Action Install
+          if ($LASTEXITCODE -ne 0) { throw 'Install' }
+          if ((Get-Item $k).GetValue('', $null, 'DoNotExpandEnvironmentNames') -ne $before) { throw 'Install changed the Edge open command' }
+          if (Get-ScheduledTask -TaskPath '\RK3576\' -ErrorAction SilentlyContinue) { throw 'Install left a task' }
+          if (Test-Path "$env:ProgramFiles\RK3576\browser-gpu") { throw 'Install left a copy' }
       - name: Same as woa-rk3576 main
         shell: pwsh
         run: |

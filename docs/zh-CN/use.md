@@ -86,10 +86,9 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows �
 - **驱动安装与更新**：如何安装或更新驱动。
 - **收集诊断信息**：在桌面写入 `RK3576-diag-<日期>-<时间>.txt`（网络、设备、驱动、GPU、温度、SSH、启动设置、首次启动日志），不做任何修改。文件里有开发板的地址，发出去之前请先检查。
 - **修复 SSH**（开了 SSH 时）：注册并启动 OpenSSH 服务器，在所有网络上开放 22 端口。
-- **浏览器 GPU 开关**：打开或关闭 Edge 和 Chrome 的 GPU 渲染。
 - **使用说明**：本页。
 
-收集诊断信息、修复 SSH 和浏览器开关会请求管理员权限。要找回这个文件夹，以管理员身份运行：
+收集诊断信息和修复 SSH 会请求管理员权限。要找回这个文件夹，以管理员身份运行：
 `powershell -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\woa-desktop-tools.ps1`
 
 ## 精简 Windows
@@ -98,9 +97,9 @@ Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows �
 
 ## 让 Edge、Chrome 和 WebView2 用上 GPU
 
-GPU 驱动处于 WDDM 2.x（默认）时，Edge 和 Chrome 只有用 `--disable-direct-composition` 启动才会用 GPU 渲染。每次安装都带上 woa-rk3576 的开关：把这个参数加到开始菜单、桌面和任务栏快捷方式、打开链接和 PDF 的命令以及 WebView2 的参数里，并关掉 Edge 的启动增强和两个浏览器的后台运行。计划任务（`\RK3576\Browser GPU`）在浏览器更新后把参数加回去，GPU 不是 WDDM 2.x 时把它去掉。你自己装的 Chrome 也一样适用。
+在当前的 GPU 驱动上，它们不需要任何开关就用 GPU 渲染。旧版 RK3576 工具包把 `--disable-direct-composition` 加到了它们的快捷方式上，并用一个计划任务一直保持；这个开关从来没有起作用。每次安装都会在首次启动时把它去掉。
 
-在板子上关掉：`HKLM\SOFTWARE\RK3576\BrowserGpu` 中 `Mode` = 0（DWORD），或在管理员命令提示符中运行 `powershell -ExecutionPolicy Bypass -File "%ProgramFiles%\RK3576\browser-gpu\rk3576-browser-gpu.ps1" -Action Disable`（`-Action Uninstall` 卸掉）。详情见 [woa-rk3576 的 BROWSER-GPU.zh-CN.md](https://github.com/gahingwoo/woa-rk3576/blob/main/tools/rk3576-tools/BROWSER-GPU.zh-CN.md)。
+如果板子上已经有这个开关，安装当前的 RK3576 工具（`install.cmd`）也会把它去掉。详情见 [woa-rk3576 的 BROWSER-GPU.zh-CN.md](https://github.com/gahingwoo/woa-rk3576/blob/main/tools/rk3576-tools/BROWSER-GPU.zh-CN.md)。
 
 ## 其他位置：SD 卡或 NVMe 硬盘
 

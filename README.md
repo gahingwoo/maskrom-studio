@@ -46,7 +46,7 @@ only in CI, against a pretend board. Board checks still to do:
 | Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode) | off by default |
 | ROCK 4D: Windows on NVMe and Armbian on an SD card (Advanced mode) | CI only, needs unreleased firmware |
 | Windows trimming, recommended set | CI only |
-| Edge, Chrome and WebView2 on the GPU (browser GPU switch) | CI only |
+| Browser switch cleanup (an older tools bundle's `--disable-direct-composition` taken out) | CI only |
 | Self-test on Windows' first desktop | CI only |
 | Automatic sign-in on every start | off by default |
 | UEFI firmware: whole image, keep the partitions | CI only |

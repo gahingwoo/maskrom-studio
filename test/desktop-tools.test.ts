@@ -4,8 +4,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  BROWSER_SWITCH_FILE, DESKTOP_FOLDER, DESKTOP_SCRIPT_FILES, DESKTOP_TOOLS_FILE, DIAG_FILE, SSH_FIX_FILE, SSH_RULE,
-  browserSwitchScript, desktopListing, desktopScripts, desktopToolsFirstStart, desktopToolsScript, diagScript, sshFixScript,
+  DESKTOP_FOLDER, DESKTOP_SCRIPT_FILES, DESKTOP_TOOLS_FILE, DIAG_FILE, SSH_FIX_FILE, SSH_RULE,
+  desktopListing, desktopScripts, desktopToolsFirstStart, desktopToolsScript, diagScript, sshFixScript,
 } from '../src/woa/desktop-tools';
 import { setupComplete } from '../src/woa/setup-files';
 import { CONFIGURE } from '../src/woa/stage-scripts';
@@ -15,11 +15,11 @@ describe('the RK3576 Tools desktop folder', () => {
   it('lists the same shortcuts in English and Chinese', () => {
     expect(desktopListing('en').map((e) => e.file)).toEqual([
       'Self-test.lnk', 'RK3576 Monitor.lnk', 'Drivers, install and update.url', 'Collect diagnostics.lnk',
-      'Fix SSH.lnk', 'Browser GPU switch.lnk', 'User guide.url',
+      'Fix SSH.lnk', 'User guide.url',
     ]);
     expect(desktopListing('zh-CN').map((e) => e.file)).toEqual([
       '自检.lnk', 'RK3576 监视器.lnk', '驱动安装与更新.url', '收集诊断信息.lnk',
-      '修复 SSH.lnk', '浏览器 GPU 开关.lnk', '使用说明.url',
+      '修复 SSH.lnk', '使用说明.url',
     ]);
     expect(DESKTOP_FOLDER).toEqual({ en: 'RK3576 Tools', 'zh-CN': 'RK3576 工具' });
   });
@@ -38,24 +38,25 @@ describe('the RK3576 Tools desktop folder', () => {
     expect(ps).toContain("GetFolderPath('CommonDesktopDirectory')");
     expect(ps).toContain("'RK3576 Tools'");
     expect(ps).toContain("'RK3576 工具'");
-    for (const zh of ['自检', '收集诊断信息', '修复 SSH', '浏览器 GPU 开关']) expect(ps).toContain(`'${zh}'`);
+    for (const zh of ['自检', '收集诊断信息', '修复 SSH']) expect(ps).toContain(`'${zh}'`);
     // Nothing is copied into the folder: only .lnk and .url files are written there.
     expect(ps).not.toMatch(/Copy-Item|Move-Item/);
     expect(ps).toContain("if (Test-Path (Join-Path $Rk 'rk-monitor.exe'))");
     expect(ps).toContain("Test-Path (Join-Path $Ssh 'install-sshd.ps1')");
-    expect(ps).toContain("Test-Path (Join-Path $Rk 'browser-gpu\\rk3576-browser-gpu.ps1')");
+    // No browser switch shortcut: the browser script only takes the switch out now.
+    expect(ps).not.toContain('browser-gpu');
     // The self-test shortcut runs it again without the first-start wait.
     expect(ps).toContain("Join-Path $Scripts 'woa-selftest.ps1') + '\" -Now')");
   });
 
-  it('is run by SetupComplete.cmd after the RK3576 tools and the browser GPU switch, and staged with its scripts', () => {
+  it('is run by SetupComplete.cmd after the RK3576 tools and the browser switch cleanup, and staged with its scripts', () => {
     const sc = setupComplete({ skipSetup: null, ssh: true, sshKey: '', rkTools: true });
     const at = sc.indexOf(desktopToolsFirstStart()[1]);
     expect(at).toBeGreaterThan(sc.indexOf('firstboot.cmd'));
     expect(at).toBeGreaterThan(sc.indexOf('-Action Install'));
     expect(desktopScripts().map((f) => f.name)).toEqual([...DESKTOP_SCRIPT_FILES]);
     expect(CONFIGURE).toContain(`for %%f in (${DESKTOP_SCRIPT_FILES.join(' ')}) do if exist "%STAGE%\\%%f" copy /y "%STAGE%\\%%f" W:\\Windows\\Setup\\Scripts\\%%f`);
-    expect(DESKTOP_SCRIPT_FILES).toEqual([DESKTOP_TOOLS_FILE, DIAG_FILE, SSH_FIX_FILE, BROWSER_SWITCH_FILE]);
+    expect(DESKTOP_SCRIPT_FILES).toEqual([DESKTOP_TOOLS_FILE, DIAG_FILE, SSH_FIX_FILE]);
   });
 
   it('the self-test takes -Now and skips its wait with it', () => {
@@ -71,7 +72,7 @@ describe('the scripts behind the shortcuts', () => {
       expect(f.text.charCodeAt(0), f.name).toBe(0xfeff);
       expect(f.text, f.name).not.toMatch(/[\u2013\u2014]/);
     }
-    for (const t of [diagScript(), sshFixScript(), browserSwitchScript()]) {
+    for (const t of [diagScript(), sshFixScript()]) {
       expect(t).toContain('-Verb RunAs');
       expect(t).toMatch(/if \(-not \(Test-Admin\)\) \{ Invoke-Elevated/);
     }
@@ -99,14 +100,6 @@ describe('the scripts behind the shortcuts', () => {
     expect(s).toContain('Set-NetFirewallRule -Profile Any -Enabled True -Action Allow');
     expect(s).toContain('New-NetFirewallRule -DisplayName $Rule -Direction Inbound -Action Allow -Protocol TCP -LocalPort 22 -Profile Any');
     expect(s).not.toMatch(/-Profile (Private|Domain|Public)/);
-  });
-
-  it('browser GPU switch: Mode 0 is off, anything else on; uses the installed script', () => {
-    const b = browserSwitchScript();
-    expect(b).toContain("RK3576\\browser-gpu\\rk3576-browser-gpu.ps1");
-    expect(b).toContain('$on = -not ($mode -eq 0)');
-    expect(b).toContain("$action = 'Disable'");
-    expect(b).toContain("$action = 'Enable'");
   });
 
   it('parse in PowerShell where pwsh is installed', () => {
