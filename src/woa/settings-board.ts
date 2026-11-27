@@ -13,6 +13,7 @@ import { readSpiFirmware } from './spi-image';
 import { TRUSTED_READ_BYTES } from './maskrom-regions';
 import { bytesSource, patchedSource, type ByteSource } from './pieces';
 import { isErasedArea, NV_REGION_BYTES, parseVarStore, VarStoreError } from './uefi-vars';
+import { BootOrderError } from './boot-options';
 import { planSettings, SettingsError, type SettingOption, type SettingsPlan, type SettingsRequest } from './uefi-settings';
 import type { Region } from './stage-layout';
 import type { WoaBoard } from './boards';
@@ -71,7 +72,7 @@ export function tryPlan(area: Uint8Array, req: SettingsRequest, options: Setting
   try {
     return planSettings(area, req, options, same);
   } catch (e) {
-    if (e instanceof VarStoreError || e instanceof SettingsError) return { stop: `${e.message} Nothing was written.` };
+    if (e instanceof VarStoreError || e instanceof SettingsError || e instanceof BootOrderError) return { stop: `${e.message} Nothing was written.` };
     throw e;
   }
 }

@@ -4,8 +4,9 @@
 // pictures, a pretend TaishanPi 3M (a folder laid out like /proc and /sys).
 //   node scripts/shots.mjs OUT_DIR
 import { _electron as electron } from 'playwright-core';
+import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,7 +29,10 @@ const base = {
 delete base.ELECTRON_RUN_AS_NODE;
 const errors = [];
 
+// SHOTS_ONLY=uefi: only the sessions whose tag starts with it.
+const only = process.env.SHOTS_ONLY;
 async function session(tag, w, h, theme, env, steps, lang = 'en') {
+  if (only && !tag.startsWith(only)) return;
   const app = await electron.launch({ args: ['.'], env });
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(`${tag}-${theme}: ${e.message}`));
@@ -238,6 +242,38 @@ await session('d-here', 1100, 780, 'light', { ...base, WOA_IMAGER_FAKE_ROOT: roo
   await page.waitForSelector('#via-here');
   await shot('6-this-board');
 }, 'zh-CN');
+// The UEFI settings view against a pretend TaishanPi 3M (test/electron/fake-settings-worker.ts): the
+// release's settings list and the board's boot order, then the order with Windows put first.
+await build({ entryPoints: ['test/electron/fake-settings-worker.ts'], bundle: true, format: 'esm', platform: 'browser', target: 'chrome130',
+  outfile: 'build/renderer/fake-settings-worker.js', loader: { '.bin': 'binary', '.gz': 'binary' }, logLevel: 'warning' });
+const settingsEnv = { ...base, WOA_IMAGER_TEST_WORKER: 'fake-settings-worker.js', WOA_IMAGER_TEST_FEATURES: 'test/fixtures/edk2-features.json' };
+const settingsFlow = async (page, shot) => {
+  await page.click('label[for="board-tspi3m"]');
+  await next(page);
+  await page.waitForSelector('#task-settings');
+  await page.click('label[for="task-settings"]');
+  await next(page);
+  await page.waitForSelector('.pf-v6-c-wizard__footer');
+  await next(page);
+  await page.waitForSelector('#boot-order', { timeout: 120000 });
+  await page.locator('#uefi-settings').scrollIntoViewIfNeeded();
+  await page.evaluate(() => document.querySelector('#uefi-settings')?.scrollIntoView({ block: 'start' }));
+  await shot('13-uefi-settings');
+  await page.click('#boot-windows-first');
+  await page.focus('#boot-up-6');
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => document.querySelector('#boot-order')?.scrollIntoView({ block: 'start' }));
+  await shot('14-uefi-boot-order');
+  await page.click('#uefi-review');
+  await page.waitForSelector('#uefi-confirm');
+  await shot('15-uefi-boot-confirm');
+};
+for (const [w, h, tag] of [[1100, 780, 'uefi-d'], [720, 640, 'uefi-m']]) {
+  for (const theme of ['light', 'dark']) await session(tag, w, h, theme, settingsEnv, settingsFlow);
+}
+await session('uefi-d', 1100, 780, 'light', settingsEnv, settingsFlow, 'zh-CN');
+rmSync('build/renderer/fake-settings-worker.js', { force: true });
+
 if (errors.length) {
   console.error(errors.join('\n'));
   process.exit(1);

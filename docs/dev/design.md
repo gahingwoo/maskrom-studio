@@ -465,6 +465,13 @@ intended. A variable that is not on the board is created only when the
 list describes all of its bytes and the board runs the firmware the list
 was made for (its build stamp equals FEATURES.json `firmwareVersion`).
 
+The boot order (`src/woa/boot-options.ts`) reads BootOrder and each
+Boot#### it lists as an EFI_LOAD_OPTION (attributes, description, device
+path; UEFI 2.10 sections 3.1.3 and 10.3). Only BootOrder is written, through
+the same writer, with its attributes on the board (NV+BS+RT), and only as a
+new order of the numbers it already holds. Windows entries are those whose
+file path ends in `\EFI\Microsoft\Boot\bootmgfw.efi`.
+
 CI writes the test stores to a folder and reads them with
 `scripts/varstore/check.py` (from VariableFormat.h) and
 `scripts/varstore/edk2-check.c` (built against EDK2's headers). The two

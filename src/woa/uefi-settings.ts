@@ -14,6 +14,7 @@
 //
 // No Node APIs: the MaskROM worker uses it too.
 
+import { bootOrderChange, BootOrderError, isBootOrder } from './boot-options';
 import {
   findVariable, freshVarStore, isErasedArea, parseVarStore, protectedReason, setVariables,
   VarStoreError, type VarChange, type VarStore,
@@ -344,7 +345,8 @@ export function resetChanges(options: SettingOption[], store: VarStore | null): 
 
 /** What the page asks a settings job to do with the area it read. */
 export type SettingsRequest =
-  | { kind: 'edit'; edits: Record<string, number> }
+  /** bootOrder: BootOrder's numbers in a new order (boot-options.ts); no Boot#### is touched. */
+  | { kind: 'edit'; edits: Record<string, number>; bootOrder?: number[] }
   | { kind: 'reset' }
   | { kind: 'restore'; area: Uint8Array };
 
@@ -365,10 +367,11 @@ export function sameFirmware(stamp: string | null, firmwareVersion: string | nul
  * The bytes to write over `area` (the 192 KiB the board holds) for `req`.
  * The area must parse; an erased one gets a new store (as the firmware
  * would make on its first start) with only the edited variables in it.
- * Throws VarStoreError or SettingsError with the reason when it must not be written.
+ * Throws VarStoreError, SettingsError or BootOrderError with the reason when it must not be written.
  */
 export function planSettings(area: Uint8Array, req: SettingsRequest, options: SettingOption[], same: boolean): SettingsPlan {
-  const allowed = allowedVariables(options);
+  const listed = allowedVariables(options);
+  const allowed = (name: string, guid: string) => listed(name, guid) || (req.kind === 'edit' && !!req.bootOrder && isBootOrder(name, guid));
   if (req.kind === 'restore') {
     const s = parseVarStore(req.area);
     if (!s.live.length) throw new VarStoreError('The backup holds no variables.');
@@ -380,6 +383,11 @@ export function planSettings(area: Uint8Array, req: SettingsRequest, options: Se
   const store = parseVarStore(base);
   const board: BoardSettings = { store: erased ? null : store, sameFirmware: same };
   const changes = req.kind === 'reset' ? resetChanges(options, board.store) : changesFor(options, board, req.edits);
+  if (req.kind === 'edit' && req.bootOrder) {
+    if (!board.store) throw new BootOrderError('The board has no boot order saved, so there is none to change.');
+    const c = bootOrderChange(board.store, req.bootOrder);
+    if (c) changes.push(c);
+  }
   if (changes.length === 0) return { bytes: null, variables: [], reclaimed: false };
   const r = setVariables(base, changes, allowed);
   return { bytes: r.bytes, variables: r.changed, reclaimed: r.reclaimed };

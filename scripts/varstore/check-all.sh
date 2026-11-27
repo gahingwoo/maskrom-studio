@@ -1,6 +1,6 @@
 #!/bin/sh
 # Read every store the tests wrote (VARSTORE_OUT=<dir> npx vitest run
-# test/uefi-vars.test.ts) with the two checkers made from EDK2, and compare
+# test/uefi-vars.test.ts test/boot-options.test.ts) with the two checkers made from EDK2, and compare
 # what they list with what the app meant to write (<name>.txt):
 #   check.py        written from VariableFormat.h and VariableParsing.c
 #   edk2-check.c    compiled against EDK2's own headers

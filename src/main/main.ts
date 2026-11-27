@@ -32,7 +32,7 @@ import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
 import { boardHere, NO_MTD_HELP } from './board-here';
 import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './windows-image';
 import { selectPackage } from '../woa/driver-package';
-import { FEATURE_KEYS } from '../woa/firmware-features';
+import { FEATURE_KEYS, parseFeatures } from '../woa/firmware-features';
 import { firmwareRelease, FIRMWARE_REPO, loadFirmwareFeatures, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
 import { ciCommit, isChannel, releaseLabel, type Channel } from '../shared/channel';
 import type { BoardId } from '../woa/boards';
@@ -172,6 +172,13 @@ const FAKE_RELEASES = !app.isPackaged && process.env.WOA_IMAGER_FAKE_RELEASES ==
 // The made-up release lists every feature on every board, so the screenshots and e2e runs see every page.
 const FAKE_FEATURES: FirmwareRelease['features'] = { from: 'release', boards: Object.fromEntries(WOA_BOARDS.map((b) => [b.id, {
   firmwareVersion: null, features: Object.fromEntries(FEATURE_KEYS.map((k) => [k, { built: true }])) }])) };
+// With a FEATURES.json given, its boards' firmware versions and settings lists (the settings screenshots).
+if (FAKE_RELEASES && process.env.WOA_IMAGER_TEST_FEATURES) {
+  for (const [id, b] of Object.entries(parseFeatures(readFileSync(process.env.WOA_IMAGER_TEST_FEATURES, 'utf8')))) {
+    const fake = FAKE_FEATURES.boards[id as BoardId];
+    if (fake && b) FAKE_FEATURES.boards[id as BoardId] = { ...fake, firmwareVersion: b.firmwareVersion, ...(b.settings !== undefined ? { settings: b.settings } : {}) };
+  }
+}
 if (FAKE_RELEASES) {
   const a = (file: string, size: number) => ({ file, url: `https://example.invalid/${file}`, size, sha256: '0'.repeat(64), sample: false as const });
   firmware = { tag: '0.4.1', url: null, problems: [], images: {

@@ -53,14 +53,14 @@ jobs:
       - run: npm run typecheck
       - name: Unit tests (staged layout, file systems, Maskrom through the WASM against a pretend board)
         run: npm test
-      # The stores the UEFI settings writer makes (uefi-vars.test.ts), read back by a checker written from
+      # The stores the UEFI settings writer makes (uefi-vars.test.ts, boot-options.test.ts), read back by a checker written from
       # EDK2's VariableFormat.h and one compiled against EDK2's own headers (scripts/varstore).
       - name: UEFI variable stores, cross-checked against EDK2
         run: |
           set -eu
           git clone -q --depth 1 --filter=blob:none --sparse -b edk2-stable202602 https://github.com/tianocore/edk2 /tmp/edk2
           git -C /tmp/edk2 sparse-checkout set MdePkg/Include MdeModulePkg/Include
-          VARSTORE_OUT=/tmp/varstores npx vitest run test/uefi-vars.test.ts
+          VARSTORE_OUT=/tmp/varstores npx vitest run test/uefi-vars.test.ts test/boot-options.test.ts
           sh scripts/varstore/check-all.sh /tmp/edk2 /tmp/varstores
       - name: Maskrom loader built from rkbin matches its pin
         run: node scripts/check-loader.mjs

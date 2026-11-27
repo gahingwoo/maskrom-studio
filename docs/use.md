@@ -287,6 +287,11 @@ uses the new values from its next start.
 - The list comes from the firmware release (FEATURES.json). Releases 0.4.1
   and older have none, so nothing can be changed there. An option whose
   stored size differs from the list is shown read-only.
+- **Boot order** lists the entries the firmware tries, from the top. Move
+  them with the arrow buttons, or press **Put Windows first**. Only the
+  order is written; no entry is added or removed. Grey entries are turned
+  off or hidden from the boot menu. This works on releases without a
+  settings list too.
 
 Firmware writes and upgrades can set values in the same job: open **Set
 UEFI settings with this firmware** on the upgrade step or the review page.

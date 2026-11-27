@@ -4,12 +4,15 @@
 // uefi-settings.ts), grouped by the page they are on in the firmware's menu.
 // Nothing is written until the summary of the changes is confirmed. Also the
 // smaller picker of values to set with a firmware write.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActionList, ActionListGroup, ActionListItem, Alert, Button, Card, CardBody, CardTitle, Content, FormSelect, FormSelectOption,
   List, ListItem, Stack, TextInput, Title,
 } from '@patternfly/react-core';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
+import { ArrowUpIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-up-icon';
+import { ArrowDownIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-down-icon';
+import { moveEntry, readBootOrder, windowsFirst, type BootEntry, type BootOrderRead } from '../woa/boot-options';
 import { useI18n } from './i18n';
 import { parseVarStore, VarStoreError, type VarStore } from '../woa/uefi-vars';
 import { settingRows, valueProblem, type Locked, type SettingOption, type SettingRow, type SettingsRequest, type Text } from '../woa/uefi-settings';
@@ -80,6 +83,83 @@ function editLines(rows: SettingRow[], edits: Edits, w: ReturnType<typeof useWor
     .map((r) => w.t('uefi.change', { what: w.text(r.option.prompt), from: w.value(r.option, r.effective), to: w.value(r.option, edits[r.option.id]) }));
 }
 
+/** An entry's name on the page: its description, or Boot#### when it has none. */
+const entryTitle = (e: BootEntry) => e.option?.description || e.name;
+
+/**
+ * The boot order: BootOrder's entries in the order the firmware tries them,
+ * moved with the arrow buttons. Only the order is ever written.
+ */
+function BootOrderSection({ boot, order, onChange }: { boot: BootOrderRead; order: BootEntry[]; onChange: (o: BootEntry[]) => void }) {
+  const { t, msg } = useWords();
+  // After a move, the focus follows the entry to its new place (or to its other button at an end).
+  const [focus, setFocus] = useState<{ slot: number; dir: 'up' | 'down' } | null>(null);
+  useEffect(() => {
+    if (!focus) return;
+    const at = order.findIndex((e) => e.slot === focus.slot);
+    const want = (focus.dir === 'up' && at === 0) || (focus.dir === 'down' && at === order.length - 1) ? (focus.dir === 'up' ? 'down' : 'up') : focus.dir;
+    document.getElementById(`boot-${want}-${focus.slot}`)?.focus();
+    setFocus(null);
+  }, [focus, order]);
+  const move = (i: number, dir: 'up' | 'down') => {
+    onChange(moveEntry(order, i, dir === 'up' ? i - 1 : i + 1));
+    setFocus({ slot: order[i].slot, dir });
+  };
+  const changed = order.some((e, i) => e.slot !== boot.entries[i].slot);
+  const first = windowsFirst(order);
+  const canWindows = first.some((e, i) => e.slot !== order[i].slot);
+  const editable = !boot.locked;
+  const state = (e: BootEntry): string | null => (e.missing ? t('uefi.boot.missing') : e.problem ? t('uefi.boot.bad', { why: e.problem })
+    : e.option && !e.option.active ? t('uefi.boot.inactive') : e.option?.hidden ? t('uefi.boot.hidden') : null);
+  const off = (e: BootEntry) => e.missing || !!e.problem || !e.option?.active || !!e.option?.hidden;
+  return (
+    <Stack id="boot-order">
+      <Title headingLevel="h3" size="md">{t('uefi.boot.title')}</Title>
+      <Content component="p" className="muted">{t('uefi.boot.lead')}</Content>
+      {boot.locked && <Alert isInline variant="info" title={t('uefi.boot.locked')}>{msg(boot.locked)}</Alert>}
+      {order.length > 0 && (
+        <Table aria-label={t('uefi.boot.title')} variant="compact" className="boot-order">
+          <Thead><Tr><Th width={10}>{t('uefi.boot.col.place')}</Th><Th>{t('uefi.boot.col.entry')}</Th><Th>{t('uefi.boot.col.device')}</Th>{editable && <Th screenReaderText={t('uefi.boot.col.move')} />}</Tr></Thead>
+          <Tbody>
+            {order.map((e, i) => (
+              <Tr key={e.slot} id={`boot-row-${e.slot}`} className={off(e) ? 'boot-off' : undefined}>
+                <Td dataLabel={t('uefi.boot.col.place')}>{i + 1}</Td>
+                <Td dataLabel={t('uefi.boot.col.entry')}>
+                  {entryTitle(e)}
+                  <div className="muted">{e.name}</div>
+                  {state(e) && <div className="muted">{state(e)}</div>}
+                </Td>
+                <Td dataLabel={t('uefi.boot.col.device')}>
+                  {e.option ? t(`uefi.boot.kind.${e.option.kind}`) : ''}
+                  {e.option?.file && <div className="muted boot-file">{e.option.file}</div>}
+                </Td>
+                {editable && (
+                  <Td dataLabel={t('uefi.boot.col.move')} modifier="fitContent">
+                    <div className="boot-move">
+                      <Button id={`boot-up-${e.slot}`} variant="plain" icon={<ArrowUpIcon />} isDisabled={i === 0}
+                        aria-label={t('uefi.boot.up', { what: entryTitle(e) })} title={t('uefi.boot.up', { what: entryTitle(e) })} onClick={() => move(i, 'up')} />
+                      <Button id={`boot-down-${e.slot}`} variant="plain" icon={<ArrowDownIcon />} isDisabled={i === order.length - 1}
+                        aria-label={t('uefi.boot.down', { what: entryTitle(e) })} title={t('uefi.boot.down', { what: entryTitle(e) })} onClick={() => move(i, 'down')} />
+                    </div>
+                  </Td>
+                )}
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      )}
+      {editable && order.length > 1 && (
+        <ActionList>
+          <ActionListGroup>
+            <ActionListItem><Button id="boot-windows-first" variant="secondary" isDisabled={!canWindows} onClick={() => onChange(first)}>{t('uefi.boot.windowsFirst')}</Button></ActionListItem>
+            <ActionListItem><Button id="boot-undo" variant="link" isDisabled={!changed} onClick={() => onChange(boot.entries)}>{t('uefi.boot.undo')}</Button></ActionListItem>
+          </ActionListGroup>
+        </ActionList>
+      )}
+    </Stack>
+  );
+}
+
 export function SettingsEditor({ options, why, read, release, onApply, onClose, pickBackup }: {
   /** The release's options, or null with `why` when it has none. */
   options: SettingOption[] | null; why: string | null;
@@ -103,8 +183,13 @@ export function SettingsEditor({ options, why, read, release, onApply, onClose, 
   }, [read]);
   const board = { store: parsed.store, sameFirmware: read.sameFirmware };
   const rows = useMemo(() => (options && !parsed.error ? settingRows(options, board, edits) : []), [options, parsed, edits, read.sameFirmware]); // eslint-disable-line react-hooks/exhaustive-deps
-  const lines = editLines(rows, edits, w);
+  const boot = useMemo(() => (parsed.error ? null : readBootOrder(parsed.store)), [parsed]);
+  const [order, setOrder] = useState<BootEntry[]>(() => boot?.entries ?? []);
+  const orderChanged = !!boot && order.some((e, i) => e.slot !== boot.entries[i]?.slot);
+  const lines = [...editLines(rows, edits, w),
+    ...(orderChanged ? [t('uefi.boot.change')] : [])];
   const canEdit = !!options && !parsed.error;
+  const request: SettingsRequest = { kind: 'edit', edits, ...(orderChanged ? { bootOrder: order.map((e) => e.number) } : {}) };
 
   const restore = async () => {
     setBackupError(null);
@@ -132,8 +217,12 @@ export function SettingsEditor({ options, why, read, release, onApply, onClose, 
         <CardBody>
           <Stack hasGutter>
             <List id="uefi-changes">{ask.lines.map((l) => <ListItem key={l}>{l}</ListItem>)}</List>
+            {ask.req.kind === 'edit' && ask.req.bootOrder && (
+              <List id="uefi-boot-new" component="ol">{order.map((e) => <ListItem key={e.slot}>{entryTitle(e)} <span className="muted">{e.name}</span></ListItem>)}</List>
+            )}
             <Content component="p">{t('uefi.ask.how')}</Content>
             {rows.some((r) => r.option.resetRequired && edits[r.option.id] !== undefined) && <Content component="p" className="muted">{t('uefi.ask.restart')}</Content>}
+            {ask.req.kind === 'edit' && ask.req.bootOrder && <Content component="p" className="muted">{t('uefi.boot.ask')}</Content>}
             <ActionList>
               <ActionListGroup>
                 <ActionListItem><Button id="uefi-write" variant="danger" onClick={() => onApply(ask.req)}>{t('uefi.write')}</Button></ActionListItem>
@@ -160,6 +249,7 @@ export function SettingsEditor({ options, why, read, release, onApply, onClose, 
               {t('uefi.other.text', { release: release.tag ?? '?', made: release.firmwareVersion ?? '?', board: read.stamp ?? t('uefi.firmware.unknown') })}
             </Alert>
           )}
+          {boot && (parsed.store || read.problem === 'erased') && <BootOrderSection boot={boot} order={order} onChange={setOrder} />}
           {canEdit && groups(rows).map(([g, rs]) => (
             <Stack key={g}>
               <Title headingLevel="h3" size="md">{g}</Title>
@@ -184,8 +274,8 @@ export function SettingsEditor({ options, why, read, release, onApply, onClose, 
           {backupError && <Alert isInline variant="danger" title={backupError} />}
           <ActionList>
             <ActionListGroup>
-              <ActionListItem><Button id="uefi-review" variant="primary" isDisabled={!canEdit || lines.length === 0}
-                onClick={() => setAsk({ req: { kind: 'edit', edits }, title: t('uefi.ask.edit', { n: lines.length }), lines })}>{t('uefi.review', { n: lines.length })}</Button></ActionListItem>
+              <ActionListItem><Button id="uefi-review" variant="primary" isDisabled={lines.length === 0}
+                onClick={() => setAsk({ req: request, title: t('uefi.ask.edit', { n: lines.length }), lines })}>{t('uefi.review', { n: lines.length })}</Button></ActionListItem>
               <ActionListItem><Button id="uefi-reset" variant="secondary" isDisabled={!canEdit || !parsed.store} onClick={reset}>{t('uefi.reset')}</Button></ActionListItem>
               <ActionListItem><Button id="uefi-restore" variant="secondary" onClick={restore}>{t('uefi.restore')}</Button></ActionListItem>
             </ActionListGroup>

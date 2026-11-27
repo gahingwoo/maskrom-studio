@@ -17,6 +17,9 @@ over on the first start.
 - UEFI settings over MaskROM (Advanced mode): read the board's firmware
   settings, change them, reset them to defaults or write back a saved copy;
   or set them with a firmware write. Not tried on a board yet.
+- UEFI boot order over MaskROM: the settings view lists BootOrder's entries
+  (description, device, file), moves them up and down, puts Windows first,
+  and writes only BootOrder. Not tried on a board yet.
 - About Maskrom Studio.
 - Windows and Armbian on one eMMC (TaishanPi 3M, Advanced mode): Armbian's
   root partition at the end of the eMMC, its U-Boot in the firmware slot,

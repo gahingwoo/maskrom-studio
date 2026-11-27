@@ -129,3 +129,8 @@ html.pf-v6-theme-dark .credit-badge__label { fill: var(--pf-t--global--text--col
   font-size: var(--pf-t--global--font--size--heading--md);
 }
 .desktop-cli { font-family: var(--pf-t--global--font--family--mono); }
+
+/* The boot order (uefi-settings-view.tsx): entries the firmware skips or hides are grey; the move buttons side by side. */
+.boot-order .boot-off td { color: var(--pf-t--global--text--color--subtle); }
+.boot-order .boot-move { display: flex; gap: var(--pf-t--global--spacer--xs); }
+.boot-order .boot-file { overflow-wrap: anywhere; }
