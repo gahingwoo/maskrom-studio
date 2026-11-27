@@ -49,6 +49,10 @@ was seen. Procedure: [hardware-test](hardware-test.md).
   page. CI: the check against the pretend board (both SPLs) in
   scripts/electron-rock4d-e2e.mjs, the wizard and the stop before any
   write in scripts/electron-rock4d-hybrid-e2e.mjs.
+- **CM5-IO, Windows on eMMC or NVMe + Armbian on SD**: the eMMC SPL check
+  over MaskROM, the loader kept running into the staged install, the card
+  written after it. CI: both SPLs and the NVMe variant in
+  scripts/electron-cm5io-hybrid-e2e.mjs (screenshots in the CI artifact).
 - **WinPE texts per target**: the screen names eMMC, SD card or NVMe drive;
   only string checks in CI (test/host-build.test.ts), no cmd.exe run.
 - **Self-test**: the message box, the report file, the issue link.

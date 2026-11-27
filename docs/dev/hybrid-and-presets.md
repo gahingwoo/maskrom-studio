@@ -24,6 +24,20 @@ not the app): `docs/dev/img/hybrid/1-install-mode.png` to `6-confirm.png`.
   builds (`dl.armbian.com/nightly/`, same signing key), marked so in the
   list. Both branches use mainline U-Boot v2026.04 with the FIT at sector
   16384 (checked in the 26.8.2 edge and 26.11.0-trunk.140 vendor images).
+- **CM5-IO: Windows on the eMMC or NVMe, Armbian on an SD card**,
+  Advanced mode (`hybrid: 'windows-and-sd'`, `startHybridSdEmmc` in
+  `App.tsx`). The firmware stays on the eMMC and writes the request to eMMC
+  sector 0x3FFF itself (target 1, the SD card); the app only checks it.
+  (1) Over MaskROM, read only: eMMC sectors 64..2111 (the first MiB from
+  64, as `ArmbianOnceSplTakesRequests` searches) for `ArmbianOnce/1`. A
+  Windows install keeps the firmware partition, so the SPL on the board
+  counts, not FEATURES.json of the release (which only gates the offer).
+  With the eMMC the check leaves the loader running and the staged install
+  follows in the same MaskROM session. (2) Windows staged on the eMMC (or
+  the NVMe drive, as on the ROCK 4D), `armbian_sd=1`; (3) Armbian's whole
+  image onto the SD card. Board-tested by hand 2026-11-27 (0.5.0 SPL,
+  request on the eMMC, one-shot SD boot, back to Windows); the app's job
+  has not run on a board.
 - **Default system:** Windows only, until the firmware has a default-system
   option; the page shows Armbian as default greyed out with the reason.
 - **No presets:** Armbian's first login asks for passwords, user and time
@@ -50,8 +64,8 @@ option (edk2-rk3576 ArmbianOnce, `RK_ARMBIAN_ONCE_ENABLE`, request in eMMC
 sector 0x3FFF, docs/ARMBIAN-CHAINLOAD.md there): Armbian's own U-Boot,
 boot.scr, kernel and DT, vendor or edge. That path passed on the
 TaishanPi 3M from an SD card; the eMMC slot path has not run. The UEFI and
-GRUB route (branch `armbian-uefi`) is not taken further. The CM5-IO needs
-its SPL rebuilt with ArmbianOnce and SD-first.
+GRUB route (branch `armbian-uefi`) is not taken further. The CM5-IO's SPL
+has ArmbianOnce from edk2-rk3576 0.5.0 on.
 
 ROCK 4D (ARMBIAN-CHAINLOAD.md "SPI NOR boards"): the SPL and the firmware
 are on the SPI NOR flash and there is no eMMC, so the request is sector
@@ -113,8 +127,9 @@ TaishanPi 3M eMMC, 62008590336 bytes (121110528 sectors):
   when it differs.
 - Armbian must never install its bootloader on this eMMC (`armbian-install`,
   `FORCE_UBOOT_UPDATE=yes`): it would overwrite the firmware.
-- CM5-IO eMMC (31 GB) has no room for both. Per board: `hybrid` in
-  `src/woa/boards.ts` (`one-emmc`, `nvme-and-sd` or none).
+- CM5-IO eMMC (31 GB) has no room for both: Armbian goes onto an SD card.
+  Per board: `hybrid` in `src/woa/boards.ts` (`one-emmc`, `nvme-and-sd`,
+  `windows-and-sd` or none).
 
 ## Decided, not built
 
@@ -223,6 +238,14 @@ ROCK 4D (nothing of it has run on a board):
 - WinPE installing to the NVMe; the card put in afterwards; Windows not
   touching the card; the text WinPE shows at the end.
 - Armbian's vendor (nightly) and edge images on the card.
+
+CM5-IO (the job; the boot path itself passed by hand on 2026-11-27):
+
+- The check over MaskROM passing on a 0.5.0 eMMC and refusing a 0.4.x one;
+  the staged install starting without a second MaskROM entry.
+- WinPE installing to the eMMC with the card out; then the card in,
+  "Armbian (U-Boot)" listed, Armbian started, the next boot Windows.
+- The same with Windows on the NVMe drive.
 
 - The eMMC slot path end to end; U-Boot picking the bootable Armbian
   partition with Windows on the same disk.

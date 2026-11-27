@@ -66,6 +66,8 @@ jobs:
         run: xvfb-run -a node scripts/electron-rock4d-e2e.mjs
       - name: ROCK 4D Armbian next to Windows (NVMe and SD card), the firmware checked first, inside Electron
         run: xvfb-run -a node scripts/electron-rock4d-hybrid-e2e.mjs
+      - name: CM5-IO Armbian next to Windows (eMMC or NVMe, and an SD card), the eMMC SPL checked first, inside Electron
+        run: xvfb-run -a node scripts/electron-cm5io-hybrid-e2e.mjs
       - name: A board that goes away, Try again and Report a problem inside Electron
         run: xvfb-run -a node scripts/electron-retry-e2e.mjs
       - name: The RK3576 driver package in the Windows setup step inside Electron

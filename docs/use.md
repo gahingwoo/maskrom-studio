@@ -133,7 +133,8 @@ Windows gets the rest, at least 32 GB).
   SD card in the board as well: both have the same file system UUID.
 - Do not run `armbian-install` or a bootloader update on this eMMC: it
   would overwrite the UEFI firmware.
-- Not on the CM5-IO (eMMC too small, no boot option in its firmware yet).
+- Not on the CM5-IO (eMMC too small): there Armbian goes onto an SD card,
+  see below.
 
 ## ROCK 4D: Windows on NVMe, Armbian on an SD card
 
@@ -144,8 +145,7 @@ the NVMe drive and the SD card; Armbian takes the whole card.
 
 - **Needs new firmware.** The ROCK 4D starts Armbian from the card only
   with firmware built with the new U-Boot SPL (U-Boot v2026.10 with the
-  one-shot request on the SD card). On 2026-11-26 no edk2-rk3576 release
-  has it (branch `rock4d-parity`). Start first reads the SPL from the board
+  one-shot request on the SD card), edk2-rk3576 0.5.0 or later. Start first reads the SPL from the board
   over MaskROM and stops, with nothing written, if it is not there.
 - How it starts: Windows from the NVMe drive, as usual. Choose
   **"Armbian (U-Boot)"** in the boot manager (Esc or F2 during the
@@ -157,6 +157,29 @@ the NVMe drive and the SD card; Armbian takes the whole card.
   to format it, say no.
 - In Armbian, do not run `armbian-install` or the boot loader update of
   `armbian-config`: they can write over the firmware on the SPI NOR flash.
+
+## CM5-IO: Windows on the eMMC or NVMe, Armbian on an SD card
+
+Experimental, Advanced mode. Choose the eMMC (over MaskROM) or the NVMe
+drive for Windows. On the Windows setup step tick **Also write Armbian to
+an SD card** and choose an Armbian image. On the last page choose the SD
+card (and the NVMe drive, if Windows goes there); Armbian takes the whole
+card. With the eMMC, one job checks the board, stages Windows on the eMMC
+and then writes the card.
+
+- **Needs edk2-rk3576 0.5.0 or later on the eMMC.** Installing Windows
+  keeps the firmware that is on the board. Start first reads the SPL from
+  the eMMC over MaskROM and stops, with nothing written, if it has no
+  Armbian one-shot. Then write the UEFI firmware first.
+- How it starts: Windows as usual. Restart, press Esc or F2 during the
+  countdown, open Boot Manager and choose **"Armbian (U-Boot)"**: the
+  firmware writes a one-time request to the eMMC and restarts, the SPL
+  erases it and loads Armbian's U-Boot from the card. The next start is
+  Windows again. The entry is listed only while the card is in.
+- Put the card in after Windows has finished installing. If Windows offers
+  to format it, say no.
+- In Armbian, do not run `armbian-install` or the boot loader update of
+  `armbian-config`: they can write over the firmware on the eMMC.
 
 ## Self-test on Windows' first desktop
 

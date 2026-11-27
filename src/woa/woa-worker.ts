@@ -26,7 +26,7 @@ import { TRUSTED_READ_BYTES } from './maskrom-regions';
 import { planUpgrade } from './upgrade-plan';
 import { readPreWriteBackup, readSpiPreWriteBackup } from './pre-write-backup';
 import { spiStorageProblem } from './spi-image';
-import { checkArmbianOnce } from './armbian-once';
+import { checkArmbianOnce, emmcStorageProblem } from './armbian-once';
 import { STORAGES } from '../maskrom/boards';
 import type { Probe } from './maskrom-regions';
 
@@ -49,7 +49,7 @@ export type WoaJob =
   | { kind: 'factory'; boardId: string; image: FileRef; resetAfter: boolean }
   /** A new edk2-rk3576 eMMC image from sector 64, keeping the partition table, Windows and (if asked) the saved UEFI settings. */
   | { kind: 'upgrade'; boardId: string; image: FileRef; keepSettings: boolean; resetAfter: boolean }
-  /** Read only: does the SPL on the board's SPI NOR flash start Armbian once from the SD card (armbian-once.ts)? */
+  /** Read only: does the SPL on the board's SPI NOR flash or eMMC start Armbian once from the SD card (armbian-once.ts)? */
   | { kind: 'armbian-once-check'; boardId: string; resetAfter: boolean };
 
 export type WoaWorkerRequest =
@@ -219,12 +219,13 @@ self.addEventListener('message', async (ev: MessageEvent<WoaWorkerRequest>) => {
         ...(board.spi ? { storage: { code: STORAGES.spinor.code, label: STORAGES.spinor.label } } : {}),
         ...(m.reconnectTimeout ? { reconnectTimeout: m.reconnectTimeout } : {}),
         plan: async (p) => {
-          const where = spiStorageProblem(board, p.capacity);
+          const where = spiStorageProblem(board, p.capacity) ?? emmcStorageProblem(board, p.capacity);
           if (where) return { stop: where };
-          if (!p.read) return { stop: 'The SPI NOR flash cannot be read over MaskROM. Nothing was written.' };
+          const storage = board.spi ? 'SPI NOR' : 'eMMC';
+          if (!p.read) return { stop: `The ${board.spi ? 'SPI NOR flash' : 'eMMC'} cannot be read over MaskROM. Nothing was written.` };
           const r = await checkArmbianOnce(board, p.read);
           if (!r.ok) return { stop: r.reason };
-          hooks.log(`ArmbianOnce/1 found in the SPL at SPI NOR byte 0x${r.offset.toString(16)}.`);
+          hooks.log(`ArmbianOnce/1 found in the SPL at ${storage} byte 0x${r.offset.toString(16)}.`);
           return { regions: [], summary: { kind: 'armbian-once', offset: r.offset } };
         },
         confirm: async () => true,

@@ -138,6 +138,14 @@ describe('staged install layout', () => {
     const withSd = planStage({ board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't',
       setup: { skipSetup: null, ssh: false, sshKey: '', armbianOnSd: true } });
     expect(withSd.ini).toMatch(/\r\nlinux_offset=none\r\narmbian_sd=1\r\n/);
+    // CM5-IO with Windows on the eMMC and Armbian on an SD card: the firmware partition stays (its SPL takes the
+    // request on the eMMC), nothing goes into the slot, and WinPE is told about the card.
+    const cm = planStage({ board: woaBoard('cm5io')!, diskBytes: 31272730624, head, winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't',
+      setup: { skipSetup: null, ssh: false, sshKey: '', armbianOnSd: true } });
+    expect(cm.ini).toMatch(/\r\ntarget=emmc\r\nfw_offset=\d+\r\n/);
+    expect(cm.ini).toMatch(/\r\nlinux_offset=none\r\narmbian_sd=1\r\n/);
+    expect(cm.armbian).toBeNull();
+    expect(cm.regions.filter((r) => r.lba !== 0 && r.lba < 131072)).toEqual([]);
     expect(() => planStage({ board: woaBoard('tspi3m')!, target: 'sd', diskBytes: 16e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't' })).toThrow(/at least/);
     execFileSync('rm', ['-rf', dir]);
   }, 60000);

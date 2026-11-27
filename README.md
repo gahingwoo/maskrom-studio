@@ -22,7 +22,7 @@ has the whole path from a new board to Windows or Linux.
 | Board | Firmware on | Windows on | MaskROM | Windows and Armbian |
 |---|---|---|---|---|
 | LCKFB TaishanPi 3M | eMMC | eMMC, SD card | short the MSK pads, or F4 in the firmware | both on the eMMC (Advanced mode) |
-| ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe | button | no |
+| ArmSoM CM5-IO | eMMC | eMMC, SD card, NVMe | button | Windows on the eMMC or NVMe, Armbian on an SD card (Advanced mode) |
 | Radxa ROCK 4D | SPI NOR | NVMe, SD card | button | Windows on NVMe, Armbian on an SD card (Advanced mode) |
 
 <!-- /generated -->
