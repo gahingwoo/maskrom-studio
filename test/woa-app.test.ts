@@ -173,7 +173,7 @@ describe('the scripts the board runs', () => {
     });
   }
   it('install: refuses 24H2, keeps the firmware, removes the staging volumes, extends Windows', () => {
-    expect(INSTALL).toMatch(/GTR 25999/);
+    expect(INSTALL).toMatch(/GTR 22631/);
     expect(INSTALL).toMatch(/call :checkfw/);
     expect(INSTALL).toMatch(/delete volume override[\s\S]*extend/);
     expect(INSTALL).toMatch(/\/Compact \/Verify/);

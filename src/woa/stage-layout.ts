@@ -20,6 +20,7 @@
 // partitions and extends Windows over them. See docs/dev/design.md.
 
 import { FatVolume } from './fat32';
+import { versionIni } from '../shared/windows-version';
 import {
   buildGpt, findFirmwarePartition, parsePrimaryGpt, randomGuid, SECTOR, TYPE_BASIC_DATA,
   FIRMWARE_FIRST_LBA, FIRMWARE_LAST_LBA, type GptPartition,
@@ -273,6 +274,7 @@ export function planStage(o: StageInput): StagePlan {
     index: o.image.index,
     edition: o.image.edition.replace(/[^\x20-\x7e]/g, '?'),
     build: o.image.build,
+    ...versionIni(o.image.build),
     skip_setup: setup.skipSetup ? 1 : 0,
     ssh: setup.ssh ? 1 : 0,
     certificates: certs.map((c) => c.thumbprint).join(' ') || 'none',

@@ -92,14 +92,22 @@ does), then deletes itself and its copy.
 
 ## Windows images
 
-Windows 11 23H2 (build 22631) is the tested version. Refused: images that
-are not ARM64, builds above 25999 (24H2 and later need ARMv8.1), builds
-before Windows 10 1809, and PC ISOs (bootx64.efi without bootaa64.efi).
-Windows 11 21H2 and Windows 10 are allowed with a notice that they were not
-tested with the current drivers. An ISO is read in place, never copied.
+Installed: Windows 10 2004 to 22H2 (builds 19041 to 19045) and Windows 11
+21H2, 22H2 and 23H2 (22000, 22621, 22631), ARM64. Windows 11 23H2 is
+recommended. The app shows the version it read, for example "Windows 10
+22H2 (19045)". Refused: images that are not ARM64, builds above 22631 (24H2
+and later need ARMv8.1 atomics, which the RK3576's cores lack), previews,
+older builds, and PC ISOs (bootx64.efi without bootaa64.efi). An ISO is read
+in place, never copied.
+
+Windows 10 for now: no NVMe drive (the RK3576 NVMe driver for Windows 10 is
+not released, so the NVMe target is off) and no Wi-Fi (Windows 10 has no
+WiFiCx; its driver comes with a later driver package). Windows 11 21H2 has
+run on these boards less than 22H2 and 23H2.
 
 Microsoft's ARM64 ISO page offers only the current release, which is too
-new. The Windows step lists sources for 23H2 ARM64:
+new. The Windows step lists sources for 23H2 ARM64 (and, further down,
+Windows 10 22H2 ARM64 from the same two sites):
 [NTriver](https://ntriver.org/download-windows-11) (recommended: direct
 downloads that also work from mainland China; volume licence Pro and IoT
 Enterprise media) and

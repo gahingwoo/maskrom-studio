@@ -134,6 +134,11 @@ describe('staged install layout', () => {
     expect(t.partitions.map((p) => p.name)).toEqual(['WOA-STAGE-BOOT', 'WOA-STAGE-DATA']);
     expect(plan.ini).toMatch(/target=nvme\r\nfw_offset=none\r\nfw_size=none\r\nwindows_offset_kb=1024\r\n/);
     expect(plan.ini).not.toMatch(/armbian_sd/);
+    // The version as data for the scripts: Windows 11 23H2 here, Windows 10 22H2 onto an SD card below.
+    expect(plan.ini).toMatch(/\r\nbuild=22631\r\nwindows_family=win11\r\nwindows_name=Windows 11 23H2\r\nwindows_kmdf=1\.33\r\nwindows_wificx=1\.0\r\n/);
+    const ten = planStage({ board: woaBoard('rock4d')!, target: 'sd', diskBytes: 64e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)),
+      image: { ...image, edition: 'Windows 10 Pro', build: 19045 }, rand, appVersion: 't' });
+    expect(ten.ini).toMatch(/\r\nbuild=19045\r\nwindows_family=win10\r\nwindows_name=Windows 10 22H2\r\nwindows_kmdf=1\.31\r\nwindows_wificx=none\r\n/);
     // ROCK 4D with Armbian on an SD card in the same job: WinPE is told, to say how Armbian starts.
     const withSd = planStage({ board: woaBoard('rock4d')!, target: 'nvme', diskBytes: 256e9, head: new Uint8Array(34 * 512), winpe: fileSource(fakeWinpe(dir)), image, rand, appVersion: 't',
       setup: { skipSetup: null, ssh: false, sshKey: '', armbianOnSd: true } });

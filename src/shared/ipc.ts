@@ -7,6 +7,7 @@ import type { Extent } from '../woa/udf';
 import type { SetupOptions } from '../woa/setup-files';
 import type { CacheInfo, ClearResult } from '../main/cache';
 import type { ReleaseFeatures } from '../woa/firmware-features';
+import type { WindowsVersion } from './windows-version';
 
 export type JobProgress = {
   stage: 'download' | 'check' | 'decompress' | 'write' | 'verify';
@@ -33,7 +34,8 @@ export interface Releases {
 }
 
 /** What goes onto the staging volume besides the image (prepareExtras). */
-export interface ExtrasWanted { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; charsiu?: boolean; boardId?: BoardId }
+/** boardId: the driver package's list for that board; build: which Windows it is for (Windows 10 lists below 22000). */
+export interface ExtrasWanted { ssh: boolean; drivers: string | null; chrome?: boolean; rkTools?: boolean; charsiu?: boolean; boardId?: BoardId; build?: number }
 
 /** Which tier a release came from: asked for, used (CI falls back to Prerelease where there is no CI release), its label and commit. */
 export interface ReleaseTier { asked: 'stable' | 'prerelease' | 'ci'; used: 'stable' | 'prerelease' | 'ci'; label: string; commit: string | null }
@@ -55,11 +57,12 @@ export interface EditionInfo {
   archName: string;
   /** "Windows 11 23H2", or null for a preview build. */
   release: string | null;
+  /** The release, when this app installs it (shared/windows-version.ts): which family, KMDF, WiFiCx; null when refused. */
+  version: WindowsVersion | null;
   languages: string[];
   refuse: string | null;
-  warn: string | null;
-  /** The check behind refuse/warn, for the page's own language (wim.ts checkEdition). */
-  check: { level: 'ok' | 'notice' | 'warn' | 'refuse'; code: string; vars: Record<string, string> };
+  /** The check behind refuse, for the page's own language (wim.ts checkEdition). */
+  check: { level: 'ok' | 'refuse'; code: string; vars: Record<string, string> };
   totalBytes: number;
 }
 

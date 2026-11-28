@@ -12,6 +12,7 @@ import { bootFilesFrom, bootFilesProblem, checkEdition, installable, readWimInfo
 import { inspectWindowsImage } from '../src/main/windows-image';
 import { WINDOWS_SOURCES, isWindowsSourceUrl } from '../src/shared/windows-sources';
 import { MESSAGES } from '../src/renderer/messages';
+import { versionLabel } from '../src/shared/windows-version';
 
 const fx = (n: string) => join(__dirname, 'fixtures', n);
 
@@ -51,28 +52,20 @@ function synthWim(eds: Ed[], esd = false): Uint8Array {
 
 describe('which editions may be installed', () => {
   const arm = (build: number) => checkEdition({ arch: 12, build });
-  it('takes 22H2 and 23H2 on ARM64 without a word', () => {
-    expect(arm(22621).level).toBe('ok');
-    expect(arm(22631).level).toBe('ok');
+  it('takes Windows 10 19041 to 19045 and Windows 11 22000, 22621, 22631 on ARM64', () => {
+    for (const b of [19041, 19042, 19043, 19044, 19045, 22000, 22621, 22631]) expect(arm(b), String(b)).toMatchObject({ level: 'ok', code: 'ok', text: null });
   });
-  it('refuses 24H2, 25H2 and later: they need ARMv8.1', () => {
+  it('refuses 24H2, 25H2 and later, saying they need ARMv8.1 atomics', () => {
     for (const b of [26000, 26100, 26200, 27000]) expect(arm(b)).toMatchObject({ level: 'refuse', code: 'new' });
-    expect(arm(25999).level).not.toBe('refuse');
+    expect(arm(26100).text).toMatch(/ARMv8\.1 atomic instructions.*Cortex-A72 and Cortex-A53/);
   });
-  it('allows Windows 11 21H2 and Windows 10 1809 to 22H2 with a notice', () => {
-    expect(arm(22000)).toMatchObject({ level: 'notice', code: 'untested', vars: { release: 'Windows 11 21H2' } });
-    expect(arm(17763)).toMatchObject({ level: 'notice', code: 'untested', vars: { release: 'Windows 10 1809' } });
-    expect(arm(19045)).toMatchObject({ level: 'notice', code: 'untested', vars: { release: 'Windows 10 22H2' } });
-    expect(arm(22000).text).not.toMatch(/froze|freeze/);
+  it('refuses anything older than Windows 10 2004, 1809 to 1909 included', () => {
+    for (const b of [17134, 17763, 18362, 18363, 19040]) expect(arm(b), String(b)).toMatchObject({ level: 'refuse', code: 'tooold' });
+    expect(checkEdition({ arch: 12, build: 19045, major: 6 })).toMatchObject({ level: 'refuse', code: 'tooold' });
   });
-  it('refuses anything older than 1809', () => {
-    expect(arm(17134)).toMatchObject({ level: 'refuse', code: 'tooold' });
-    expect(checkEdition({ arch: 12, build: 18000, major: 6 })).toMatchObject({ level: 'refuse', code: 'tooold' });
-  });
-  it('warns about preview builds', () => {
-    expect(arm(22635)).toMatchObject({ level: 'warn', code: 'preview' });
-    expect(arm(25398)).toMatchObject({ level: 'warn', code: 'preview' });
-    expect(arm(20348)).toMatchObject({ level: 'warn', code: 'preview' });
+  it('refuses preview and server builds in between and above 22631', () => {
+    for (const b of [19046, 20348, 21996, 22001, 22622, 22632, 22635, 25398, 25999]) expect(arm(b), String(b)).toMatchObject({ level: 'refuse', code: 'preview' });
+    expect(arm(22000).text).toBeNull();
   });
   it('refuses x64, x86, 32-bit ARM and an image without ARCH or BUILD', () => {
     expect(checkEdition({ arch: 9, build: 22631 })).toMatchObject({ level: 'refuse', code: 'arch', vars: { arch: 'x64' } });
@@ -86,10 +79,13 @@ describe('which editions may be installed', () => {
     expect(releaseName(26200)).toBe('Windows 11 25H2');
     expect(releaseName(28000)).toMatch(/24H2 or later/);
     expect(releaseName(19045)).toBe('Windows 10 22H2');
+    expect(releaseName(19041)).toBe('Windows 10 2004');
+    expect(releaseName(22000)).toBe('Windows 11 21H2');
+    expect(releaseName(17763)).toBe('Windows 10 1809');
     expect(releaseName(22635)).toBeNull();
   });
   it('has the page text for every check in both languages, without dashes', () => {
-    for (const code of ['arch', 'nobuild', 'new', 'tooold', 'untested', 'preview']) {
+    for (const code of ['arch', 'nobuild', 'new', 'tooold', 'preview']) {
       const m = MESSAGES[`win.check.${code}`];
       expect(m?.en, code).toBeTruthy();
       expect(m?.['zh-CN'], code).toBeTruthy();
@@ -169,30 +165,35 @@ describe('inspectWindowsImage', () => {
     expect(w.editions.every((e) => e.refuse === w.refuse)).toBe(true);
   });
 
-  it('sorts an image with 17763, 19045, 22000, 22631, 26100 and x64 editions', () => {
+  it('sorts an image with 17763, 19045, 22000, 22621, 22631, 22635, 26100 and x64 editions, and names each version', () => {
     const p = join(dir, 'mixed.wim');
     writeFileSync(p, synthWim([
       { name: 'Windows 10 Pro', arch: 12, build: 17763 },
-      { name: 'Windows 10 Pro', arch: 12, build: 19045 },
+      { name: 'Windows 10 Pro', arch: 12, build: 19045, sp: 2006 },
       { name: 'Windows 11 Pro', arch: 12, build: 22000 },
+      { name: 'Windows 11 Pro', arch: 12, build: 22621 },
       { name: 'Windows 11 Pro', arch: 12, build: 22631 },
+      { name: 'Windows 11 Pro', arch: 12, build: 22635 },
       { name: 'Windows 11 Pro', arch: 12, build: 26100 },
       { name: 'Windows 11 Pro', arch: 9, build: 22631 },
     ]));
     const w = inspectWindowsImage(p);
     expect(w).toMatchObject({ container: 'wim', boot: null, refuse: null });
-    expect(w.editions.map((e) => [e.build, e.archName, e.release, e.check.level, e.refuse === null])).toEqual([
-      [17763, 'ARM64', 'Windows 10 1809', 'notice', true],
-      [19045, 'ARM64', 'Windows 10 22H2', 'notice', true],
-      [22000, 'ARM64', 'Windows 11 21H2', 'notice', true],
-      [22631, 'ARM64', 'Windows 11 23H2', 'ok', true],
-      [26100, 'ARM64', 'Windows 11 24H2', 'refuse', false],
-      [22631, 'x64', 'Windows 11 23H2', 'refuse', false],
+    expect(w.editions.map((e) => [e.build, e.archName, e.release, e.check.level, e.refuse === null, e.version && versionLabel(e.version)])).toEqual([
+      [17763, 'ARM64', 'Windows 10 1809', 'refuse', false, null],
+      [19045, 'ARM64', 'Windows 10 22H2', 'ok', true, 'Windows 10 22H2 (19045)'],
+      [22000, 'ARM64', 'Windows 11 21H2', 'ok', true, 'Windows 11 21H2 (22000)'],
+      [22621, 'ARM64', 'Windows 11 22H2', 'ok', true, 'Windows 11 22H2 (22621)'],
+      [22631, 'ARM64', 'Windows 11 23H2', 'ok', true, 'Windows 11 23H2 (22631)'],
+      [22635, 'ARM64', null, 'refuse', false, null],
+      [26100, 'ARM64', 'Windows 11 24H2', 'refuse', false, null],
+      [22631, 'x64', 'Windows 11 23H2', 'refuse', false, null],
     ]);
-    expect(w.editions[0].warn).toMatch(/not tested on these boards with the current drivers/);
-    expect(w.editions[3].warn).toBeNull();
-    expect(w.editions[4].refuse).toMatch(/ARMv8\.1/);
-    expect(w.editions[5].refuse).toMatch(/x64, not ARM64/);
+    expect(w.editions[1].version).toMatchObject({ family: 'win10', kmdf: '1.31', wificx: null });
+    expect(w.editions[2].version).toMatchObject({ family: 'win11', kmdf: '1.33', wificx: '1.0', tested: 'less' });
+    expect(w.editions[0].refuse).toMatch(/older than Windows 10 2004/);
+    expect(w.editions[6].refuse).toMatch(/ARMv8\.1/);
+    expect(w.editions[7].refuse).toMatch(/x64, not ARM64/);
   });
 
   it('reads an .esd by its contents', () => {

@@ -51,3 +51,10 @@ build it supports, before the board is touched.
 
 Other sources that serve 23H2 ARM64 ISOs are listed in the app's Windows
 step (with the date each was last checked).
+
+## Windows 10 22H2
+
+The same steps, from <https://uupdump.net/known.php?q=19045+arm64>: take the
+newest **"Feature update to Windows 10, version 22H2 (19045.xxxx) arm64"**.
+On Windows 10 an NVMe drive and Wi-Fi do not work yet (their Windows 10
+drivers are not released); Windows 11 23H2 is recommended.

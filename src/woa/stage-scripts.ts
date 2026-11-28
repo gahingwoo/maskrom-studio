@@ -210,7 +210,7 @@ set WIM=%STAGE%\%W_image%
 echo.
 echo ======================================================================
 echo  Maskrom Studio: installing %W_edition%
-echo  ^(build %W_build%, index %W_index%^) onto %TGT%.
+echo  ^(%W_windows_name%, build %W_build%, index %W_index%^) onto %TGT%.
 if not "%W_fw_offset%"=="none" echo  The firmware partition is kept.
 echo  Close this window or press Ctrl+C within 15 seconds to stop;
 echo  nothing has been changed yet.
@@ -288,8 +288,8 @@ if /i not "%ARCH%"=="arm64" (
 set BUILD=
 for /f "tokens=5 delims=. " %%v in ('type X:\woa-stage\img.txt ^| find /i "Version :"') do if not defined BUILD set BUILD=%%v
 set /a BNUM=%BUILD% 2>nul
-if %BNUM% GTR 25999 (
-  echo This image is build %BNUM%. Windows 11 24H2 and later cannot run on RK3576.
+if %BNUM% GTR 22631 (
+  echo This image is build %BNUM%. Builds above 22631 are not installed: Windows 11 24H2 and later need ARMv8.1 atomics, which RK3576 lacks.
   goto :faillog
 )
 if %BNUM% LSS 10000 (
@@ -515,8 +515,8 @@ type "%HERE%\img.txt" >> "%LOG%"
 set BUILD=
 for /f "tokens=5 delims=. " %%v in ('type "%HERE%\img.txt" ^| find /i "Version :"') do if not defined BUILD set BUILD=%%v
 set /a BNUM=%BUILD% 2>nul
-if %BNUM% GTR 25999 (
-  echo This image is build %BNUM%. Windows 11 24H2 and later cannot run on RK3576.
+if %BNUM% GTR 22631 (
+  echo This image is build %BNUM%. Builds above 22631 are not installed: Windows 11 24H2 and later need ARMv8.1 atomics, which RK3576 lacks.
   goto :faillog
 )
 

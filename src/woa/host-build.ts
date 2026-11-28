@@ -6,6 +6,7 @@
 
 import { certsCmd, trustedCerts } from './certs';
 import { FatVolume } from './fat32';
+import { versionIni } from '../shared/windows-version';
 import type { ByteSource } from './pieces';
 import { AUTOLOGON_FILE, autoLogonScript, setupComplete, unattendXml, type SetupOptions } from './setup-files';
 import { stageIni, StageError, winpeVolume, type DiskTarget } from './stage-layout';
@@ -58,6 +59,7 @@ export function hostBuildFiles(o: HostBuildInput): Array<{ path: string; data: U
     index: o.index,
     edition: o.edition.replace(/[^\x20-\x7e]/g, '?'),
     build: o.build,
+    ...versionIni(o.build),
   };
   if (o.mode === 'disk') {
     if (o.diskNumber === undefined || !o.diskBytes) throw new StageError('No disk was chosen.');

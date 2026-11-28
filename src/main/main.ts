@@ -32,6 +32,7 @@ import { installUsbHandlers, ROCKCHIP_VID, type UsbChoice } from './usb';
 import { boardHere, NO_MTD_HELP } from './board-here';
 import { hashWindowsImage, inspectWindowsImage, type WindowsImage } from './windows-image';
 import { selectPackage } from '../woa/driver-package';
+import { targetProblem } from '../shared/windows-version';
 import { FEATURE_KEYS } from '../woa/firmware-features';
 import { firmwareRelease, FIRMWARE_REPO, loadFirmwareFeatures, tierRelease, WINPE_REPO, winpeRelease, type FirmwareRelease, type GithubRelease, type WinpeRelease } from '../woa/releases';
 import { CHARSIU_PINNED, CHARSIU_REPO, CHARSIU_SETUP_PATH, charsiuFromRelease, chooseCharsiu, type CharsiuInstaller } from '../woa/charsiu-desktop';
@@ -306,8 +307,8 @@ function describeWindows(path: string): WindowsChoice | { error: string } {
       token, fileName: img.fileName, container: img.container, imageName: img.imageName, imageSize: img.imageSize,
       fileSize: img.fileSize, extents: img.extents, boot: img.boot, refuse: img.refuse,
       editions: img.editions.map((x) => ({
-        index: x.index, name: x.name, build: x.build, spBuild: x.spBuild, archName: x.archName, release: x.release, languages: x.languages,
-        refuse: x.refuse, warn: x.warn, check: { level: x.check.level, code: x.check.code, vars: x.check.vars }, totalBytes: x.totalBytes,
+        index: x.index, name: x.name, build: x.build, spBuild: x.spBuild, archName: x.archName, release: x.release, version: x.version, languages: x.languages,
+        refuse: x.refuse, check: { level: x.check.level, code: x.check.code, vars: x.check.vars }, totalBytes: x.totalBytes,
       })),
     };
   } catch (e) {
@@ -320,7 +321,7 @@ const TEST_PICK = !app.isPackaged ? process.env.WOA_IMAGER_TEST_PICK : undefined
 ipcMain.handle('woa:pick-windows', async () => {
   if (TEST_PICK) return describeWindows(TEST_PICK);
   const r = await dialog.showOpenDialog(win!, {
-    title: 'Choose the Windows 11 23H2 ARM64 image',
+    title: 'Choose the Windows ARM64 image',
     properties: ['openFile'],
     filters: [{ name: 'Windows images', extensions: ['iso', 'wim', 'esd'] }, { name: 'All files', extensions: ['*'] }],
   });
@@ -699,12 +700,12 @@ function driversAsset(): { file: string; url: string; size: number; sha256: stri
  * under rk3576-drivers/. None when the release has no package: the install
  * then adds the WinPE image's drivers, as releases before it did.
  */
-async function packageDriverFiles(wc: WebContents, signal: AbortSignal, board: BoardId): Promise<Array<{ path: string; data: Uint8Array }>> {
+async function packageDriverFiles(wc: WebContents, signal: AbortSignal, board: BoardId, build?: number): Promise<Array<{ path: string; data: Uint8Array }>> {
   const a = driversAsset();
   if (!a) return [];
   const zip = await fetchImage({ ...a, sample: false }, cacheDir(), (p) => sendProgress(wc, p), signal);
   const entries = unzip(new Uint8Array(readFileSync(zip)), (d) => new Uint8Array(inflateRawSync(d)));
-  return selectPackage(entries, board).files;
+  return selectPackage(entries, board, build).files;
 }
 
 /**
@@ -754,7 +755,7 @@ async function charsiuFiles(wc: WebContents, signal: AbortSignal): Promise<Array
 /** Everything besides the image that goes onto the staging volume (or the PC build's folder). */
 async function extrasFor(wc: WebContents, signal: AbortSignal, o: ExtrasWanted) {
   return [
-    ...(o.boardId ? await packageDriverFiles(wc, signal, o.boardId) : []),
+    ...(o.boardId ? await packageDriverFiles(wc, signal, o.boardId, o.build) : []),
     ...(o.ssh ? await opensshFiles(wc, signal) : []),
     ...(o.drivers ? driverFiles(o.drivers) : []),
     ...(o.chrome ? await chromeFiles(wc, signal) : []),
@@ -787,6 +788,8 @@ ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (
   if (!img) return { ok: false, reason: 'Choose the Windows image again. Nothing was written.' };
   const ed = img.editions.find((x) => x.index === req.index);
   if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
+  const notHere = targetProblem(ed.version, req.target);
+  if (notHere) return { ok: false, reason: 'ver.nvme.refused' };
   const dir = join(app.getPath('userData'), 'host-build');
   try {
     let diskNumber: number | undefined;
@@ -802,7 +805,7 @@ ipcMain.handle('woa:host-build', (e, req: HostBuildRequest) => exclusive(async (
       diskBytes = drives.find((d) => d.device === req.device)!.size ?? undefined;
     }
     const pe = await winpeFile(wc, signal);
-    const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId });
+    const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId, build: ed.build ?? undefined });
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     const vhdPath = join(dir, 'woa-emmc.vhd');
@@ -926,9 +929,11 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       if (!img) return { ok: false, reason: 'Choose the Windows image again. Nothing was written.' };
       const ed = img.editions.find((x) => x.index === req.index);
       if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
+      const notHere = targetProblem(ed.version, req.target);
+      if (notHere) return { ok: false, reason: 'ver.nvme.refused' };
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
-      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId });
+      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId, build: ed.build ?? undefined });
       bj = { kind: 'stage-disk', target: req.target, device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
@@ -941,7 +946,7 @@ ipcMain.handle('woa:write-board', (e, req: BoardJobRequest) => exclusive(async (
       if (!ed || ed.refuse) return { ok: false, reason: ed?.refuse ?? 'Choose an edition. Nothing was written.' };
       const pe = await winpeFile(wc, signal);
       if (!img.sha256) img.sha256 = await hashWindowsImage(img, (bytes) => sendProgress(wc, { stage: 'check', bytes, total: img.imageSize }), signal);
-      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId });
+      const extras = await extrasFor(wc, signal, { ssh: req.setup.ssh, drivers: req.drivers, chrome: !!req.setup.trim?.chrome, rkTools: !!req.setup.rkTools, charsiu: !!req.setup.charsiuDesktop, boardId: req.boardId, build: ed.build ?? undefined });
       bj = { kind: 'stage', device: req.device, boardId: req.boardId, winpe: pe.path, appVersion: app.getVersion(),
         setup: req.setup, extras: extras.map((x) => ({ path: x.path, base64: Buffer.from(x.data).toString('base64') })),
         image: { path: img.path, extents: img.extents, name: img.imageName, size: img.imageSize, sha256: img.sha256,
