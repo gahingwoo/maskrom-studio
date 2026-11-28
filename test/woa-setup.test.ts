@@ -198,3 +198,18 @@ describe('SetupComplete.cmd on Windows 10', () => {
     expect(lines[3]).toContain('> "%LOG%"');
   });
 });
+
+describe('RunOnce commands run natively', () => {
+  // Windows 10 19045 started a RunOnce command as x86 on the CM5-IO (2026-11-28):
+  // %ProgramFiles% was Program Files (x86) and pnputil was not found.
+  it('the SetupComplete fallback goes through Sysnative to a native cmd', () => {
+    const line = CONFIGURE.split('\n').find((l) => l.includes('/v WoaSetupComplete'))!;
+    expect(line).toContain('/d "cmd.exe /c if exist %%WINDIR%%\\Sysnative\\cmd.exe (%%WINDIR%%\\Sysnative\\cmd.exe /c if not exist');
+    expect(line).toContain(') else (if not exist %%WINDIR%%\\Logs\\woa-setupcomplete.log call %%WINDIR%%\\Setup\\Scripts\\SetupComplete.cmd)"');
+  });
+  it('the self-test RunOnce too', () => {
+    const sc = setupComplete({ skipSetup: null, ssh: false, sshKey: '' });
+    const line = sc.split('\n').find((l) => l.includes('/v WoaSelfTest'))!;
+    expect(line).toContain('/d "cmd.exe /c if exist %WINDIR%\\Sysnative\\cmd.exe (%WINDIR%\\Sysnative\\cmd.exe /c powershell.exe');
+  });
+});

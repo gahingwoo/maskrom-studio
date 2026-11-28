@@ -25,6 +25,7 @@
 // for labels and goto to work reliably).
 
 import { notepadFixCmd } from './trim';
+import { nativeRunOnce } from './native-run';
 
 export const LAUNCHER = String.raw`@echo off
 rem ---------------------------------------------------------------------------
@@ -118,8 +119,9 @@ reg add HKLM\WOAOFF\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DW
 rem SetupComplete.cmd, again at the first sign-in if Windows did not run it: Windows 10
 rem IoT Enterprise 19045 logs "Not allowed to run the Setupcomplete.cmd" (the OEM key
 rem rule) and skips it, Windows 11 runs it. Its log is its first line, so this does
-rem nothing where it ran. HKLM RunOnce runs elevated for an administrator.
-reg add HKLM\WOAOFF\Microsoft\Windows\CurrentVersion\RunOnce /v WoaSetupComplete /t REG_SZ /d "cmd.exe /c if not exist %%WINDIR%%\Logs\woa-setupcomplete.log call %%WINDIR%%\Setup\Scripts\SetupComplete.cmd" /f >> "%LOG%" 2>&1
+rem nothing where it ran. HKLM RunOnce runs elevated for an administrator, and on Windows 10
+rem as an x86 process: the command goes through Sysnative to a native cmd (native-run.ts).
+reg add HKLM\WOAOFF\Microsoft\Windows\CurrentVersion\RunOnce /v WoaSetupComplete /t REG_SZ /d "${nativeRunOnce('if not exist %%WINDIR%%\\Logs\\woa-setupcomplete.log call %%WINDIR%%\\Setup\\Scripts\\SetupComplete.cmd', '%%')}" /f >> "%LOG%" 2>&1
 rem The drivers' test certificates in Root and TrustedPublisher, so Plug and
 rem Play installs them without asking (woa-rk3576 docs/INSTALL.md).
 if exist "%STAGE%\woa-certs.cmd" (

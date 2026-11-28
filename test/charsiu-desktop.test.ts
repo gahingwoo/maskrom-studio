@@ -87,7 +87,7 @@ describe('Charsiu Desktop', () => {
   it('runs at the first sign-in, not in SetupComplete.cmd: it installs per user', () => {
     const sc = setupComplete({ skipSetup: null, ssh: false, sshKey: '', charsiuDesktop: true });
     expect(sc).toContain(charsiuRunOnce()[1]);
-    expect(sc).toContain(`\\CurrentVersion\\RunOnce" /v WoaCharsiuDesktop /t REG_SZ /d "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %WINDIR%\\Setup\\Scripts\\${CHARSIU_FILE}"`);
+    expect(sc).toContain(`\\CurrentVersion\\RunOnce" /v WoaCharsiuDesktop /t REG_SZ /d "cmd.exe /c if exist %WINDIR%\\Sysnative\\cmd.exe (%WINDIR%\\Sysnative\\cmd.exe /c powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %WINDIR%\\Setup\\Scripts\\${CHARSIU_FILE}) else (powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %WINDIR%\\Setup\\Scripts\\${CHARSIU_FILE})"`);
     expect(sc).not.toMatch(/charsiu-desktop-setup\.exe/);
     expect(setupComplete({ skipSetup: null, ssh: false, sshKey: '' })).not.toMatch(/Charsiu/i);
   });
