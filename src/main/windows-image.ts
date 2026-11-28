@@ -1,15 +1,17 @@
 // The Windows image the user chose: an ISO, an install.wim or an
 // install.esd. Read in place (src/woa/udf.ts finds install.wim inside an
 // ISO), checked before the board is involved: editions, ARM64 (the XML's
-// ARCH, and in an ISO its EFI boot file names too), build at most 25999 with
-// 22621 and 22631 the ones without a warning. No Electron here, so the tests
-// use it directly.
+// ARCH, and in an ISO its EFI boot file names too), and a build that is one
+// of the releases in shared/windows-version.ts (Windows 10 19041 to 19045,
+// Windows 11 22000, 22621, 22631). No Electron here, so the tests use it
+// directly.
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { basename } from 'node:path';
 import { fileSource } from '../helper/board-write';
 import type { ByteSource } from '../woa/pieces';
+import { windowsVersion, type WindowsVersion } from '../shared/windows-version';
 import { UdfVolume, extentSource, type Extent } from '../woa/udf';
 import { archName, bootFilesFrom, bootFilesProblem, checkEdition, installable, readWimInfo, releaseName, whyNotWholeImage, type BootFiles, type EditionCheck, type WimImage } from '../woa/wim';
 
@@ -22,11 +24,11 @@ export interface Edition {
   archName: string;
   /** "Windows 11 23H2", or null for a preview build. */
   release: string | null;
+  /** The release, when it is one this app installs (shared/windows-version.ts); null when refused. */
+  version: WindowsVersion | null;
   languages: string[];
   /** Why it cannot be installed on RK3576, or null. */
   refuse: string | null;
-  /** Why it can be installed but is not the tested version (check.level "notice" or "warn"), or null. */
-  warn: string | null;
   check: EditionCheck;
   totalBytes: number;
 }
@@ -84,9 +86,8 @@ export function inspectWindowsImage(path: string): WindowsImage {
       const check = checkEdition(i);
       return {
         index: i.index, name: i.displayName || i.name, build: i.build, spBuild: i.spBuild, arch: i.arch,
-        archName: archName(i.arch), release: releaseName(i.build), languages: i.languages,
+        archName: archName(i.arch), release: releaseName(i.build), version: check.level === 'ok' ? windowsVersion(i.build) : null, languages: i.languages,
         refuse: refuse ?? (check.level === 'refuse' ? check.text : null),
-        warn: check.level === 'warn' || check.level === 'notice' ? check.text : null,
         check, totalBytes: i.totalBytes,
       };
     });

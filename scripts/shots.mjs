@@ -238,6 +238,90 @@ await session('d-here', 1100, 780, 'light', { ...base, WOA_IMAGER_FAKE_ROOT: roo
   await page.waitForSelector('#via-here');
   await shot('6-this-board');
 }, 'zh-CN');
+// Windows 10 and Windows 11 21H2 images (a WIM header and its XML, as test/windows-vetting.test.ts builds them):
+// what the Windows step says about each version, the NVMe target Windows 10 cannot use yet, and the confirmation.
+function versionWim(name, build, sp) {
+  const xml = `<WIM><TOTALBYTES>0</TOTALBYTES><IMAGE INDEX="1"><TOTALBYTES>14000000000</TOTALBYTES><WINDOWS><ARCH>12</ARCH><EDITIONID>Professional</EDITIONID>`
+    + '<INSTALLATIONTYPE>Client</INSTALLATIONTYPE><LANGUAGES><LANGUAGE>en-US</LANGUAGE><DEFAULT>en-US</DEFAULT></LANGUAGES>'
+    + `<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>${build}</BUILD><SPBUILD>${sp}</SPBUILD></VERSION></WINDOWS><NAME>${name}</NAME><DISPLAYNAME>${name}</DISPLAYNAME></IMAGE></WIM>`;
+  const x = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(xml, 'utf16le')]);
+  const b = Buffer.alloc(208 + 4096 + x.length);
+  b.write('MSWIM\0\0\0', 0, 'latin1');
+  b.writeUInt32LE(208, 8); b.writeUInt32LE(0x00010d00, 12); b.writeUInt16LE(1, 40); b.writeUInt16LE(1, 42); b.writeUInt32LE(1, 44);
+  b.writeUInt32LE(x.length, 72); b[79] = 0x02; b.writeUInt32LE(208 + 4096, 80); b.writeUInt32LE(x.length, 88);
+  x.copy(b, 208 + 4096);
+  const p = join(tmp, `install-${build}.wim`);
+  writeFileSync(p, b);
+  return p;
+}
+const win10 = versionWim('Windows 10 Pro', 19045, 6456);
+const win11old = versionWim('Windows 11 Pro', 22000, 2538);
+const chooseFile = (page) => page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /Choose a file|选择文件/.test(b.textContent))?.click(); });
+// ROCK 4D, Windows 10 onto its NVMe drive: refused with the reason, then the NVMe choice off on the task step.
+const rock4dWin10 = async (page, shot) => {
+  await page.click('label[for="board-rock4d"]');
+  await next(page);
+  await page.waitForSelector('#task-windows');
+  await page.click('label[for="task-windows"]');
+  await next(page);
+  await page.waitForSelector('.drop');
+  await chooseFile(page);
+  await page.locator('#ver-blocked').scrollIntoViewIfNeeded();
+  await shot('13-win10-rock4d-nvme');
+  // "Install on an SD card instead": the step then says what Windows 10 still lacks.
+  await page.click('#ver-use-other');
+  await page.locator('#ver-notes').scrollIntoViewIfNeeded();
+  await shot('13-win10-rock4d-sd');
+  await page.click('.pf-v6-c-wizard__footer button.pf-m-secondary');
+  await page.waitForSelector('#dest-nvme:disabled');
+  await page.locator('#dest-sd').scrollIntoViewIfNeeded();
+  await shot('13-win10-rock4d-task');
+};
+// CM5-IO, Windows 10 onto the eMMC: the notes, then the review.
+const cm5ioVersion = (name) => async (page, shot) => {
+  await page.click('label[for="board-cm5io"]');
+  await next(page);
+  await page.waitForSelector('#task-windows');
+  await page.click('label[for="task-windows"]');
+  await page.click('label[for="dest-emmc"]');
+  await next(page);
+  await page.waitForSelector('.drop');
+  await chooseFile(page);
+  await page.locator('#ver-notes').scrollIntoViewIfNeeded();
+  await shot(name);
+  if (name !== '13-win10-cm5io') return;
+  await next(page);
+  await page.waitForSelector('#first-oobe');
+  await page.click('label[for="first-oobe"]');
+  await next(page);
+  await page.waitForSelector('.pf-v6-c-description-list');
+  await shot('13-win10-review');
+};
+// Simple mode, CM5-IO, Windows 10: the chosen file with its version and notes, then the confirmation.
+const simpleWin10 = async (page, shot) => {
+  await page.click('#s-board-cm5io');
+  await next(page);
+  await page.waitForSelector('#s-task-windows');
+  await page.click('label[for="s-task-windows"]');
+  await page.click('#s-win');
+  await page.waitForSelector('#s-ver-note');
+  await shot('14-simple-win10-what');
+  await next(page);
+  await page.waitForTimeout(400);
+  await next(page);
+  await page.waitForSelector('#s-understand');
+  await shot('14-simple-win10-confirm');
+};
+for (const theme of ['light', 'dark']) {
+  for (const [w, h, tag] of [[1100, 780, 'd'], [720, 640, 'm']]) await session(tag, w, h, theme, { ...base, WOA_IMAGER_TEST_PICK: win10 }, rock4dWin10);
+  await session('d', 1100, 780, theme, { ...base, WOA_IMAGER_TEST_PICK: win10 }, cm5ioVersion('13-win10-cm5io'));
+  await session('d', 1100, 780, theme, { ...base, WOA_IMAGER_TEST_PICK: win11old }, cm5ioVersion('13-win11-21h2-cm5io'));
+  await session('d', 1100, 780, theme, { ...base, WOA_IMAGER_UI_MODE: 'simple', WOA_IMAGER_TEST_PICK: win10 }, simpleWin10);
+}
+await session('d', 1100, 780, 'light', { ...base, WOA_IMAGER_TEST_PICK: win10 }, rock4dWin10, 'zh-CN');
+await session('d', 1100, 780, 'light', { ...base, WOA_IMAGER_TEST_PICK: win10 }, cm5ioVersion('13-win10-cm5io'), 'zh-CN');
+await session('d', 1100, 780, 'light', { ...base, WOA_IMAGER_UI_MODE: 'simple', WOA_IMAGER_TEST_PICK: win10 }, simpleWin10, 'zh-CN');
+
 if (errors.length) {
   console.error(errors.join('\n'));
   process.exit(1);

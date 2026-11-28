@@ -390,12 +390,17 @@ Read on the PC in TypeScript (`src/main/windows-image.ts`, `src/woa/wim.ts`,
   (UDF), or the file itself. Its XML (UTF-16, at the end, never compressed,
   also in solid ESDs) gives each edition's ARCH, BUILD, SPBUILD and
   languages. Setup and WinPE images in an ESD are skipped.
-- Per edition: ARCH must be 12 (ARM64). BUILD 26000 and above is refused
-  (24H2 26100, 25H2 26200 and later need ARMv8.1 LSE atomics; RK3576 is
-  ARMv8.0). 22621 and 22631 get no remark. 22000 (21H2) and 17763 to 19045
-  (Windows 10 1809 to 22H2) are allowed with a notice. Below 17763 or MAJOR
-  below 10 is refused. Builds in between are Insider: allowed with a
-  warning.
+- Per edition: ARCH must be 12 (ARM64). BUILD must be one of the releases
+  in `src/shared/windows-version.ts`: Windows 10 19041 to 19045 (2004 to
+  22H2, KMDF 1.31, no WiFiCx) and Windows 11 22000, 22621, 22631 (KMDF 1.33,
+  WiFiCx 1.0). 26000 and above is refused for needing ARMv8.1 LSE atomics
+  (RK3576 is ARMv8.0); below 19041 or MAJOR below 10 as too old; anything
+  else as a preview or server build. The same table gives the notes the
+  pages show (Windows 10: NVMe and Wi-Fi drivers pending; 21H2: run less),
+  turns off the NVMe target for Windows 10 (`WIN10_DRIVERS`), picks the
+  driver package's Windows 10 list below 22000 (its manifest's `os`), and
+  writes `windows_family`, `windows_name`, `windows_kmdf` and
+  `windows_wificx` into woa-stage.ini and host-build.ini.
 - An ISO with bootx64.efi or bootia32.efi and no bootaa64.efi is refused as
   a PC ISO; bootaa64.efi with no ARM64 edition is refused too.
 - No ISO checksum list: images come from many places and UUP dump builds
@@ -406,7 +411,10 @@ step lists come from `src/shared/windows-sources.json` (in order, each with
 a last-checked date; the app opens only those URLs): NTriver (recommended
 for everyone: direct downloads that also work from mainland China; 23H2
 ARM64 VL Pro and IoT Enterprise media, its Consumer 23H2 is x64 only),
-UUP dump, Visual Studio subscriptions (not checked) and Microsoft's
+UUP dump, the same two for Windows 10 22H2 ARM64 (NTriver's
+download-windows-10 page: 22H2 VL Pro and IoT Enterprise arm64; UUP dump's
+"Feature update to Windows 10, version 22H2 (19045.x) arm64"), Visual
+Studio subscriptions (not checked) and Microsoft's
 ARM64 ISO page, marked unsuitable (current release only).
 
 ## Armbian or the firmware onto an SD card or USB drive

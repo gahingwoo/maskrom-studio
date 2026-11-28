@@ -29,3 +29,7 @@ Maskrom Studio 需要 **ARM64** 版 Windows 11 **23H2**（版本号 22631）。�
 在应用的 "Windows 映像" 步骤里选择这个 ISO（或者把它拖进窗口）。应用会先读取映像，如果不是 ARM64 或不是支持的版本，会在动开发板之前告诉你。
 
 应用的 Windows 步骤里还列出了其他提供 23H2 ARM64 ISO 的来源（每个都注明最后核对的日期）。
+
+## Windows 10 22H2
+
+步骤相同，从 <https://uupdump.net/known.php?q=19045+arm64> 开始：选最新的 **"Feature update to Windows 10, version 22H2 (19045.xxxx) arm64"**。Windows 10 暂时不能用 NVMe 硬盘和 Wi-Fi（它们的 Windows 10 驱动还没有发布）；推荐 Windows 11 23H2。

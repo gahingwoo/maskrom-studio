@@ -24,6 +24,7 @@ import { anyTrim, NO_TRIM, RECOMMENDED_TRIM, TRIM_KEYS, type TrimOptions } from 
 import { AboutModal, api, DriversNote, SettingsModal, Shell, StepPage, UpdateModal, type UiMode } from './common';
 import { useI18n } from './i18n';
 import { WINDOWS_SOURCES } from '../shared/windows-sources';
+import { targetProblem, versionLabel, versionNotes } from '../shared/windows-version';
 import { defaultLanguage, imageHasLanguage, keyboardChoices, languageChoices, timeZoneChoices, windowsZoneFor } from '../shared/windows-intl';
 import { Picker } from './picker';
 import { ARMBIAN_RESTORE, DESKTOPS, distroWords, simpleOffers, variantWords, type ArmbianOffer } from '../woa/armbian-restore';
@@ -226,6 +227,8 @@ export function App() {
   const simpleArmbianIds = [...simpleArmbian.desktops.map((o) => o.id), ...(simpleArmbian.cli ? [simpleArmbian.cli.id] : [])];
   const onBoard = via === 'here' && !!here?.boardId && here.boardId === boardId;
   const edition = windows?.editions.find((e) => e.index === index) ?? null;
+  // The chosen Windows cannot use the chosen target (Windows 10 on an NVMe drive until its driver is out): a message key.
+  const destProblem = task === 'windows' && edition ? targetProblem(edition.version, dest) : null;
   const fwRelease = releases?.firmware && boardId ? releases.firmware.boards[boardId] : undefined;
   // What the chosen release's image for the board supports (firmware-features.ts): true, false, or null when
   // neither the release (FEATURES.json) nor the built-in table knows.
@@ -270,6 +273,13 @@ export function App() {
     firmware: t(`board.fw.${b.firmwareStorage}`), where: whereText(b.windowsTargets), maskrom: t(`board.maskrom.${b.maskromEntry}`),
   });
   const checkText = (e: EditionInfo): string | null => (e.check.level === 'ok' ? null : t(`win.check.${e.check.code}`, e.check.vars));
+  // "Windows 10 22H2 (19045)": the release the image's build is (shared/windows-version.ts).
+  const versionText = (e: EditionInfo): string => (e.version ? versionLabel(e.version) : `${e.release ?? t('win.preview')} (${e.build ?? '?'})`);
+  // Where this Windows can go on the board: the board's targets without the ones it cannot use yet.
+  const usableWhere = (b: WoaBoard, e: EditionInfo): string => whereText(b.windowsTargets.filter((x) => !targetProblem(e.version, x)));
+  // What this version still lacks on the board (versionNotes), as sentences; the NVMe one only where the board takes NVMe.
+  const noteTexts = (b: WoaBoard, e: EditionInfo, targets: WindowsTarget[]): string[] =>
+    versionNotes(e.version, targets).map((k) => t(k, { version: versionText(e), board: b.name, where: usableWhere(b, e) }));
   // The tier a release came from (Settings): nothing for Stable, a word for the others.
   const tierWord = (tr: ReleaseTier) => (tr.used === 'stable' ? '' : ` (${t(`tier.${tr.used}`)})`);
   const tierNotice = (() => {
@@ -373,8 +383,8 @@ export function App() {
       const locale = defaultLanguage(api.systemLocale, [...new Set(r.editions.flatMap((e) => e.languages))]);
       setAccount((a) => ({ ...a, locale }));
     }
-    // 22H2 and 23H2 first; an untested or preview edition only when there is nothing else.
-    const clean = r.editions.filter((e) => !e.refuse && !e.warn);
+    // 22H2 and 23H2 first; a release run less on these boards (21H2) only when there is nothing else.
+    const clean = r.editions.filter((e) => !e.refuse && e.version?.tested === 'tested');
     const ok = clean.length ? clean : r.editions.filter((e) => !e.refuse);
     const pro = ok.find((e) => /\bpro\b/i.test(e.name) && !/workstation|education/i.test(e.name));
     setIndex((pro ?? ok[0])?.index ?? null);
@@ -525,7 +535,7 @@ export function App() {
       { id: 'winpe', get: () => api.prepareWinpe() },
       { id: 'image', get: () => api.serveWindows(windows!.token) },
       ...(hybridEmmc ? [{ id: 'armbian', get: () => api.prepareArmbian(b.id, hybridId!) }] : []),
-    ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, charsiu: charsiuDesktop, ...(packageThere ? { boardId: b.id } : {}) }, onWritten);
+    ], { ssh, drivers: drivers?.token ?? null, chrome: trim.chrome, rkTools, charsiu: charsiuDesktop, ...(packageThere ? { boardId: b.id, build: ed.build ?? undefined } : {}) }, onWritten);
   };
 
   // Every failure ends on the run page with Try again, never in a run that waits for nothing.
@@ -830,9 +840,10 @@ export function App() {
             {/* Only the places this board can take Windows (boards.ts windowsTargets). */}
             {board.windowsTargets.map((x) => (x === 'emmc'
               ? <Radio key={x} id="dest-emmc" name="dest" label={t('dest.emmc')} isChecked={dest === 'emmc'} onChange={() => setDest('emmc')} description={t('dest.emmc.desc')} />
-              : <Radio key={x} id={`dest-${x}`} name="dest" label={t(`dest.${x}`)} isChecked={dest === x} isDisabled={onBoard}
+              : <Radio key={x} id={`dest-${x}`} name="dest" label={t(`dest.${x}`)} isChecked={dest === x} isDisabled={onBoard || (!!edition && !!targetProblem(edition.version, x))}
                 onChange={() => { setDest(x); setDisk(null); refreshDisks(); }}
-                description={x === 'sd' ? t(`dest.sd.desc.${board.sdBoot}`, { board: board.name }) : t('dest.nvme.desc', { board: board.name })} />))}
+                description={edition && targetProblem(edition.version, x) ? t(`${targetProblem(edition.version, x)!}.here`, { version: versionText(edition) })
+                  : x === 'sd' ? t(`dest.sd.desc.${board.sdBoot}`, { board: board.name }) : t('dest.nvme.desc', { board: board.name })} />))}
           </FormGroup>
           {/* Built on this PC needs a Windows PC (DISM); elsewhere the board installs, and that is said once, not offered greyed out. */}
           {WIN_HOST && !onBoard ? (
@@ -1021,10 +1032,7 @@ export function App() {
   // What was read from the chosen image, before anything is written.
   const windowsFound = (w: WindowsChoice) => {
     const uniq = (xs: string[]) => [...new Set(xs)];
-    const builds = uniq(w.editions.map((e) => {
-      const b = `${e.build ?? '?'}${e.spBuild ? `.${e.spBuild}` : ''}`;
-      return `${b} (${e.release ?? t('win.preview')})`;
-    }));
+    const builds = uniq(w.editions.map(versionText));
     const boot = w.container !== 'iso' ? null
       : !w.boot ? t('win.found.boot.none')
       : (['arm64', 'x64', 'x86'] as const).filter((k) => w.boot![k]).map((k) => t(`win.found.boot.${k}`)).join(', ') || t('win.found.boot.none');
@@ -1078,16 +1086,29 @@ export function App() {
           {windows.refuse ? msg(windows.refuse) : checkText(windows.editions[0])}
         </Alert>
       )}
-      {edition?.check.level === 'notice' && <Alert isInline variant="custom" title={t('win.untested')}>{checkText(edition)}</Alert>}
-      {edition?.check.level === 'warn' && <Alert isInline variant="warning" title={t('win.warned')}>{checkText(edition)}</Alert>}
+      {/* The chosen target cannot take this Windows: said here, and Next stays off until another image or target. */}
+      {board && edition && destProblem && (
+        <Alert isInline variant="danger" id="ver-blocked" title={t('ver.blocked.title', { version: versionText(edition), target: t(`where.${dest}`) })}
+          actionLinks={board.windowsTargets.filter((x) => !targetProblem(edition.version, x)).slice(0, 1).map((x) => (
+            <AlertActionLink key={x} id="ver-use-other" onClick={() => { setDest(x); setDisk(null); if (x !== 'emmc') refreshDisks(); }}>{t('ver.blocked.use', { target: t(`where.${x}`) })}</AlertActionLink>))}>
+          {t(destProblem, { version: versionText(edition), where: usableWhere(board, edition) })}
+        </Alert>
+      )}
+      {/* What this version still lacks on the board (Windows 10: NVMe and Wi-Fi drivers; 21H2: run less). */}
+      {board && edition && !destProblem && noteTexts(board, edition, board.windowsTargets).length > 0 && (
+        <Alert isInline variant="info" id="ver-notes" title={t('ver.notes.title', { version: versionText(edition) })}>
+          {noteTexts(board, edition, board.windowsTargets).map((x) => <Content component="p" key={x}>{x}</Content>)}
+        </Alert>
+      )}
       {windows && (
         <Table aria-label={t('win.col.edition')} variant="compact">
-          <Thead><Tr><Th screenReaderText={t('restore.list.pick')} /><Th>{t('win.col.edition')}</Th><Th>{t('win.col.build')}</Th><Th>{t('win.col.installed')}</Th></Tr></Thead>
+          <Thead><Tr><Th screenReaderText={t('restore.list.pick')} /><Th>{t('win.col.edition')}</Th><Th>{t('win.col.version')}</Th><Th>{t('win.col.build')}</Th><Th>{t('win.col.installed')}</Th></Tr></Thead>
           <Tbody>
             {windows.editions.map((e) => (
               <Tr key={e.index}>
                 <Td select={{ rowIndex: e.index, isSelected: index === e.index, onSelect: () => setIndex(e.index), isDisabled: !!e.refuse, variant: 'radio' }} />
                 <Td dataLabel={t('win.col.edition')}>{e.name}{!windows.refuse && checkText(e) && <div className="muted">{checkText(e)}</div>}</Td>
+                <Td dataLabel={t('win.col.version')}>{e.version ? e.version.name : (e.release ?? t('win.preview'))}</Td>
                 <Td dataLabel={t('win.col.build')}>{e.build ?? '?'}{e.spBuild ? `.${e.spBuild}` : ''}</Td>
                 <Td dataLabel={t('win.col.installed')}>{e.totalBytes > 1e6 ? formatBytes(e.totalBytes) : ''}</Td>
               </Tr>
@@ -1344,7 +1365,7 @@ export function App() {
     reviewRows.push([t('review.board'), onBoard ? t('review.board.here', { board: board.name }) : t('review.board.maskrom', { board: board.name })]);
     if (task === 'windows') {
       reviewRows = reviewRows.concat(([
-        [t('review.windows'), edition ? t('review.windows.value', { edition: edition.name, build: `${edition.build}${edition.spBuild ? `.${edition.spBuild}` : ''}`, file: windows!.fileName }) : t('review.notChosen')],
+        [t('review.windows'), edition ? t('review.windows.value', { edition: edition.name, version: versionText(edition), build: `${edition.build}${edition.spBuild ? `.${edition.spBuild}` : ''}`, file: windows!.fileName }) : t('review.notChosen')],
         [t('review.winpe'), releases?.winpe ? `woa-rk3576 ${releases.winpe.tier.label} (${releases.winpe.file})${tierWord(releases.winpe.tier)}` : t('review.unavailable')],
         [t('review.setup'), skipOn ? t('review.setup.skip', { user: account.user, auto: account.autoLogonAlways ? t('review.setup.auto') : '' }) : t('review.setup.oobe')],
         // The codes the answer file gets, as picked on the setup step.
@@ -1376,6 +1397,7 @@ export function App() {
         ] as Array<[string, string]>),
       ] as Array<[string, string]>));
       if (!edition) why = t('why.windows');
+      else if (destProblem) why = t(destProblem, { version: versionText(edition), where: usableWhere(board, edition) });
       else if (hybridOn && !hybridId) why = t('why.hybrid.pick');
       else if (!setupOk) why = t('why.setup');
       if (!releases?.winpe) why = t('why.winpe');
@@ -1606,9 +1628,10 @@ export function App() {
             <FormHelperText><HelperText>
               {windowsError ? <HelperTextItem variant="error">{t('s.windows.bad')} {windowsError}</HelperTextItem>
                 : windows && !edition ? <HelperTextItem variant="error">{t('s.windows.bad')} {windows.refuse ? msg(windows.refuse) : checkText(windows.editions[0])}</HelperTextItem>
-                : edition ? <HelperTextItem variant="success">{t('s.windows.ok', { edition: edition.name, release: (edition.release ?? String(edition.build)).replace(/^Windows 1[01] /, '') })}</HelperTextItem>
-                : <HelperTextItem>{t('win.24h2.text')}</HelperTextItem>}
-              {edition?.warn && <HelperTextItem variant="warning">{checkText(edition)}</HelperTextItem>}
+                : edition ? <HelperTextItem variant="success">{t('s.windows.ok', { edition: edition.name, version: versionText(edition) })}</HelperTextItem>
+                : <HelperTextItem>{t('s.windows.which')}</HelperTextItem>}
+              {/* Simple mode writes the eMMC: no NVMe note, only what the version lacks there. */}
+              {edition && noteTexts(board, edition, ['emmc']).map((x) => <HelperTextItem key={x} id="s-ver-note">{x}</HelperTextItem>)}
             </HelperText></FormHelperText>
             <ExpandableSection toggleText={t('win.get')} className="sources">
               <Content component="p">{t('win.get.text')}</Content>
@@ -1712,6 +1735,7 @@ export function App() {
         [t('s.confirm.board'), board.name],
         [t('s.confirm.what'), t(`s.what.${task}`)],
         [t('s.confirm.file'), simpleFrom ?? ''],
+        ...(task === 'windows' && edition ? [[t('s.confirm.version'), `${edition.name}, ${versionText(edition)}`] as [string, string]] : []),
         [t('s.confirm.erased'), eraseText],
         [t('s.confirm.checked'), t('s.confirm.checked.value')],
         ...(task === 'windows' ? [[t('s.confirm.time'), t('s.time.windows')] as [string, string]]
@@ -1892,11 +1916,11 @@ export function App() {
           {mode === 'simple' ? simpleWizard : mode === 'advanced' && <Wizard navAriaLabel={t('steps')} isVisitRequired startIndex={wizardStart}>
             <WizardStep name={t('step.board')} id="board" footer={{ isNextDisabled: !board, isCancelHidden: true, isBackHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{boardStep}</WizardStep>
             <WizardStep name={t('step.task')} id="task" isDisabled={!board} footer={{ isNextDisabled: !task, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{taskStep}</WizardStep>
-            {windowsNeeded && (<WizardStep name={t('step.windows')} id="windows" footer={{ isNextDisabled: !edition, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>)}
-            {windowsNeeded && (<WizardStep name={t('step.setup')} id="setup" isDisabled={!edition} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>)}
+            {windowsNeeded && (<WizardStep name={t('step.windows')} id="windows" footer={{ isNextDisabled: !edition || !!destProblem, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{windowsStep}</WizardStep>)}
+            {windowsNeeded && (<WizardStep name={t('step.setup')} id="setup" isDisabled={!edition || !!destProblem} footer={{ isNextDisabled: !setupOk, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{setupStep}</WizardStep>)}
             {task === 'upgrade' && (<WizardStep name={t('step.upgrade')} id="upgrade" footer={{ isNextDisabled: !upgradeReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{upgradeStep}</WizardStep>)}
             {restoreTask && (<WizardStep name={t('step.restore')} id="restore" footer={{ isNextDisabled: !restoreReady, isCancelHidden: true, nextButtonText: t('next'), backButtonText: t('back') }}>{restoreStep}</WizardStep>)}
-            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !setupOk)) || (restoreTask && !restoreReady) || (task === 'upgrade' && !upgradeReady)}
+            <WizardStep name={t('step.review')} id="review" isDisabled={!task || (windowsNeeded && (!edition || !!destProblem || !setupOk)) || (restoreTask && !restoreReady) || (task === 'upgrade' && !upgradeReady)}
               footer={<ReviewFooter label={goLabel} disabled={!!why || (erases && !understood)} why={why ?? (erases && !understood ? t('review.tick') : null)} onGo={() => { setUnderstood(false); start(); }} />}>
               {reviewStep}
             </WizardStep>

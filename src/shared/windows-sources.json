@@ -1,5 +1,5 @@
 {
-  "comment": "Where to get Windows 11 23H2 ARM64. Shown on the Windows image step in this order; add a source by adding an entry. The app opens only the URLs listed here. fits: false marks a page that does not offer an image that runs on RK3576 (shown so it is not mistaken for one). recommended: a short label, or null. fetched: when the page was last checked. Texts: en and zh-CN.",
+  "comment": "Where to get Windows ARM64: Windows 11 23H2 (recommended) and Windows 10 22H2. Shown on the Windows image step in this order; add a source by adding an entry. The app opens only the URLs listed here. fits: false marks a page that does not offer an image that runs on RK3576 (shown so it is not mistaken for one). recommended: a short label, or null. fetched: when the page was last checked. Texts: en and zh-CN.",
   "sources": [
     {
       "id": "ntriver",
@@ -26,8 +26,8 @@
       "url": "https://uupdump.net/known.php?q=22631+arm64",
       "fetched": "2026-11-23",
       "title": {
-        "en": "UUP dump",
-        "zh-CN": "UUP dump"
+        "en": "UUP dump: Windows 11 23H2",
+        "zh-CN": "UUP dump：Windows 11 23H2"
       },
       "text": {
         "en": "Builds the ISO on your own computer from files on Microsoft's update servers. Choose the newest \"Windows 11, version 23H2 (22631.x) arm64\" (not \"Cumulative Update\"), a language and the editions, then \"Download and convert to ISO\", and run the script in the zip (Windows, Linux or macOS).",
@@ -35,18 +35,48 @@
       }
     },
     {
+      "id": "ntriver-win10",
+      "fits": true,
+      "recommended": null,
+      "url": "https://ntriver.org/download-windows-10",
+      "fetched": "2026-11-28",
+      "title": {
+        "en": "NTriver: Download Windows 10",
+        "zh-CN": "NTriver：Download Windows 10"
+      },
+      "text": {
+        "en": "Windows 10 22H2 ISOs with direct downloads, which also work from mainland China. The ARM64 ones are the Business (volume licence) media, SW_DVD9_Win_Pro_10_22H2.36_Arm64_<language>_Pro_Ent_EDU_N_MLF, and the IoT Enterprise 22H2 arm64 ISO.",
+        "zh-CN": "Windows 10 22H2 ISO，可直接下载，在中国大陆也能用。其中 ARM64 的是商业版（批量许可）介质 SW_DVD9_Win_Pro_10_22H2.36_Arm64_<语言>_Pro_Ent_EDU_N_MLF，以及 IoT Enterprise 22H2 arm64 ISO。"
+      }
+    },
+    {
+      "id": "uupdump-win10",
+      "fits": true,
+      "recommended": null,
+      "url": "https://uupdump.net/known.php?q=19045+arm64",
+      "fetched": "2026-11-28",
+      "title": {
+        "en": "UUP dump: Windows 10 22H2",
+        "zh-CN": "UUP dump：Windows 10 22H2"
+      },
+      "text": {
+        "en": "Builds the Windows 10 ISO on your own computer, as for Windows 11 above: choose the newest \"Feature update to Windows 10, version 22H2 (19045.x) arm64\" (not \"Cumulative Update\"), a language and the editions, then \"Download and convert to ISO\".",
+        "zh-CN": "在你自己的电脑上生成 Windows 10 ISO，做法和上面的 Windows 11 一样：选择最新的“Feature update to Windows 10, version 22H2 (19045.x) arm64”（不是“Cumulative Update”）。"
+      }
+    },
+    {
       "id": "visualstudio",
       "fits": true,
       "recommended": null,
       "url": "https://my.visualstudio.com/Downloads",
-      "fetched": "2026-11-23",
+      "fetched": "2026-11-28",
       "title": {
         "en": "Visual Studio subscriptions",
         "zh-CN": "Visual Studio 订阅"
       },
       "text": {
-        "en": "For subscribers. Older releases may be listed there; search for Windows 11 version 23H2 arm64.",
-        "zh-CN": "仅限订阅用户。可能列有旧版本，请搜索 Windows 11 version 23H2 arm64。"
+        "en": "For subscribers. Older releases may be listed there; search for Windows 11 version 23H2 arm64 or Windows 10 version 22H2 arm64.",
+        "zh-CN": "仅限订阅用户。可能列有旧版本，请搜索 Windows 11 version 23H2 arm64 或 Windows 10 version 22H2 arm64。"
       }
     },
     {

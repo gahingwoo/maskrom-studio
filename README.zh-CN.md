@@ -4,7 +4,7 @@
 
 <img src="resources/icons/maskrom-studio.svg" alt="Maskrom Studio 图标：一块存储芯片，一个箭头向它写入" width="96" height="96">
 
-一个桌面应用：在电脑上通过 USB（MaskROM 模式）给 Rockchip RK3576 开发板安装 Windows 11 23H2、[edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI 固件、Armbian 或出厂映像。装 Windows 不需要 U 盘。
+一个桌面应用：在电脑上通过 USB（MaskROM 模式）给 Rockchip RK3576 开发板安装 Windows 11 23H2 或 Windows 10 22H2、[edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI 固件、Armbian 或出厂映像。装 Windows 不需要 U 盘。
 
 第一次接触这些板子？[edk2-rk3576 的说明](https://github.com/gahingwoo/edk2-rk3576/blob/main/README.zh-CN.md)里有从新板子到 Windows 或 Linux 的完整路径。
 

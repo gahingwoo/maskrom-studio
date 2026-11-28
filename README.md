@@ -4,7 +4,7 @@
 
 <img src="resources/icons/maskrom-studio.svg" alt="Maskrom Studio icon: a storage chip with an arrow writing into it" width="96" height="96">
 
-A desktop app that installs Windows 11 23H2, the
+A desktop app that installs Windows 11 23H2 or Windows 10 22H2, the
 [edk2-rk3576](https://github.com/gahingwoo/edk2-rk3576) UEFI firmware,
 Armbian or a factory image on Rockchip RK3576 boards from a PC over USB
 (MaskROM mode). No USB stick is needed for Windows.

@@ -13,6 +13,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { BoardId } from './boards';
+import { familyOfBuild } from '../shared/windows-version';
 
 /** The package's asset name on a woa-rk3576 release. */
 export const DRIVERS_ASSET = /^rk3576-drivers-arm64.*\.zip$/;
@@ -27,6 +28,8 @@ export interface PackageDriver {
   from: string;
   default: string[];
   optional: string[];
+  /** Which Windows it is for (woa-rk3576 drivers.tsv's os column): every one, Windows 10 only (below 22000) or Windows 11 only. */
+  os: 'all' | 'win10' | 'win11';
   infs: string[];
 }
 
@@ -56,13 +59,21 @@ export function parseManifest(text: string): DriverManifest {
     seen.add(d.dir);
     if (typeof d.what !== 'string') d.what = d.dir;
     if (!strs(d.infs)) d.infs = [];
+    // Packages before the os column are for every Windows (they were built and tested on Windows 11).
+    if (d.os === undefined) d.os = 'all';
+    if (d.os !== 'all' && d.os !== 'win10' && d.os !== 'win11') throw new Error(`The driver package says ${d.dir} is for "${String(d.os)}", which this version does not know. Update Maskrom Studio.`);
   }
   return { format: 1, version: o.version, boards: strs(o.boards) ? o.boards! : [], sources: o.sources && typeof o.sources === 'object' ? o.sources : {}, drivers: o.drivers };
 }
 
-/** The drivers the package installs on this board by default, in the manifest's order. */
-export function boardDrivers(m: DriverManifest, board: BoardId): PackageDriver[] {
-  return m.drivers.filter((d) => d.default.includes(board));
+/**
+ * The drivers the package installs on this board by default, in the
+ * manifest's order, for the Windows build (as the package's install.cmd
+ * picks: Windows 10 below 22000). No build: the Windows 11 list.
+ */
+export function boardDrivers(m: DriverManifest, board: BoardId, build?: number): PackageDriver[] {
+  const family = build ? familyOfBuild(build) : 'win11';
+  return m.drivers.filter((d) => d.default.includes(board) && (d.os === 'all' || d.os === family));
 }
 
 export interface PackageSelection {
@@ -77,15 +88,15 @@ export interface PackageSelection {
  * manifest, the board, a required driver or a listed driver's files, or when a
  * file does not match the package's SHA256SUMS.txt.
  */
-export function selectPackage(entries: Array<{ path: string; data: Uint8Array }>, board: BoardId): PackageSelection {
+export function selectPackage(entries: Array<{ path: string; data: Uint8Array }>, board: BoardId, build?: number): PackageSelection {
   const man = entries.find((e) => /(^|\/)rk3576-drivers\/manifest\.json$/.test(e.path));
   if (!man) throw new Error('The driver package has no rk3576-drivers/manifest.json.');
   const root = man.path.slice(0, man.path.length - 'manifest.json'.length);
   const m = parseManifest(new TextDecoder().decode(man.data));
   if (m.boards.length && !m.boards.includes(board)) throw new Error(`The driver package ${m.version} has no drivers for this board (${board}). Update Maskrom Studio.`);
-  const picked = boardDrivers(m, board);
+  const picked = boardDrivers(m, board, build);
   for (const r of REQUIRED_DRIVERS) {
-    if (!picked.some((d) => d.dir === r)) throw new Error(`The driver package ${m.version} has no ${r} for this board. Nothing was written.`);
+    if (!picked.some((d) => d.dir === r)) throw new Error(`The driver package ${m.version} has no ${r} for this board${build ? ` and Windows build ${build}` : ''}. Nothing was written.`);
   }
   const sumsEntry = entries.find((e) => e.path === `${root}SHA256SUMS.txt`);
   const sums = new Map<string, string>();

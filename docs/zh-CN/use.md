@@ -46,9 +46,11 @@ eMMC 上要先有用完整映像写入的固件。没有的话，先写一次"UE
 
 ## Windows 映像
 
-测试过的版本是 Windows 11 23H2（版本号 22631）。会被拒绝：不是 ARM64 的映像、版本号大于 25999 的（24H2 及以后需要 ARMv8.1）、早于 Windows 10 1809 的、PC 用的 ISO（有 bootx64.efi 没有 bootaa64.efi）。Windows 11 21H2 和 Windows 10 可以装，但会提示没有用当前驱动测试过。ISO 原地读取，不会复制。
+可以安装：ARM64 版 Windows 10 2004 到 22H2（版本号 19041 到 19045）和 Windows 11 21H2、22H2、23H2（22000、22621、22631）。推荐 Windows 11 23H2。应用会显示读到的版本，例如“Windows 10 22H2 (19045)”。会被拒绝：不是 ARM64 的映像、版本号大于 22631 的（24H2 及以后需要 ARMv8.1 原子指令，RK3576 的核心没有）、预览版、更旧的版本、PC 用的 ISO（有 bootx64.efi 没有 bootaa64.efi）。ISO 原地读取，不会复制。
 
-Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows 一步列出了 23H2 ARM64 的来源：[NTriver](https://ntriver.org/download-windows-11)（推荐：可直接下载，在中国大陆也能用；批量许可专业版和 IoT 企业版介质）和 [UUP dump](https://uupdump.net/known.php?q=22631+arm64)，后者在你自己的电脑上从 Microsoft 更新服务器生成 ISO（[详细步骤](windows-image.md)）。你需要有效的许可证。
+Windows 10 目前：不能装到 NVMe 硬盘（RK3576 的 Windows 10 NVMe 驱动还没有发布，NVMe 选项会关闭），没有 Wi-Fi（Windows 10 没有 WiFiCx，它的驱动会在以后的驱动包中提供）。Windows 11 21H2 在这些开发板上运行得比 22H2 和 23H2 少。
+
+Microsoft 官网的 ARM64 ISO 只有当前版本，太新。应用的 Windows 一步列出了 23H2 ARM64 的来源（下面还有这两个网站的 Windows 10 22H2 ARM64）：[NTriver](https://ntriver.org/download-windows-11)（推荐：可直接下载，在中国大陆也能用；批量许可专业版和 IoT 企业版介质）和 [UUP dump](https://uupdump.net/known.php?q=22631+arm64)，后者在你自己的电脑上从 Microsoft 更新服务器生成 ISO（[详细步骤](windows-image.md)）。你需要有效的许可证。
 
 ## 磁盘布局
 

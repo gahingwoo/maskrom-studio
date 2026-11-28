@@ -1,4 +1,4 @@
-// Where to get Windows 11 23H2 ARM64: the list in windows-sources.json,
+// Where to get Windows for ARM64 (Windows 11 23H2, Windows 10 22H2): the list in windows-sources.json,
 // typed. The imager never ships, mirrors or downloads Windows; these are
 // links the user follows, and the app opens no other URLs of these sites.
 import data from './windows-sources.json';
