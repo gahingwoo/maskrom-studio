@@ -179,3 +179,22 @@ describe('zip', () => {
     expect(got.map((g) => [g.path, g.data.length])).toEqual([['OpenSSH-ARM64/a.txt', 5], ['OpenSSH-ARM64/b.bin', 5000]]);
   });
 });
+
+describe('SetupComplete.cmd on Windows 10', () => {
+  // Windows 10 IoT Enterprise 19045 skipped it ("Not allowed to run the
+  // Setupcomplete.cmd", CM5-IO 2026-11-28): the install script leaves a
+  // RunOnce that runs it at the first sign-in unless its log is there.
+  it('the offline SOFTWARE hive gets a RunOnce that runs it if it did not run', () => {
+    const line = CONFIGURE.split('\n').find((l) => l.includes('/v WoaSetupComplete'));
+    expect(line).toBeDefined();
+    expect(line).toContain('reg add HKLM\\WOAOFF\\Microsoft\\Windows\\CurrentVersion\\RunOnce');
+    // %% so the WinPE cmd writes %WINDIR% itself, not X:\Windows
+    expect(line).toContain('if not exist %%WINDIR%%\\Logs\\woa-setupcomplete.log call %%WINDIR%%\\Setup\\Scripts\\SetupComplete.cmd');
+    expect(CONFIGURE.indexOf('/v WoaSetupComplete')).toBeLessThan(CONFIGURE.indexOf('reg unload HKLM\\WOAOFF'));
+  });
+  it('SetupComplete.cmd writes that log before anything else', () => {
+    const lines = setupComplete({ skipSetup: null, ssh: true, sshKey: '' }).split('\n');
+    expect(lines[2]).toBe('set LOG=%WINDIR%\\Logs\\woa-setupcomplete.log');
+    expect(lines[3]).toContain('> "%LOG%"');
+  });
+});
