@@ -1,3 +1,4 @@
+import { nativeRunOnce } from './native-run';
 // The self-test on Windows' first desktop: woa-selftest.ps1, copied to
 // \Windows\Setup\Scripts and started once by an HKLM RunOnce value that
 // SetupComplete.cmd sets (RunOnce values are deleted before they run).
@@ -25,7 +26,7 @@ export const ISSUES_URL = 'https://github.com/gahingwoo/maskrom-studio/issues/ne
 export function selfTestRunOnce(): string[] {
   return [
     'rem The self-test on the first desktop (selftest.ts): once, for the first user who signs in.',
-    `if exist "%WINDIR%\\Setup\\Scripts\\${SELFTEST_FILE}" reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v WoaSelfTest /t REG_SZ /d "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %WINDIR%\\Setup\\Scripts\\${SELFTEST_FILE}" /f >> "%LOG%" 2>&1`,
+    `if exist "%WINDIR%\\Setup\\Scripts\\${SELFTEST_FILE}" reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v WoaSelfTest /t REG_SZ /d "${nativeRunOnce(`powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %WINDIR%\\Setup\\Scripts\\${SELFTEST_FILE}`)}" /f >> "%LOG%" 2>&1`,
   ];
 }
 

@@ -31,6 +31,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { releaseAsset, type GithubRelease } from './releases';
+import { nativeRunOnce } from './native-run';
 
 export const CHARSIU_REPO = 'gahingwoo/charsiu-desktop';
 export const CHARSIU_DESKTOP = {
@@ -118,6 +119,6 @@ export function charsiuGenerated(extras: Array<{ path: string; data: Uint8Array 
 export function charsiuRunOnce(): string[] {
   return [
     'rem Charsiu Desktop (charsiu-desktop.ts): its installer installs per user, so it runs at the first sign-in.',
-    `if exist "%WINDIR%\\Setup\\Scripts\\${CHARSIU_FILE}" reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v WoaCharsiuDesktop /t REG_SZ /d "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %WINDIR%\\Setup\\Scripts\\${CHARSIU_FILE}" /f >> "%LOG%" 2>&1`,
+    `if exist "%WINDIR%\\Setup\\Scripts\\${CHARSIU_FILE}" reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v WoaCharsiuDesktop /t REG_SZ /d "${nativeRunOnce(`powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %WINDIR%\\Setup\\Scripts\\${CHARSIU_FILE}`)}" /f >> "%LOG%" 2>&1`,
   ];
 }
